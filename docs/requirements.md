@@ -162,6 +162,20 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Cảnh báo IP | ≥ 3 review cùng địa điểm từ cùng /24 trong 24 h | Đã chốt |
 | Bán kính check-in | 200 m | Theo plan (§5) |
 | Độ sâu bình luận | 2 cấp (bình luận + trả lời) | Đã chốt |
+| Mật khẩu | ≥ 8 ký tự, có chữ và số | Đã chốt (U1) |
+| Hạn link xác thực email / đặt lại mật khẩu | 24 h / 30 phút | Đã chốt (U1) |
+| Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |
+| Review từ dải IP bị cảnh báo | Bắt buộc vào hàng chờ + gắn cờ "nghi ngờ IP" | Đã chốt (U3) |
+| Độ dài tối thiểu review | 20 ký tự | Đã chốt (U4) |
+| Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |
+| Số chủ mỗi địa điểm | 1 | Đã chốt (U6) |
+| Cảnh báo trùng khi đề xuất địa điểm | Tên gần giống trong bán kính 50 m → cảnh báo, không chặn | Đã chốt (U7) |
+| Tìm quanh vị trí | Mặc định 2 km, tối đa 20 km; tâm Hà Nội khi không có quyền vị trí | Đã chốt (U8) |
+| Meilisearch lỗi | Fallback MySQL `LIKE` | Đã chốt (U9) |
+| Báo cáo trùng | Mỗi người 1 báo cáo / đối tượng | Đã chốt (U10) |
+| Lưu token phía client | Refresh token: cookie HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth; access token chỉ trong bộ nhớ (không localStorage) | Đã chốt (S1) |
+| Upload ảnh review | Review + ảnh trong một request multipart qua API (không presigned URL) | Đã chốt (S2) |
+| Cột điểm địa điểm | Lưu cả `avg_rating` (trung bình thô) và `bayesian_score` | Đã chốt (S3) |
 
 ---
 

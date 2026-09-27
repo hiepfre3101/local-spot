@@ -1,0 +1,96 @@
+@startuml erd-account
+' ERD 1/3 — Tài khoản & phân quyền. Chi tiết cột: docs/design/database.md §3.1
+hide circle
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+
+entity users {
+  * id : BIGINT <<PK>>
+  --
+  * email : VARCHAR(191) <<UQ>>
+  * password_hash : VARCHAR(100)
+  * display_name : VARCHAR(100)
+  avatar_url : VARCHAR(500)
+  bio : VARCHAR(500)
+  email_verified_at : DATETIME
+  * helpful_votes_count : INT
+  * contribution_points : INT
+  locked_until : DATETIME
+  lock_reason : VARCHAR(500)
+  * created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity roles {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(50) <<UQ>>
+}
+
+entity permissions {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(100) <<UQ>>
+  description : VARCHAR(255)
+}
+
+entity user_roles {
+  * user_id : BIGINT <<PK, FK>>
+  * role_id : BIGINT <<PK, FK>>
+}
+
+entity role_permissions {
+  * role_id : BIGINT <<PK, FK>>
+  * permission_id : BIGINT <<PK, FK>>
+}
+
+entity refresh_tokens {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * token_hash : CHAR(64) <<UQ>>
+  * family_id : CHAR(36)
+  * expires_at : DATETIME
+  used_at : DATETIME
+  revoked_at : DATETIME
+  user_agent : VARCHAR(255)
+  ip_address : VARCHAR(45)
+  * created_at : DATETIME
+}
+
+entity user_tokens {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * type : VARCHAR(20)
+  * token_hash : CHAR(64) <<UQ>>
+  * expires_at : DATETIME
+  used_at : DATETIME
+  * created_at : DATETIME
+}
+
+entity user_violations {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * source_type : VARCHAR(30)
+  * source_id : BIGINT
+  * points : TINYINT
+  * expires_at : DATETIME
+  created_by : BIGINT <<FK>>
+  * created_at : DATETIME
+}
+
+users ||--o{ user_roles
+roles ||--o{ user_roles
+roles ||--o{ role_permissions
+permissions ||--o{ role_permissions
+users ||--o{ refresh_tokens
+users ||--o{ user_tokens
+users ||--o{ user_violations : vi phạm
+users |o--o{ user_violations : ghi bởi
+@enduml

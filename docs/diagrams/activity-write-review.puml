@@ -1,0 +1,71 @@
+@startuml activity-write-review
+' Sơ đồ hoạt động — Viết đánh giá (UC12, FR-17/19/22/23)
+' Luật: docs/requirements.md §5, §5.1; docs/analysis/use-cases.md §3.6
+skinparam ActivityBackgroundColor #FDFDFD
+skinparam ActivityBorderColor #555555
+
+|Thành viên|
+start
+:Mở trang địa điểm, bấm "Viết đánh giá";
+:Chấm 1–5 sao, nhập nội dung, ngày đã đến;
+if (Đính kèm ảnh?) then (có)
+  :Chọn ảnh, crop phía client;
+endif
+:Gửi đánh giá;
+
+|Hệ thống|
+if (Đã xác thực email?) then (chưa)
+  :Trả 403, gợi ý gửi lại email xác thực;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+if (Dữ liệu hợp lệ?\n(1–5 sao, ≥ 20 ký tự, ngày đến ≤ hôm nay,\nảnh ≤ 5 MB, ≤ 10 ảnh, đúng MIME)) then (không)
+  :Trả 422 kèm lỗi từng trường;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+if (Đã có review cho địa điểm này?) then (có)
+  :Trả 409, gợi ý sửa review cũ;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+if (Vượt 5 review / 24 h?) then (có)
+  :Trả 429;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+:Tính trust score của tác giả;
+:Kiểm tra số review cùng địa điểm\ntừ cùng dải IP /24 trong 24 h;
+if (trust ≥ 30 **và** < 3 review cùng dải IP?) then (có)
+  :Lưu review, status = **published**;
+  :Phát ReviewCreatedEvent (sau commit);
+  fork
+    |Xử lý nền|
+    :Tính lại điểm Bayesian của địa điểm\n(v, R của review published; m = 10; C toàn hệ thống);
+    :Đồng bộ điểm mới lên Meilisearch;
+  fork again
+    |Xử lý nền|
+    :Thông báo cho chủ địa điểm (nếu có);
+  end fork
+else (không)
+  |Hệ thống|
+  :Lưu review, status = **pending**;
+  if (Do cảnh báo IP?) then (có)
+    :Gắn cờ "nghi ngờ IP";
+  endif
+  :Đưa vào hàng chờ duyệt (UC28);
+endif
+
+|Xử lý nền|
+if (Có ảnh?) then (có)
+  :Resize, nén, gỡ EXIF, lưu S3/MinIO;
+endif
+
+|Thành viên|
+:Thấy review (published)\nhoặc nhãn "Chờ duyệt" (pending);
+stop
+@enduml

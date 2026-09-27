@@ -74,3 +74,63 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 
 - **Q3 ✅**: trần age 18, trần helpful 36, phạt 25/vi phạm; chụp trust người vote tại thời điểm vote (cờ `counted` trên `review_votes`). → Ảnh hưởng ERD ở checklist B: cần cột lưu vi phạm có thời điểm (để tính hết hạn 30 ngày) và cột `counted` trên `review_votes`.
 - **Phạm vi ✅**: supervisor bỏ 3 mục ngoài phạm vi bổ sung (đăng nhập mạng xã hội, gợi ý cá nhân hóa, kiểm duyệt AI) → danh sách ngoài phạm vi giữ nguyên theo plan-v1.md §1. Tick "Chốt phạm vi" trong checklist A.
+
+---
+
+## 2026-09-27 (+07) — Tạo board quản lý task (GitHub Projects)
+
+- Board: https://github.com/users/hiepfre3101/projects/1 (private), đã link với repo `hiepfre3101/local-spot`.
+- 93 thẻ sinh tự động từ checklist A–H của plan-v1.md; field single-select **Giai đoạn** (A…H); Status Done cho 6 mục đã xong ở A, còn lại Todo.
+- **Chọn draft item thay vì issue**: tránh tạo 93 issue làm rối tab Issues ngay từ đầu; khi bắt tay làm một thẻ thì "Convert to issue" để link PR (`Refs #n`). Đánh đổi: draft item không có số issue, không tham chiếu được từ commit cho đến khi convert.
+- Chọn GitHub Projects thay vì Trello: nằm cùng repo, link được issue/PR, có thể chụp làm minh chứng quy trình cho báo cáo.
+
+---
+
+## 2026-09-27 (+07) — Checklist B: sơ đồ use case tổng quát + đặc tả chi tiết (bản nháp)
+
+- Checklist A hoàn tất (supervisor tự push `develop`). Bắt đầu B; board: 2 thẻ đầu B → In Progress.
+- **PlantUML** (`docs/diagrams/*.puml`) thay vì draw.io: plan §2 khuyến nghị; sơ đồ dạng text, diff được trong git. Máy chưa có Java nên chưa render được PNG — xem bằng extension PlantUML của VS Code hoặc render sau khi cài JDK 21 (cần cho backend ở checklist C).
+- **Gộp 42 FR thành 33 use case**: sơ đồ tổng quát với 42 use case sẽ quá dày để đưa vào báo cáo. Tác vụ hệ thống (Bayesian FR-22, activity log FR-42, xử lý ảnh) không vẽ thành use case vì không có tác nhân người khởi phát — mô tả ở sơ đồ tuần tự/hoạt động.
+- Dùng quan hệ kế thừa tác nhân (Thành viên → Khách, Chủ → Thành viên, Admin → Moderator) để giảm số đường nối, khớp với RBAC đã chốt ở Q2.
+- **Chọn 10 use case đặc tả chi tiết** (UC01/02, 03, 08, 09, 11, 12, 16, 23, 28, 29): phủ đủ 5 tác nhân và cả 4 điểm khác biệt cốt lõi.
+- Các luật nghiệp vụ chưa có trong requirements.md được đánh dấu (đề xuất) và gom vào 10 câu hỏi mở U1–U10 — không tự chốt.
+
+---
+
+## 2026-09-27 (+07) — Chốt U1–U10; sơ đồ hoạt động & tuần tự (bản nháp)
+
+- **U1–U10 ✅** (supervisor chốt toàn bộ đề xuất) → chép vào docs/requirements.md §5, bỏ nhãn (đề xuất) trong use-cases.md. Tick 2 mục đầu checklist B.
+- **Sơ đồ hoạt động** (3, đúng plan §8): viết đánh giá, đề xuất & duyệt địa điểm, check-in — dùng swimlane để thấy rõ ranh giới người dùng / hệ thống / xử lý nền / kiểm duyệt viên.
+- **Sơ đồ tuần tự** (3): đăng nhập + làm mới phiên, tìm kiếm (kèm fallback U9 và đồng bộ index), đăng review kèm ảnh. Participant dùng đúng tên lớp dự kiến ở plan §7 để sơ đồ lớp / code khớp nhau.
+- **Quyết định kỹ thuật thể hiện trong sơ đồ**:
+  - Event tính rating / xử lý ảnh dùng `@TransactionalEventListener(AFTER_COMMIT)`: tránh tính rating hoặc xử lý ảnh cho review mà transaction bị rollback. Đánh đổi: nếu app sập giữa commit và listener thì mất event (chấp nhận được với đồ án; hướng khắc phục: outbox pattern — nêu ở hướng phát triển).
+  - Ảnh xuất JPEG thay vì WebP: ImageIO/Thumbnailator không ghi WebP nếu không thêm thư viện (vi phạm CLAUDE.md §4 nếu tự thêm).
+  - Fallback tìm kiếm nằm trong `PlaceSearchService`, không lộ ra controller.
+- **Chờ supervisor chốt**:
+  - S1: refresh token qua cookie HttpOnly + SameSite=Strict, access token chỉ trong bộ nhớ (không localStorage) — chống XSS đánh cắp refresh token; đánh đổi: cần cấu hình CORS `allowCredentials` và đăng nhập lại khi reload trang nếu refresh lỗi.
+  - S2: review + ảnh trong một request multipart qua API thay vì presigned URL lên MinIO — server kiểm tra được MIME thật (NFR-09), đơn giản hơn; đánh đổi: ảnh đi qua băng thông của API.
+  - Ghi chú cho ERD: cần cột IP (/24) trên `reviews` cho luật cảnh báo IP; cần phân biệt `avg_rating` (trung bình thô) và điểm Bayesian hay dùng chung một cột.
+
+---
+
+## 2026-09-27 (+07) — Render sơ đồ bằng JDK trong WSL
+
+- Supervisor cho dùng JDK 21 có sẵn trong WSL Ubuntu 22.04 (OpenJDK 21.0.12). Tải `plantuml.jar` 1.2026.8 vào `~/tools` của WSL (ngoài repo, không phải dependency dự án).
+- Dùng layout **Smetana** (tích hợp trong PlantUML) thay vì cài Graphviz — tránh cần `sudo apt` trong WSL; chất lượng layout đủ cho báo cáo.
+- Render 7 sơ đồ ra `docs/diagrams/png/`, kiểm tra từng ảnh: không lỗi cú pháp. Lệnh render ghi ở `docs/diagrams/README.md`.
+
+---
+
+## 2026-09-27 (+07) — Chốt S1–S3; thiết kế CSDL + ERD (bản nháp)
+
+- **S1, S2, S3 ✅** → ghi vào requirements.md §5; tick sơ đồ hoạt động & tuần tự. Board: 3 thẻ B tiếp theo → In Progress.
+- **docs/design/database.md**: 32 bảng (plan §5 + `refresh_tokens`, `user_tokens`, `user_violations`; bỏ `banners`). **ERD** tách 3 sơ đồ theo miền — một ERD 32 bảng không đọc được trên trang A4.
+- **Quyết định thiết kế** (lý do chi tiết trong database.md §1):
+  - Trạng thái dùng `VARCHAR + CHECK` thay `ENUM`: thêm trạng thái không cần `ALTER TABLE` sửa định nghĩa ENUM; map `@Enumerated(STRING)`.
+  - `DATETIME(6)` lưu UTC; ngày nghiệp vụ (`checkin_date`, `view_date`) tính theo giờ Việt Nam.
+  - Luật U5 (1 check-in/ngày) và U10 (1 báo cáo/người/đối tượng) enforce bằng UNIQUE ở CSDL, không chỉ ở service — chặn race condition.
+  - `user_violations.points` lưu mức phạt tại thời điểm ghi → đổi cấu hình không làm sai lịch sử.
+  - `review_votes` dùng PK tổ hợp (review_id, user_id) — thỏa `UNIQUE(review_id, user_id)` của plan mà không cần cột id.
+  - `reports.target_id` không có FK (quan hệ đa hình) — đánh đổi toàn vẹn tham chiếu lấy tính tổng quát, kiểm tra ở service.
+- **Phát hiện khi thiết kế** (chờ supervisor, D1–D7): trust score tính động hay lưu; soft delete xung đột với `UNIQUE(place_id, user_id)` và `users.email`; index plan §5 dùng `avg_rating` nhưng xếp hạng dùng `bayesian_score`; **`C` thay đổi làm bayesian_score của mọi địa điểm khác lỗi thời** → đề xuất job đêm; tags đa hình; số phản hồi chủ quán.
+- Sơ đồ lớp để sau khi chốt ERD (entity JPA phản ánh 1-1 bảng).

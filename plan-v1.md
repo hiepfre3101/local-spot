@@ -349,14 +349,14 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Viết đặc tả yêu cầu chức năng (đánh mã FR-01…) — [docs/requirements.md](docs/requirements.md)
 - [x] Viết đặc tả yêu cầu phi chức năng — [docs/requirements.md](docs/requirements.md)
 - [x] Chốt phạm vi và ghi rõ phần ngoài phạm vi — MoSCoW + ngoài phạm vi theo §1, xem [docs/requirements.md](docs/requirements.md)
-- [ ] Tạo repo git, thiết lập nhánh và quy ước commit — repo + [CONTRIBUTING.md](CONTRIBUTING.md) xong, `develop` mới tạo local, chưa push
-- [ ] Tạo board quản lý task
+- [x] Tạo repo git, thiết lập nhánh và quy ước commit — [CONTRIBUTING.md](CONTRIBUTING.md), nhánh `main`/`develop` đã push
+- [x] Tạo board quản lý task — [GitHub Projects #1](https://github.com/users/hiepfre3101/projects/1)
 
 ### B. Phân tích & thiết kế
-- [ ] Sơ đồ use case tổng quát
-- [ ] Đặc tả chi tiết ít nhất 8 use case
-- [ ] Sơ đồ hoạt động (≥3 nghiệp vụ)
-- [ ] Sơ đồ tuần tự (≥3 luồng)
+- [x] Sơ đồ use case tổng quát — [docs/diagrams/use-case-overview.puml](docs/diagrams/use-case-overview.puml)
+- [x] Đặc tả chi tiết ít nhất 8 use case — 10 UC, [docs/analysis/use-cases.md](docs/analysis/use-cases.md)
+- [x] Sơ đồ hoạt động (≥3 nghiệp vụ) — [docs/diagrams/](docs/diagrams/README.md)
+- [x] Sơ đồ tuần tự (≥3 luồng) — [docs/diagrams/](docs/diagrams/README.md)
 - [ ] Sơ đồ lớp
 - [ ] ERD hoàn chỉnh
 - [ ] Bảng mô tả chi tiết từng bảng CSDL
