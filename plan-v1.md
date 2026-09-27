@@ -146,7 +146,7 @@ Kèm Application Event/Listener cho các tác vụ phụ: `ReviewCreatedEvent` (
 ### Quản trị viên / Kiểm duyệt viên
 - Duyệt / từ chối địa điểm và yêu cầu sở hữu.
 - Xử lý hàng đợi báo cáo, ẩn nội dung, khóa tài khoản.
-- Quản lý danh mục, tiện ích, banner.
+- Quản lý danh mục, tiện ích. *(Banner đã cắt khỏi phạm vi — 2026-09-27, xem docs/requirements.md Q4.)*
 - Dashboard thống kê: người dùng mới, review theo ngày, địa điểm hot.
 
 ---
@@ -344,12 +344,12 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 ## 10. Checklist
 
 ### A. Chuẩn bị
-- [ ] Chốt tên dự án và domain
-- [ ] Khảo sát 3–5 sản phẩm tương tự, ghi bảng so sánh
-- [ ] Viết đặc tả yêu cầu chức năng (đánh mã FR-01…)
-- [ ] Viết đặc tả yêu cầu phi chức năng
-- [ ] Chốt phạm vi và ghi rõ phần ngoài phạm vi
-- [ ] Tạo repo git, thiết lập nhánh và quy ước commit
+- [x] Chốt tên dự án và domain
+- [x] Khảo sát 3–5 sản phẩm tương tự, ghi bảng so sánh
+- [x] Viết đặc tả yêu cầu chức năng (đánh mã FR-01…) — [docs/requirements.md](docs/requirements.md)
+- [x] Viết đặc tả yêu cầu phi chức năng — [docs/requirements.md](docs/requirements.md)
+- [x] Chốt phạm vi và ghi rõ phần ngoài phạm vi — MoSCoW + ngoài phạm vi theo §1, xem [docs/requirements.md](docs/requirements.md)
+- [ ] Tạo repo git, thiết lập nhánh và quy ước commit — repo + [CONTRIBUTING.md](CONTRIBUTING.md) xong, `develop` mới tạo local, chưa push
 - [ ] Tạo board quản lý task
 
 ### B. Phân tích & thiết kế
