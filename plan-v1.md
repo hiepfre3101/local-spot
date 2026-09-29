@@ -54,7 +54,7 @@
 ### Backend
 | Hạng mục | Lựa chọn | Ghi chú |
 |---|---|---|
-| Framework | Spring Boot 3.3 + Java 21 (LTS) | API-only (REST), Maven (hoặc Gradle) |
+| Framework | Spring Boot 4.1 + Java 21 (LTS) | API-only (REST), Maven Wrapper. *Đổi từ 3.3 (2026-09-29): dòng 3.x đã hết hỗ trợ OSS, Initializr không còn cung cấp* |
 | Auth | Spring Security + JWT (jjwt) | Access token + refresh token; giải thích rõ luồng trong báo cáo |
 | Phân quyền | RBAC tự thiết kế + `@PreAuthorize` | Bảng `roles`/`permissions` riêng (Spring không có sẵn như Spatie); Role: user, owner, moderator, admin |
 | ORM | Spring Data JPA + Hibernate | Entity, Repository interface, tránh N+1 bằng `@EntityGraph`/fetch join |
@@ -77,7 +77,7 @@
 - **CSDL**: MySQL 8 (cột `POINT` + `SPATIAL INDEX` cho tìm theo bán kính).
 - **Lưu trữ ảnh**: MinIO khi dev, Cloudflare R2 / AWS S3 khi deploy.
 - **Container**: Docker Compose (app, nginx, mysql, redis, rabbitmq, meilisearch, minio).
-- **CI/CD**: GitHub Actions — chạy JUnit + Vitest + Checkstyle/SpotBugs, build jar và image.
+- **CI/CD**: GitHub Actions — chạy JUnit + Vitest + Spotless/SpotBugs + ESLint/Prettier, build jar và image.
 - **Deploy**: VPS Ubuntu + Nginx (reverse proxy) + systemd hoặc Docker chạy jar, hoặc Railway/Render nếu muốn nhanh.
 - **Giám sát**: Sentry (bản free) + Spring Boot Actuator.
 
@@ -370,12 +370,12 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Đặc tả API (OpenAPI) — [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
 ### C. Thiết lập môi trường
-- [ ] Docker Compose: app, nginx, mysql, redis, rabbitmq, meilisearch, minio
-- [ ] Khởi tạo Spring Boot (Spring Initializr), cấu hình `application.yml` theo profile (dev/prod)
-- [ ] Cài Vue 3 + Vite + TypeScript + Tailwind
-- [ ] Thiết lập ESLint, Prettier (frontend); Checkstyle/Spotless, SpotBugs (backend)
-- [ ] Thiết lập JUnit 5 + Testcontainers và Vitest
-- [ ] GitHub Actions chạy lint + test
+- [x] Docker Compose: app, nginx, mysql, redis, rabbitmq, meilisearch, minio — app + nginx dưới profile `app`; dev chỉ bật hạ tầng
+- [x] Khởi tạo Spring Boot (Spring Initializr), cấu hình `application.yml` theo profile (dev/prod)
+- [x] Cài Vue 3 + Vite + TypeScript + Tailwind — theme Tailwind = token design system
+- [x] Thiết lập ESLint, Prettier (frontend); Spotless, SpotBugs (backend) — bỏ Checkstyle (trùng formatter)
+- [x] Thiết lập JUnit 5 + Testcontainers và Vitest
+- [x] GitHub Actions chạy lint + test — [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 ### D. Backend — nền tảng
 - [ ] Toàn bộ Flyway migration + khóa ngoại + index

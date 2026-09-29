@@ -203,3 +203,24 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
   - Check-in (P12) và thông báo (P07) là hộp thoại / bảng thả xuống, không có route.
 - Sơ đồ `sitemap.puml` dạng WBS (PlantUML, cùng công cụ các sơ đồ khác), render bằng JDK trong WSL.
 - `docs/design-system/` đưa vào `.gitignore` theo yêu cầu supervisor. Hệ quả: token phải chép vào cấu hình Tailwind trong `frontend/` (được commit) khi scaffold ở checklist C.
+
+---
+
+## 2026-09-29 (+07) — Checklist C: thiết lập môi trường
+
+**Quyết định (supervisor chốt qua câu hỏi):**
+- **Spring Boot 4.1.1** thay 3.3: dòng 3.x hết hỗ trợ OSS (3.3 từ 06/2025), Initializr chỉ còn 4.0/4.1. Khởi đầu dự án mới trên bản EOL không có bản vá bảo mật là điểm yếu khi bảo vệ. Đánh đổi: kéo theo Spring Security 7, Hibernate 7, Jackson 3, Testcontainers 2 — tài liệu/ví dụ trên mạng ít hơn 3.x. Đã sửa plan §2 và CLAUDE.md.
+- **Build backend trong WSL** (JDK 21, Docker đã có). Đánh đổi: I/O qua `/mnt/d` chậm hơn (verify lần đầu ~3,5 phút gồm tải dependency + image).
+- **Dev: hạ tầng trong Docker, app chạy host**; backend + nginx dưới profile `app` cho chạy full stack / deploy. Lý do: hot reload & debug trên host; không thay đổi hành vi `docker compose up` hiện có của nhóm.
+- **Spotless (palantir-java-format) + SpotBugs, bỏ Checkstyle**: formatter tự sửa được, Checkstyle trùng phần lớn và dễ xung đột rule.
+
+**Quyết định kỹ thuật khác:**
+- `application-dev.yml` import `../.env` (`optional:file:../.env[.properties]`) → một nguồn thông tin đăng nhập cho cả compose và backend. `application-prod.yml` không có giá trị mặc định cho bí mật → thiếu biến thì khởi động lỗi ngay.
+- `open-in-view: false`, `ddl-auto: validate`, JDBC time zone UTC (khớp database.md §1).
+- Testcontainers ghim `mysql:8.4`, `rabbitmq:3.13-management-alpine`, `redis:7-alpine` = đúng image compose (Initializr sinh `:latest` → test có thể chạy trên MySQL khác production).
+- **Gỡ oxlint** mà create-vue tự thêm: công cụ ngoài stack (CLAUDE.md §4); ESLint dùng `flat/recommended` thay `essential`.
+- **Tailwind 4 theme = design system**: reset `--color-*`, `--shadow-*`, `--text-*`, `--radius-*`, `--font-*` về `initial`, chỉ khai báo token LocalSpot → `bg-blue-500`, `shadow-md`, `text-sm` không sinh CSS, lệch design system lộ khi review. Màu dùng `@theme inline` trỏ `var(--surface)`… để đổi theme bằng `data-theme`. Khoảng cách giữ mặc định (lưới 4px trùng `space-*`). Token màu chép vào `frontend/src/assets/tokens.css` (được commit) vì `docs/design-system/` bị ignore.
+- nginx: SPA fallback, proxy `/api` + `/ws` (cùng origin → cookie refresh token SameSite=Strict — S1), `client_max_body_size 55m` (10 ảnh × 5 MB — S2/NFR-09); backend `forward-headers-strategy: framework` để lấy IP thật cho luật cảnh báo IP.
+- Font Be Vietnam Pro qua Google Fonts `<link>` — không thêm package.
+
+**Kiểm chứng:** `./mvnw verify` xanh (1 smoke test trên MySQL/RabbitMQ/Redis thật, Spotless, SpotBugs 0 lỗi); frontend lint + format + type-check + Vitest + build xanh; `docker compose --profile app up --build`: backend profile prod kết nối MySQL, Flyway chạy, SPA 200, deep link 200, `/api` qua nginx tới Spring Security (401 — đúng, SecurityConfig làm ở D); profile dev trên host đọc `.env`, health 200. CI chưa chạy trên GitHub (chạy khi push).
