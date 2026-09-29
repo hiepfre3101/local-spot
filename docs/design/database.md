@@ -1,6 +1,6 @@
 # Thiết kế cơ sở dữ liệu — LocalSpot
 
-> Trạng thái: **BẢN NHÁP** (2026-09-27) — chờ supervisor chốt các câu hỏi ở mục 5 trước khi viết Flyway `V1__init.sql`.
+> Trạng thái: **Đã chốt** (2026-09-28) — D1–D7 đã được supervisor xác nhận; là đầu vào cho Flyway `V1__init.sql`.
 > Nguồn: [plan-v1.md](../../plan-v1.md) §5, [requirements.md](../requirements.md) §5–5.1, [use-cases.md](../analysis/use-cases.md).
 > ERD: [erd-*.puml](../diagrams/) (3 sơ đồ theo miền). Tài liệu này là "bảng mô tả chi tiết từng bảng CSDL" cho Chương 3 và Phụ lục.
 
@@ -58,7 +58,9 @@ Ký hiệu: **PK** khóa chính · **FK** khóa ngoại · **UQ** unique · **IX
 | lock_reason | VARCHAR(500) | | |
 | created_at, updated_at, deleted_at | DATETIME(6) | | `created_at` là thành phần `age_score` của trust |
 
-**Trust score không lưu thành cột** — xem câu hỏi D1.
+**Trust score không lưu thành cột** (D1): tính khi cần từ `created_at`, `helpful_votes_count` và `SUM(user_violations.points)` còn hiệu lực.
+
+**Xóa tài khoản** (D7): đặt `deleted_at`, đồng thời ẩn danh hóa `email = deleted_{id}@localspot.invalid`, `display_name = "Người dùng đã xóa"`, xóa `avatar_url`, `bio`, thu hồi mọi refresh token → email được giải phóng để đăng ký lại (NFR-11).
 
 #### `roles`, `permissions`, `role_permissions`, `user_roles`
 | Bảng | Cột | Ràng buộc |
@@ -145,7 +147,7 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | checkin_count | INT UNSIGNED | NN, default 0 | |
 | version | INT | NN | Optimistic lock |
 | created_at, updated_at, deleted_at | DATETIME(6) | | |
-| | | IX(category_id, status, bayesian_score) | Plan §5 ghi `avg_rating` — xem D3 |
+| | | IX(category_id, status, bayesian_score) | Xếp hạng theo danh mục (D3, plan §5 đã cập nhật) |
 | | | IX(status, created_at) | Trang chủ "mới nhất", hàng chờ duyệt |
 | | | IX(owner_id) | |
 
@@ -181,7 +183,7 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | Bảng | Cột | Ràng buộc |
 |---|---|---|
 | tags | id, name VARCHAR(50), slug VARCHAR(60) | slug UQ |
-| taggables | tag_id FK, taggable_type VARCHAR(20), taggable_id, created_by FK users | PK(tag_id, taggable_type, taggable_id) — xem D5 |
+| taggables | tag_id FK, taggable_type VARCHAR(20), taggable_id, created_by FK users | PK(tag_id, taggable_type, taggable_id) — giữ đa hình như plan (D5); hiện chỉ dùng `taggable_type = PLACE` |
 
 #### `place_views`
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
@@ -229,7 +231,7 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | moderated_at | DATETIME(6) | | |
 | version | INT | NN | |
 | created_at, updated_at, deleted_at | DATETIME(6) | | |
-| | | **UQ(place_id, user_id)** | Mỗi người một review / địa điểm (plan §5) — xem D2 |
+| | | **UQ(place_id, user_id)** | Mỗi người một review / địa điểm (plan §5). Tính cả review đã xóa mềm (D2 = A): xóa rồi không viết lại được, muốn đổi ý thì sửa |
 | | | IX(place_id, status, created_at) | Plan §5 — danh sách review của địa điểm |
 | | | IX(user_id, created_at) | Rate limit 5 / 24 h |
 | | | IX(place_id, ip_prefix, created_at) | Luật cảnh báo IP |
@@ -265,7 +267,7 @@ Không cho vote review của chính mình (kiểm tra ở service).
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
 |---|---|---|---|
 | id | BIGINT UNSIGNED | PK | |
-| review_id | BIGINT UNSIGNED | FK reviews, NN, **UQ** | Một phản hồi / review — xem D6 |
+| review_id | BIGINT UNSIGNED | FK reviews, NN, **UQ** | Một phản hồi / review, sửa được (D6) |
 | user_id | BIGINT UNSIGNED | FK users, NN | Chủ địa điểm tại thời điểm phản hồi |
 | content | VARCHAR(2000) | NN | |
 | created_at, updated_at | DATETIME(6) | | |
@@ -353,7 +355,8 @@ Ghi qua Spring AOP `@Aspect` quanh các phương thức service có annotation `
 
 | Cột | Cập nhật khi | Bởi |
 |---|---|---|
-| `places.review_count`, `avg_rating`, `bayesian_score` | Review đổi sang / rời khỏi `PUBLISHED` | `RecalculateRatingListener` (AFTER_COMMIT, @Async) |
+| `places.review_count`, `avg_rating`, `bayesian_score` | Review đổi sang / rời khỏi `PUBLISHED` | `RecalculateRatingListener` (AFTER_COMMIT, @Async) — tính lại `C` và địa điểm liên quan |
+| `places.bayesian_score` (mọi địa điểm) | Hằng đêm 03:00 (D4) | `RatingRecalculationJob` (`@Scheduled`) — cập nhật theo lô với `C` mới, vì `C` đổi làm điểm của mọi địa điểm khác lỗi thời |
 | `places.checkin_count` | Check-in thành công | `CheckInService` (cùng transaction) |
 | `reviews.helpful_count` | Vote / bỏ vote | `ReviewVoteService` (`UPDATE ... SET helpful_count = helpful_count ± 1`, nguyên tử) |
 | `users.helpful_votes_count` | Vote có `counted = 1` / bỏ vote đó | `ReviewVoteService` |
@@ -363,14 +366,14 @@ Lý do denormalize (trả lời câu hỏi bảo vệ "vì sao denormalize `avg_
 
 ---
 
-## 5. Câu hỏi mở
+## 5. Câu hỏi mở / đã chốt
 
 | # | Câu hỏi | Đề xuất | Đánh đổi |
 |---|---|---|---|
-| D1 | Trust score lưu cột hay tính khi cần? | **Tính khi cần** từ `created_at`, `helpful_votes_count`, `SUM(user_violations.points)` còn hiệu lực — 1 truy vấn có index | Trust thay đổi theo thời gian (tuổi tăng, vi phạm hết hạn) → cột lưu sẵn sẽ lỗi thời nếu không có job định kỳ |
-| D2 | Soft delete vs `UNIQUE(place_id, user_id)` trên `reviews`: review đã xóa mềm vẫn chiếm chỗ → người dùng **không viết lại được** review cho địa điểm đó | **Giữ nguyên ràng buộc như plan** — muốn đổi ý thì sửa review (UC13), không xóa rồi viết lại. Chặn luôn chiêu xóa-viết lại để "làm mới" review | Phương án khác: cột sinh `active_key = IF(deleted_at IS NULL, 1, NULL)` + `UQ(place_id, user_id, active_key)` cho phép viết lại, nhưng lệch với ràng buộc ghi trong plan |
-| D3 | Plan §5 ghi index `places(category_id, status, avg_rating)`. Sau S3, sắp xếp dùng `bayesian_score` | Đổi thành `(category_id, status, bayesian_score)` và **sửa plan §5** cho khớp | Là ràng buộc cốt lõi (CLAUDE.md §3) nên cần xác nhận trước khi sửa plan |
-| D4 | `C` (trung bình toàn hệ thống) thay đổi → `bayesian_score` của **mọi** địa điểm khác đều lỗi thời, không chỉ địa điểm vừa có review | Mỗi event: tính lại `C` và điểm **địa điểm liên quan**; thêm **job đêm** (`@Scheduled`, 03:00) tính lại toàn bộ `bayesian_score` với `C` mới | `C` biến động rất chậm khi đã có nhiều review → sai lệch trong ngày không đáng kể; tránh cập nhật cả bảng `places` sau mỗi review |
-| D5 | `tags` / `taggables` đa hình như plan, trong khi FR-30 chỉ gắn thẻ cho địa điểm | Giữ `taggables` như plan (cho phép mở rộng gắn thẻ review sau này) | Bảng `place_tags` đơn giản hơn và có FK thật, nhưng lệch tên với plan |
-| D6 | Chủ địa điểm được phản hồi mấy lần / review? | 1 phản hồi, sửa được (`UQ(review_id)`) | |
-| D7 | Soft delete vs `users.email` UNIQUE: tài khoản đã xóa vẫn giữ email | Khi xóa tài khoản, **ẩn danh hóa** email (`deleted_{id}@localspot.invalid`) và tên hiển thị → email dùng đăng ký lại được, phù hợp NFR-11 | Mất khả năng khôi phục tài khoản đã xóa |
+| D1 ✅ | Trust score lưu cột hay tính khi cần? | **Tính khi cần** từ `created_at`, `helpful_votes_count`, `SUM(user_violations.points)` còn hiệu lực — 1 truy vấn có index | Trust thay đổi theo thời gian (tuổi tăng, vi phạm hết hạn) → cột lưu sẵn sẽ lỗi thời nếu không có job định kỳ |
+| D2 ✅ (A) | Soft delete vs `UNIQUE(place_id, user_id)` trên `reviews`: review đã xóa mềm vẫn chiếm chỗ → người dùng **không viết lại được** review cho địa điểm đó | **Giữ nguyên ràng buộc như plan** — muốn đổi ý thì sửa review (UC13), không xóa rồi viết lại. Chặn luôn chiêu xóa-viết lại để "làm mới" review | Phương án khác: cột sinh `active_key = IF(deleted_at IS NULL, 1, NULL)` + `UQ(place_id, user_id, active_key)` cho phép viết lại, nhưng lệch với ràng buộc ghi trong plan |
+| D3 ✅ | Plan §5 ghi index `places(category_id, status, avg_rating)`. Sau S3, sắp xếp dùng `bayesian_score` | Đổi thành `(category_id, status, bayesian_score)` và **sửa plan §5** cho khớp | Là ràng buộc cốt lõi (CLAUDE.md §3) nên cần xác nhận trước khi sửa plan |
+| D4 ✅ | `C` (trung bình toàn hệ thống) thay đổi → `bayesian_score` của **mọi** địa điểm khác đều lỗi thời, không chỉ địa điểm vừa có review | Mỗi event: tính lại `C` và điểm **địa điểm liên quan**; thêm **job đêm** (`@Scheduled`, 03:00) tính lại toàn bộ `bayesian_score` với `C` mới | `C` biến động rất chậm khi đã có nhiều review → sai lệch trong ngày không đáng kể; tránh cập nhật cả bảng `places` sau mỗi review |
+| D5 ✅ | `tags` / `taggables` đa hình như plan, trong khi FR-30 chỉ gắn thẻ cho địa điểm | Giữ `taggables` như plan (cho phép mở rộng gắn thẻ review sau này) | Bảng `place_tags` đơn giản hơn và có FK thật, nhưng lệch tên với plan |
+| D6 ✅ | Chủ địa điểm được phản hồi mấy lần / review? | 1 phản hồi, sửa được (`UQ(review_id)`) | |
+| D7 ✅ | Soft delete vs `users.email` UNIQUE: tài khoản đã xóa vẫn giữ email | Khi xóa tài khoản, **ẩn danh hóa** email (`deleted_{id}@localspot.invalid`) và tên hiển thị → email dùng đăng ký lại được, phù hợp NFR-11 | Mất khả năng khôi phục tài khoản đã xóa |
