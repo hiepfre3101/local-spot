@@ -50,3 +50,18 @@ Những phần sau là xương sống hệ thống. Có thể sửa/mở rộng 
 
 - Không thêm thư viện/framework mới ngoài stack đã chốt (mục 2) nếu chưa hỏi — kể cả khi có lựa chọn "tốt hơn", vì báo cáo đã được viết dựa trên stack cụ thể.
 - Ưu tiên tính nhất quán với plan-v1.md; nếu code cần đi chệch khỏi kế hoạch (ví dụ đổi tên bảng, đổi luồng API), cập nhật lại plan-v1.md trong cùng thay đổi thay vì để hai tài liệu lệch nhau.
+
+## Design system
+
+Nguồn chuẩn cho mọi việc liên quan UI nằm ở `docs/design-system/`. Nếu source không có folder đó, hãy yêu cầu người dùng bổ sung thủ công bằng artifact thông qua Claude Design. Đọc trước khi viết hoặc sửa giao diện:
+
+- `docs/design-system/README.md` — nguyên tắc, màu, chữ, khoảng cách, giọng văn, khả năng tiếp cận
+- `docs/design-system/tokens.css` (và `tokens.json`) — design tokens, dùng `var(--...)`, không hard-code màu/cỡ chữ
+- `docs/design-system/components/<Tên>/README.md` — API & quy tắc từng thành phần; `preview.html` là bản xem mẫu
+- `docs/design-system/api/` — tham chiếu tokens và props của các thành phần
+- `docs/design-system/use-cases.md` — bảng UC → màn hình → thành phần (33 UC, 5 tác nhân)
+- `docs/design-system/DECISIONS.md` — quyết định đã chốt & câu hỏi còn chờ quyết (29/09/2026)
+
+Quy tắc cốt lõi: không gradient, không đổ bóng, không card lồng card; trạng thái không chỉ bằng màu;
+trang công khai bo 12–20px + nút pill, trang quản trị bo tối thiểu (control 2px, panel/bảng 0);
+font Be Vietnam Pro; hỗ trợ theme Sáng + Tối; không thêm chức năng ngoài danh sách UC.
