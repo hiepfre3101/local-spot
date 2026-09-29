@@ -134,3 +134,72 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
   - `reports.target_id` không có FK (quan hệ đa hình) — đánh đổi toàn vẹn tham chiếu lấy tính tổng quát, kiểm tra ở service.
 - **Phát hiện khi thiết kế** (chờ supervisor, D1–D7): trust score tính động hay lưu; soft delete xung đột với `UNIQUE(place_id, user_id)` và `users.email`; index plan §5 dùng `avg_rating` nhưng xếp hạng dùng `bayesian_score`; **`C` thay đổi làm bayesian_score của mọi địa điểm khác lỗi thời** → đề xuất job đêm; tags đa hình; số phản hồi chủ quán.
 - Sơ đồ lớp để sau khi chốt ERD (entity JPA phản ánh 1-1 bảng).
+
+---
+
+## 2026-09-28 (+07) — Chốt D1, D3–D7 (thiết kế CSDL)
+
+- **D1 ✅** trust score tính khi cần, không lưu cột. **D5 ✅** giữ `tags`/`taggables` đa hình. **D6 ✅** 1 phản hồi chủ quán / review, sửa được.
+- **D3 ✅** đổi index `places(category_id, status, avg_rating)` → `(category_id, status, bayesian_score)` và **sửa plan-v1.md §5** trong cùng thay đổi (ràng buộc cốt lõi, CLAUDE.md §3 — đã được supervisor xác nhận).
+- **D4 ✅** thêm `RatingRecalculationJob` chạy 03:00 hằng đêm tính lại `bayesian_score` của mọi địa điểm với `C` mới; ghi vào requirements.md §5 và database.md §4.
+- **D7 ✅** xóa tài khoản = xóa mềm + ẩn danh hóa email / tên / avatar / bio + thu hồi refresh token.
+- **D2 ⏳** supervisor hỏi lại ý nghĩa đề xuất → giải thích bằng ví dụ, chờ quyết định.
+- **D2 ✅ = A** (2026-09-28): giữ nguyên `UNIQUE(place_id, user_id)` tính cả review đã xóa mềm. Lý do: chặn chiêu xóa-viết lại để làm mới review / xóa review bị từ chối để thử lại; không đổi ràng buộc cốt lõi. Đánh đổi: người xóa nhầm không viết lại được → UI cảnh báo khi xóa, gợi ý sửa. Ghi vào FR-18. Tick ERD + bảng mô tả CSDL.
+
+---
+
+## 2026-09-28 (+07) — Sơ đồ lớp (bản nháp)
+
+- Tách 2 sơ đồ: **class-domain** (32 bảng → entity, nhóm theo 4 miền như ERD) và **class-review-module** (Controller → DTO → Service → Repository → Entity + event/listener cho module đánh giá). Lý do: sơ đồ lớp gồm cả service của mọi module sẽ không đọc được; module đánh giá chứa đủ 3 điểm nhấn (chống review ảo, trust, Bayesian) nên đại diện tốt cho kiến trúc.
+- **Quyết định thể hiện trong sơ đồ**:
+  - `BaseEntity` / `SoftDeletableEntity` (`@MappedSuperclass`) gom id + audit + xóa mềm — tránh lặp ở 4 entity xóa mềm.
+  - Hành vi nghiệp vụ đặt trên entity (`Review.publish/reject`, `Place.applyRating`, `RefreshToken.isUsable`) thay vì setter trần — giữ bất biến trạng thái ở một chỗ; service chỉ điều phối.
+  - Bảng nối có cột thêm (`review_votes`, `collection_place`, `follows`, `user_badges`) → entity riêng với `@EmbeddedId`; bảng nối thuần (`user_roles`, `role_permissions`, `place_amenity`) → `@ManyToMany`.
+  - Tham số chống review ảo gom vào `AntiFakeProperties` (`@ConfigurationProperties`) — đổi cấu hình để thử nghiệm Chương 5 mà không sửa code (requirements §5.1).
+  - `RatingCalculator` là hàm thuần, không I/O → unit test độc lập (checklist G).
+- **Chờ supervisor (C1)**: kiểu Java cho cột `POINT` — `hibernate-spatial` (JTS `Point`) hay `lat`/`lng` + native query.
+- **C1 ✅ = A** (2026-09-28): dùng `hibernate-spatial` + JTS `Point` cho `places.location`, `check_ins.location`. Là module chính thức của Hibernate (đã trong stack) nhưng vẫn là dependency mới → đã hỏi trước theo CLAUDE.md §4 và thêm vào bảng stack plan §2. Tick sơ đồ lớp.
+
+---
+
+## 2026-09-29 (+07) — Đặc tả API OpenAPI
+
+- **C1 = A** được supervisor xác nhận bằng "okay" (hiểu là chấp nhận phương án khuyến nghị).
+- `docs/api/openapi.yaml`: OpenAPI 3.1, 83 operation, lint hợp lệ bằng Redocly CLI (`--extends=minimal`, 0 lỗi). Công cụ lint chạy qua `npx` (cache npm), không thêm vào dự án. WSL thiếu `python3-venv` nên không dùng openapi-spec-validator.
+- **Quyết định & lệch so với plan §6 (đã sửa plan cùng lúc)**:
+  - Vote `POST` → `PUT`/`DELETE` idempotent.
+  - Tách `/owner/*` và `/moderation/*` khỏi `/admin/*`: nhóm route theo vai trò khớp RBAC Q2, và tránh trùng đường dẫn `/places/{slug}` (GET chi tiết, giữ đúng plan) với `/places/{placeId}` (PATCH của chủ) — Redocly báo `no-ambiguous-paths`.
+  - Bỏ "response bọc API Resource" (khái niệm Laravel) → DTO MapStruct, không envelope.
+  - Quyết định duyệt dùng `POST .../decision {APPROVE|REJECT, reason, version}` thay vì hai endpoint approve/reject: một chỗ kiểm tra optimistic lock, dễ ghi activity_log.
+  - `PlaceUpdateRequest` không cho chủ đổi vị trí / danh mục — tránh "dời" địa điểm để thoát review xấu; đổi phải qua báo cáo WRONG_INFO.
+  - `GET /moderation/claims/{id}/evidence/{i}` trả presigned URL 5 phút — minh chứng nằm bucket riêng tư.
+- Còn cảnh báo (không phải lỗi): thiếu `operationId` (sẽ lấy từ tên method controller khi springdoc sinh), thiếu mô tả tag.
+
+---
+
+## 2026-09-29 (+07) — Đối chiếu design system với plan; chốt 4 điểm lệch
+
+**Bối cảnh**: đọc `docs/design-system/` (bản xuất từ Claude Design: token, `bundle.css` lớp `.ls-*`, README + preview HTML; không có component code) và đối chiếu với plan / requirements.
+
+- **UI ✅ Tailwind, bỏ shadcn-vue / PrimeVue** (sửa plan §2). Token design system đưa vào theme Tailwind, component Vue tự viết. Lý do: hai thư viện kia mang sẵn bóng đổ, bo góc, style riêng — xung đột quy tắc "không bóng, quản trị bo 2px, không card lồng card". Đánh đổi: tự viết Button / FormField / DataTable / dialog → nhiều việc hơn, bù lại UI khớp design system.
+- **Một đánh giá / người / địa điểm ✅** — trả lời câu hỏi mở P04 theo `UNIQUE(place_id, user_id)` (D2). Không đổi schema.
+- **Check-in ✅ giữ U5** (200 m, accuracy ≤ 100 m, 1 lần / địa điểm / ngày). Supervisor ban đầu nói "không giới hạn" — mâu thuẫn với U5 đã có trong ERD (`UQ(user_id, place_id, checkin_date)`), API (409) và sơ đồ hoạt động → hỏi lại, supervisor giữ U5. Lý do giữ: check-in cộng điểm xếp hạng; không giới hạn thì cày điểm được.
+- **Duyệt đánh giá ✅ giữ luồng lõi**: trust ≥ 30 đăng ngay; < 30 hoặc cảnh báo IP → hàng chờ. **Không** theo design system ("mọi đánh giá vào hàng chờ") vì làm trust score mất tác dụng (điểm bảo vệ), tải moderator tăng tuyến tính theo số review.
+- **Hàng chờ gộp FIFO ✅**: thêm `GET /moderation/queue` (openapi) gộp 4 loại, sắp xếp cố định `(submittedAt, type, id)`, cursor keyset (không OFFSET), chỉ trả loại người gọi có quyền. Là màn **xem**; duyệt vẫn qua `decision` riêng từng loại → không đổi luật nghiệp vụ, optimistic lock giữ nguyên. Triển khai dự kiến: native `UNION ALL` 4 bảng dùng index `(status, created_at)` sẵn có. Đánh đổi: báo cáo gom nhóm theo đối tượng nên `submittedAt` = báo cáo đầu tiên của nhóm; `position` cần một `COUNT` các mục cũ hơn.
+- Đã sửa: plan-v1.md §2, §6; requirements.md §3.7, §5; openapi.yaml; design-system `DECISIONS.md`, `use-cases.md`.
+- **Còn lệch**: các README component (P03, P04, ReviewItem…) và project gốc trên Claude Design vẫn ghi "mọi đánh giá vào hàng chờ" — cần sửa ở nguồn Claude Design rồi xuất lại, không sửa tay bản xuất.
+
+---
+
+## 2026-09-29 (+07) — Duyệt P01–P12; sitemap; đóng checklist B
+
+- **Supervisor duyệt P01–P12** và coi mục "Prototype Figma" là xong (prototype làm trên Claude Design thay Figma — đã sửa dòng checklist plan §10.B cho đúng công cụ thực tế, tránh báo cáo ghi Figma mà không có file Figma).
+- **Cách hiểu "duyệt"**: chấp nhận phương án đề xuất của từng màn; câu hỏi nào đã có câu trả lời trong tài liệu chốt (U1, U5, U6, U7, D2, FR-10, FR-26, FR-30, FR-39, ngoài phạm vi) thì **tài liệu chốt thắng**. Phát hiện P02 thiếu bộ lọc khoảng giá so với FR-10 → bổ sung trong sitemap. Bảng kết luận ở `docs/design/sitemap.md` §4.
+- **Không tự chốt** 7 câu hỏi không có phương án đề xuất hoặc chạm schema (O1–O7). Đáng chú ý nhất **O2**: giữ bản cũ của đánh giá đã đăng trong lúc bản sửa chờ duyệt cần bảng lưu bản sửa — `reviews` hiện chỉ có một trạng thái. Không ảnh hưởng sitemap, phải chốt trước module đánh giá.
+- **Quyết định sitemap**:
+  - `/propose` thay vì `/places/new` — tránh đụng route `/places/:slug` (slug "new").
+  - Tab trang cá nhân / chủ địa điểm dùng query `?tab=` thay vì route con — giữ link chia sẻ được mà không nhân đôi số route.
+  - Danh sách riêng từng loại hàng chờ = `/admin/queue?type=` — một màn DataTable, khớp API `GET /moderation/queue`.
+  - Check-in (P12) và thông báo (P07) là hộp thoại / bảng thả xuống, không có route.
+- Sơ đồ `sitemap.puml` dạng WBS (PlantUML, cùng công cụ các sơ đồ khác), render bằng JDK trong WSL.
+- `docs/design-system/` đưa vào `.gitignore` theo yêu cầu supervisor. Hệ quả: token phải chép vào cấu hình Tailwind trong `frontend/` (được commit) khi scaffold ở checklist C.

@@ -29,3 +29,6 @@ Xem nhanh trong VS Code: extension "PlantUML" (jebbs.plantuml), `Alt+D`.
 | erd-account | ERD 1/3: tài khoản & phân quyền | — |
 | erd-place-review | ERD 2/3: địa điểm & đánh giá | — |
 | erd-community | ERD 3/3: cộng đồng & vận hành | — |
+| class-domain | Sơ đồ lớp 1/2: mô hình miền (JPA entity) | — |
+| class-review-module | Sơ đồ lớp 2/2: module đánh giá theo phân lớp | UC12, UC28 |
+| sitemap | Sitemap frontend (route theo layout) — chi tiết ở [docs/design/sitemap.md](../design/sitemap.md) | UC01–UC33 |

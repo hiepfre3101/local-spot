@@ -77,7 +77,7 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | Mã | Tác nhân | Chức năng | Mô tả / tiêu chí chấp nhận | Ưu tiên | Nguồn |
 |---|---|---|---|---|---|
 | FR-17 | Thành viên | Viết review | Sao 1–5, nội dung, ngày đã đến; **mỗi người một review / địa điểm** (`UNIQUE(place_id, user_id)`) | M | §4, §5 |
-| FR-18 | Thành viên | Sửa / xóa review của mình | Xóa mềm; sửa/xóa kích hoạt tính lại rating | M | §4, §6 |
+| FR-18 | Thành viên | Sửa / xóa review của mình | Xóa mềm; sửa/xóa kích hoạt tính lại rating. Review đã xóa vẫn chiếm chỗ `UNIQUE(place_id, user_id)` → không viết lại được; hộp thoại xóa phải cảnh báo và gợi ý sửa thay vì xóa (D2) | M | §4, §6 |
 | FR-19 | Thành viên | Ảnh đính kèm review | Nhiều ảnh, crop phía client, xử lý nền như FR-16 | M | §10.E, §10.F |
 | FR-20 | Thành viên | Vote "hữu ích" | Mỗi người một vote / review (`UNIQUE(review_id, user_id)`), bấm lại để bỏ vote | M | §5, §6 |
 | FR-21 | Thành viên | Bình luận review | Bình luận phân cấp tối đa 2 cấp (bình luận + trả lời); xóa mềm | M | §4, §10.E |
@@ -114,6 +114,8 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | FR-40 | Kiểm duyệt viên | Duyệt yêu cầu sở hữu | Duyệt thì gán role `owner` cho người yêu cầu | S | §4 |
 | FR-41 | Quản trị viên | Dashboard thống kê | Người dùng mới, review theo ngày, địa điểm hot | S | §4 |
 | FR-42 | Hệ thống | Nhật ký thao tác quản trị | Ghi `activity_log` qua Spring AOP cho mọi thao tác admin/moderator | S | §5 `activity_log` |
+
+Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một danh sách gộp FIFO** (cũ nhất trước, không đổi được thứ tự; lọc được theo loại) — `GET /moderation/queue`. Chỉ là màn xem; duyệt / từ chối vẫn qua endpoint `decision` riêng của từng loại *(chốt 2026-09-29)*.
 
 **Tổng**: 42 FR — 30 Must, 8 Should, 4 Could.
 
@@ -155,10 +157,10 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Tham số | Giá trị | Trạng thái |
 |---|---|---|
 | `m` — ngưỡng review trong Bayesian | 10 | Đã chốt |
-| `C` — trung bình sao toàn hệ thống | Tính lại mỗi lần tính lại rating, lấy từ bảng tổng hợp | Đã chốt |
+| `C` — trung bình sao toàn hệ thống | Tính lại mỗi lần tính lại rating (cập nhật điểm địa điểm liên quan) + job đêm 03:00 tính lại `bayesian_score` của mọi địa điểm với `C` mới | Đã chốt (D4) |
 | N — số review tối đa / ngày / tài khoản | 5 | Đã chốt |
 | Công thức trust score | Xem mục 5.1 | Đã chốt |
-| Ngưỡng trust score để bỏ qua hàng chờ duyệt | 30 | Đã chốt |
+| Ngưỡng trust score để bỏ qua hàng chờ duyệt | 30 — review từ trust ≥ 30 đăng ngay; **không** đưa mọi review vào hàng chờ (xác nhận lại 2026-09-29, khi đối chiếu design system) | Đã chốt |
 | Cảnh báo IP | ≥ 3 review cùng địa điểm từ cùng /24 trong 24 h | Đã chốt |
 | Bán kính check-in | 200 m | Theo plan (§5) |
 | Độ sâu bình luận | 2 cấp (bình luận + trả lời) | Đã chốt |

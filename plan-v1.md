@@ -43,7 +43,7 @@
 | Ngôn ngữ | TypeScript | Nên dùng — điểm cộng lớn khi bảo vệ |
 | State | Pinia | Store: auth, places, filters, notifications |
 | Router | Vue Router 4 | Lazy load route, navigation guard |
-| UI | TailwindCSS + shadcn-vue (hoặc PrimeVue) | Tự chọn theo gu thẩm mỹ |
+| UI | TailwindCSS, theme lấy từ token của `docs/design-system/` | Component Vue tự viết theo design system (phẳng, không bóng, bo góc theo bề mặt) — **không dùng shadcn-vue/PrimeVue** *(chốt 2026-09-29)* |
 | Form | VeeValidate + Zod | Validate đồng bộ với rule backend |
 | HTTP | Axios + interceptor | Tự gắn token, xử lý 401 |
 | Data fetching | TanStack Query (Vue Query) | Cache, infinite scroll cho danh sách review |
@@ -58,6 +58,7 @@
 | Auth | Spring Security + JWT (jjwt) | Access token + refresh token; giải thích rõ luồng trong báo cáo |
 | Phân quyền | RBAC tự thiết kế + `@PreAuthorize` | Bảng `roles`/`permissions` riêng (Spring không có sẵn như Spatie); Role: user, owner, moderator, admin |
 | ORM | Spring Data JPA + Hibernate | Entity, Repository interface, tránh N+1 bằng `@EntityGraph`/fetch join |
+| Spatial | `hibernate-spatial` (JTS `Point`) | Map cột `POINT SRID 4326` sang entity, viết truy vấn không gian trong JPQL — thêm 2026-09-28 (C1) |
 | Migration | Flyway | Versioned SQL migration, chạy tự động khi start app |
 | Media | Service tự viết + AWS S3 SDK v2 | Client tương thích MinIO khi dev, R2/S3 khi deploy |
 | Ảnh | Thumbnailator + metadata-extractor | Resize, nén, gỡ EXIF |
@@ -175,7 +176,7 @@ Kèm Application Event/Listener cho các tác vụ phụ: `ReviewCreatedEvent` (
 - `collection_place`: khóa chính tổ hợp `(collection_id, place_id)`.
 - `places.location`: `POINT NOT NULL SRID 4326` + `SPATIAL INDEX`.
 - `places.slug`, `users.email`, `categories.slug`: UNIQUE.
-- Index tổ hợp: `places(category_id, status, avg_rating)`, `reviews(place_id, status, created_at)`.
+- Index tổ hợp: `places(category_id, status, bayesian_score)` *(đổi từ `avg_rating` — 2026-09-28, docs/design/database.md D3: xếp hạng dùng điểm Bayesian, `avg_rating` chỉ là trung bình thô để hiển thị)*, `reviews(place_id, status, created_at)`.
 - Soft delete cho `places`, `reviews`, `comments`, `users`.
 
 ### Công thức xếp hạng (Bayesian average)
@@ -200,9 +201,11 @@ Quán 5 sao / 1 review sẽ không vượt mặt quán 4.6 sao / 300 review. Đ�
 
 ## 6. Thiết kế API (REST, prefix `/api/v1`)
 
+> Bảng dưới là tóm tắt. Đặc tả đầy đủ (83 operation, schema, mã lỗi, quyền): [docs/api/openapi.yaml](docs/api/openapi.yaml). Các chỗ đổi so với bản đầu được đánh dấu *(2026-09-29)*.
+
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| POST | `/auth/register`, `/auth/login`, `/auth/logout` | Xác thực |
+| POST | `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/refresh`, `/auth/verify-email`, `/auth/forgot-password`, `/auth/reset-password` | Xác thực *(bổ sung các luồng FR-02/04/05)* |
 | GET | `/places` | Danh sách + lọc + phân trang |
 | GET | `/places/nearby?lat=&lng=&radius=` | Tìm theo bán kính |
 | GET | `/places/{slug}` | Chi tiết |
@@ -210,15 +213,17 @@ Quán 5 sao / 1 review sẽ không vượt mặt quán 4.6 sao / 300 review. Đ�
 | GET | `/places/{id}/reviews` | Đánh giá của địa điểm |
 | POST | `/places/{id}/reviews` | Viết đánh giá |
 | PATCH/DELETE | `/reviews/{id}` | Sửa / xóa |
-| POST | `/reviews/{id}/vote` | Vote hữu ích |
+| PUT/DELETE | `/reviews/{id}/vote` | Vote / bỏ vote hữu ích *(đổi từ POST: idempotent, bấm 2 lần không đảo trạng thái ngoài ý muốn)* |
 | POST | `/reviews/{id}/comments` | Bình luận |
 | POST | `/places/{id}/check-in` | Check-in |
-| CRUD | `/collections`, `/collections/{id}/places` | Bộ sưu tập |
+| CRUD | `/collections`, `PUT/DELETE /collections/{id}/places/{placeId}` | Bộ sưu tập |
 | POST | `/reports` | Báo cáo vi phạm |
 | GET | `/search?q=` | Tìm kiếm qua Meilisearch |
-| CRUD | `/admin/*` | Nhóm route quản trị |
+| * | `/owner/*` | Chủ địa điểm: sửa thông tin, ảnh, thống kê *(tách riêng: tránh trùng đường dẫn với `/places/{slug}`)* |
+| * | `/moderation/*` | Kiểm duyệt viên: hàng chờ địa điểm / review / báo cáo / yêu cầu sở hữu *(tách khỏi `/admin` theo phân quyền Q2)*; `GET /moderation/queue` gộp 4 loại, xếp FIFO *(2026-09-29)* |
+| CRUD | `/admin/*` | Quản trị viên: người dùng, role, danh mục, tiện ích, dashboard |
 
-**Quy ước chung**: phân trang cursor cho danh sách dài, chuẩn hóa lỗi theo RFC 7807, versioning bằng prefix URL, response bọc trong API Resource.
+**Quy ước chung**: phân trang cursor cho danh sách dài, chuẩn hóa lỗi theo RFC 7807, versioning bằng prefix URL, response là DTO map bằng MapStruct *(thay "API Resource" của Laravel)*.
 
 ---
 
@@ -357,12 +362,12 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Đặc tả chi tiết ít nhất 8 use case — 10 UC, [docs/analysis/use-cases.md](docs/analysis/use-cases.md)
 - [x] Sơ đồ hoạt động (≥3 nghiệp vụ) — [docs/diagrams/](docs/diagrams/README.md)
 - [x] Sơ đồ tuần tự (≥3 luồng) — [docs/diagrams/](docs/diagrams/README.md)
-- [ ] Sơ đồ lớp
-- [ ] ERD hoàn chỉnh
-- [ ] Bảng mô tả chi tiết từng bảng CSDL
-- [ ] Sitemap và wireframe
-- [ ] Prototype Figma các màn hình chính
-- [ ] Đặc tả API (OpenAPI)
+- [x] Sơ đồ lớp — [class-domain, class-review-module](docs/diagrams/README.md)
+- [x] ERD hoàn chỉnh — [docs/diagrams/erd-*.puml](docs/diagrams/README.md)
+- [x] Bảng mô tả chi tiết từng bảng CSDL — [docs/design/database.md](docs/design/database.md)
+- [x] Sitemap và wireframe — [docs/design/sitemap.md](docs/design/sitemap.md), [sitemap.puml](docs/diagrams/sitemap.puml)
+- [x] Prototype các màn hình chính — làm trên **Claude Design** thay cho Figma (design system + màn P01–P12 đã duyệt 2026-09-29; bản xuất cục bộ `docs/design-system/`, không commit)
+- [x] Đặc tả API (OpenAPI) — [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
 ### C. Thiết lập môi trường
 - [ ] Docker Compose: app, nginx, mysql, redis, rabbitmq, meilisearch, minio
