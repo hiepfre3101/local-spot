@@ -1,0 +1,28 @@
+# Cấu hình chung mọi môi trường. Giá trị theo môi trường nằm ở application-{dev,prod}.yml.
+spring:
+  application:
+    name: localspot
+  profiles:
+    default: dev
+  jpa:
+    open-in-view: false # Không giữ session tới view — buộc nạp dữ liệu trong service, lộ N+1 sớm
+    hibernate:
+      ddl-auto: validate # Schema do Flyway quản lý; Hibernate chỉ đối chiếu
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC # DATETIME(6) lưu UTC (docs/design/database.md §1)
+  flyway:
+    locations: classpath:db/migration
+  jackson:
+    time-zone: UTC
+
+server:
+  port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
