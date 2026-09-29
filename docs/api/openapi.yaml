@@ -1,0 +1,1636 @@
+openapi: 3.1.0
+info:
+  title: LocalSpot API
+  version: 1.0.0-draft
+  description: |
+    Đặc tả API thiết kế trước (design-first) cho LocalSpot. Nguồn: plan-v1.md §6, docs/requirements.md,
+    docs/analysis/use-cases.md, docs/design/database.md.
+
+    **Quy ước**
+    - Prefix `/api/v1`, JSON UTF-8, thời gian ISO-8601 UTC.
+    - Lỗi theo RFC 7807 (`application/problem+json`, schema `Problem`); lỗi validate có `errors[]` theo từng trường.
+    - Danh sách dài phân trang **cursor**: `?cursor=&limit=` → `{ items, nextCursor }`; `nextCursor = null` là hết.
+    - Xác thực: `Authorization: Bearer <accessToken>` (15 phút). Refresh token nằm trong cookie HttpOnly
+      `refresh_token` (Path=/api/v1/auth, SameSite=Strict) — S1.
+    - Phân quyền ghi trong `x-permission` của từng operation (khớp bảng `permissions`).
+    - Nhóm đường dẫn theo vai trò: công khai / thành viên ở gốc, `/owner/*` chủ địa điểm, `/moderation/*` kiểm duyệt viên, `/admin/*` quản trị viên.
+    - Chi tiết địa điểm tra theo `slug` (`/places/{slug}`, thân thiện SEO — plan §6); mọi thao tác ghi dùng `placeId`.
+    - Realtime: STOMP qua WebSocket `/ws`, kênh cá nhân `/user/queue/notifications` (FR-27).
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Dev
+tags:
+  - name: Auth
+  - name: Me
+  - name: Users
+  - name: Catalog
+  - name: Places
+  - name: Search
+  - name: Reviews
+  - name: Comments
+  - name: CheckIns
+  - name: Collections
+  - name: Reports
+  - name: Owner
+  - name: Moderation
+  - name: Admin
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────────── Auth (UC01–UC05) ─────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Đăng ký (FR-01)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { description: 'Đã tạo tài khoản, email xác thực đã được xếp hàng gửi' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Xác thực email bằng token trong link (FR-02)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '204': { description: Đã xác thực }
+        '410': { description: Token hết hạn hoặc đã dùng, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Gửi lại email xác thực
+      responses:
+        '204': { description: Đã xếp hàng gửi }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập (FR-03) — giới hạn 5 lần / 15 phút theo (email, IP)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Thành công. Refresh token trả qua `Set-Cookie`.
+          headers:
+            Set-Cookie: { schema: { type: string }, description: 'refresh_token=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Tài khoản bị khóa, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Làm mới access token, xoay vòng refresh token (FR-04)
+      description: Refresh token đã dùng bị gửi lại → thu hồi toàn bộ refresh token của người dùng, trả 401 (U2).
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: Access token mới + cookie refresh token mới
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Đăng xuất — thu hồi refresh token hiện tại, xóa cookie
+      security:
+        - refreshCookie: []
+      responses:
+        '204': { description: Đã đăng xuất }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Yêu cầu link đặt lại mật khẩu (FR-05)
+      description: Luôn trả 204 kể cả khi email không tồn tại (không lộ thông tin tài khoản).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '204': { description: Đã xử lý }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Đặt lại mật khẩu bằng token (hết hạn 30 phút, dùng 1 lần)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '204': { description: 'Đã đổi mật khẩu, mọi refresh token bị thu hồi' }
+        '410': { description: Token hết hạn hoặc đã dùng }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ───────────────────────────── Me (UC06, UC19) ─────────────────────────────
+  /me:
+    get:
+      tags: [Me]
+      summary: Hồ sơ của tôi
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+    patch:
+      tags: [Me]
+      summary: Cập nhật hồ sơ (FR-07)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Me]
+      summary: Xóa tài khoản — xóa mềm + ẩn danh hóa (D7)
+      responses:
+        '204': { description: Đã xóa }
+  /me/avatar:
+    put:
+      tags: [Me]
+      summary: Đổi avatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /me/password:
+    put:
+      tags: [Me]
+      summary: Đổi mật khẩu (FR-06) — thu hồi các refresh token khác
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '204': { description: Đã đổi }
+        '401': { description: Mật khẩu hiện tại sai }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /me/reviews:
+    get:
+      tags: [Me]
+      summary: Review của tôi (mọi trạng thái, kèm lý do bị từ chối)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+  /me/places:
+    get:
+      tags: [Me]
+      summary: Địa điểm tôi đã đề xuất (mọi trạng thái)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+  /me/collections:
+    get:
+      tags: [Me, Collections]
+      summary: Bộ sưu tập của tôi
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+  /me/notifications:
+    get:
+      tags: [Me]
+      summary: Thông báo (FR-27)
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationPage' } } } }
+  /me/notifications/unread-count:
+    get:
+      tags: [Me]
+      summary: Số thông báo chưa đọc
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { count: { type: integer } } }
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [Me]
+      summary: Đánh dấu đã đọc
+      parameters: [ { $ref: '#/components/parameters/NotificationId' } ]
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /me/notifications/read-all:
+    post:
+      tags: [Me]
+      summary: Đánh dấu tất cả đã đọc
+      responses:
+        '204': { description: OK }
+
+  # ───────────────────────────── Users (UC20, UC21) ─────────────────────────────
+  /users/{userId}:
+    get:
+      tags: [Users]
+      summary: Hồ sơ công khai (không lộ email — NFR-11)
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PublicProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/reviews:
+    get:
+      tags: [Users]
+      summary: Review đã công khai của người dùng
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+  /users/{userId}/follow:
+    put:
+      tags: [Users]
+      summary: Theo dõi (FR-28) — idempotent
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: Đang theo dõi }
+        '422': { description: Không thể tự theo dõi mình }
+    delete:
+      tags: [Users]
+      summary: Bỏ theo dõi — idempotent
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: Đã bỏ }
+  /users/{userId}/followers:
+    get:
+      tags: [Users]
+      summary: Danh sách người theo dõi
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserSummaryPage' } } } }
+  /users/{userId}/following:
+    get:
+      tags: [Users]
+      summary: Danh sách đang theo dõi
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserSummaryPage' } } } }
+  /leaderboard:
+    get:
+      tags: [Users]
+      summary: Bảng xếp hạng đóng góp (FR-29)
+      security: []
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [WEEK, MONTH, ALL], default: MONTH } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/LeaderboardEntry' } }
+
+  # ───────────────────────────── Catalog ─────────────────────────────
+  /categories:
+    get:
+      tags: [Catalog]
+      summary: Cây danh mục (cache Redis)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+  /amenities:
+    get:
+      tags: [Catalog]
+      summary: Danh sách tiện ích (cache Redis)
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Amenity' } }
+  /home:
+    get:
+      tags: [Catalog]
+      summary: Dữ liệu trang chủ — nổi bật (bayesian_score), danh mục, mới nhất (FR-08, cache)
+      security: []
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/HomeResponse' } } } }
+
+  # ───────────────────────────── Places (UC08–UC11) ─────────────────────────────
+  /places:
+    get:
+      tags: [Places]
+      summary: Danh sách địa điểm đã duyệt + lọc + sắp xếp (FR-10)
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } } }
+        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: Giá tối đa (VND) }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [SCORE, NEWEST, MOST_REVIEWED], default: SCORE } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+    post:
+      tags: [Places]
+      summary: Đề xuất địa điểm mới → PENDING (FR-15, UC11)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [place]
+              properties:
+                place: { $ref: '#/components/schemas/PlaceCreateRequest' }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary } }
+            encoding:
+              place: { contentType: application/json }
+      responses:
+        '201': { description: 'Đã tạo, chờ duyệt', content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /places/duplicates:
+    get:
+      tags: [Places]
+      summary: Kiểm tra nghi trùng trước khi đề xuất — tên gần giống trong 50 m (U7)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+      responses:
+        '200':
+          description: Danh sách nghi trùng (rỗng nếu không có) — chỉ cảnh báo, không chặn
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+  /places/nearby:
+    get:
+      tags: [Places]
+      summary: Địa điểm trong bán kính, sắp theo khoảng cách (FR-11, UC09)
+      description: Lọc thô `MBRContains` trên spatial index rồi lọc chính xác `ST_Distance_Sphere`.
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: radius, in: query, schema: { type: integer, minimum: 100, maximum: 20000, default: 2000 }, description: Mét (U8) }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /places/{slug}:
+    get:
+      tags: [Places]
+      summary: Chi tiết địa điểm theo slug (FR-13) — ghi nhận lượt xem theo ngày
+      description: Địa điểm chưa duyệt chỉ người đề xuất, chủ và kiểm duyệt viên xem được.
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Search (UC08) ─────────────────────────────
+  /search:
+    get:
+      tags: [Search]
+      summary: Tìm kiếm tiếng Việt qua Meilisearch, fallback MySQL LIKE (FR-09, U9)
+      security: []
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } } }
+        - { name: priceMax, in: query, schema: { type: integer } }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK. `degraded = true` khi đang dùng fallback.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PlaceSummaryPage' }
+                  - type: object
+                    properties:
+                      degraded: { type: boolean }
+
+  # ───────────────────────────── Reviews (UC12–UC14) ─────────────────────────────
+  /places/{placeId}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Review đã công khai của địa điểm (FR-14)
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/PlaceId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: sort, in: query, schema: { type: string, enum: [NEWEST, HELPFUL], default: NEWEST } }
+        - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Lọc theo số sao }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+    post:
+      tags: [Reviews]
+      summary: Viết review kèm ảnh — một request multipart (FR-17/19/23, UC12, S2)
+      description: |
+        Kiểm tra theo thứ tự: email đã xác thực → validate → chưa có review (kể cả đã xóa, D2) → ≤ 5 review / 24 h →
+        trust ≥ 30 và < 3 review cùng /24 trong 24 h ⇒ `PUBLISHED`, ngược lại `PENDING`.
+      x-permission: review:create
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [review]
+              properties:
+                review: { $ref: '#/components/schemas/ReviewCreateRequest' }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: 'JPEG/PNG/WebP, ≤ 5 MB mỗi ảnh' }
+            encoding:
+              review: { contentType: application/json }
+      responses:
+        '201': { description: Đã tạo — xem `status`, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '403': { description: Chưa xác thực email, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /reviews/{reviewId}:
+    patch:
+      tags: [Reviews]
+      summary: Sửa review của mình (FR-18) — tác giả trust < 30 thì review về PENDING
+      x-permission: review:update-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewUpdateRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Reviews]
+      summary: Xóa mềm review của mình — không viết lại được cho địa điểm này (D2)
+      x-permission: review:delete-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '204': { description: Đã xóa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /reviews/{reviewId}/vote:
+    put:
+      tags: [Reviews]
+      summary: Vote "hữu ích" — idempotent (FR-20)
+      description: '`counted` = trust người vote ≥ 30 tại thời điểm vote. Không vote review của chính mình.'
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
+        '422': { description: Không thể vote review của chính mình }
+    delete:
+      tags: [Reviews]
+      summary: Bỏ vote — idempotent
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
+
+  # ───────────────────────────── Comments (UC15) ─────────────────────────────
+  /reviews/{reviewId}/comments:
+    get:
+      tags: [Comments]
+      summary: Bình luận của review — bình luận gốc kèm trả lời (2 cấp)
+      security: []
+      parameters: [ { $ref: '#/components/parameters/ReviewId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CommentPage' } } } }
+    post:
+      tags: [Comments]
+      summary: Bình luận / trả lời (FR-21) — `parentId` phải là bình luận gốc
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentCreateRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /comments/{commentId}:
+    delete:
+      tags: [Comments]
+      summary: Xóa mềm bình luận của mình
+      x-permission: comment:delete-own
+      parameters: [ { name: commentId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: Đã xóa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ───────────────────────────── Check-in (UC16) ─────────────────────────────
+  /places/{placeId}/check-in:
+    post:
+      tags: [CheckIns]
+      summary: Check-in — accuracy ≤ 100 m, cách địa điểm ≤ 200 m, 1 lần / ngày (FR-24, U5)
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckInRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInResponse' } } } }
+        '409': { description: Đã check-in hôm nay }
+        '422': { description: 'GPS không đủ chính xác hoặc quá xa (problem có `distanceM`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ───────────────────────────── Collections (UC18) ─────────────────────────────
+  /collections:
+    post:
+      tags: [Collections]
+      summary: Tạo bộ sưu tập (FR-26)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+  /collections/{collectionId}:
+    get:
+      tags: [Collections]
+      summary: Chi tiết bộ sưu tập (chủ sở hữu hoặc công khai)
+      security: [ {}, { bearerAuth: [] } ]
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Collections]
+      summary: Sửa tên / mô tả / công khai — bật công khai thì sinh `shareSlug`
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Collections]
+      summary: Xóa bộ sưu tập
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      responses:
+        '204': { description: Đã xóa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /collections/{collectionId}/places/{placeId}:
+    put:
+      tags: [Collections]
+      summary: Thêm địa điểm vào bộ sưu tập — idempotent
+      parameters: [ { $ref: '#/components/parameters/CollectionId' }, { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { note: { type: string, maxLength: 500 } } }
+      responses:
+        '204': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Collections]
+      summary: Bỏ địa điểm khỏi bộ sưu tập — idempotent
+      parameters: [ { $ref: '#/components/parameters/CollectionId' }, { $ref: '#/components/parameters/PlaceId' } ]
+      responses:
+        '204': { description: OK }
+  /shared/collections/{shareSlug}:
+    get:
+      tags: [Collections]
+      summary: Xem bộ sưu tập công khai qua link chia sẻ
+      security: []
+      parameters: [ { name: shareSlug, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Reports (UC17) ─────────────────────────────
+  /reports:
+    post:
+      tags: [Reports]
+      summary: Báo cáo vi phạm — 1 báo cáo / người / đối tượng (FR-25, U10)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportCreateRequest' }
+      responses:
+        '201': { description: Đã ghi nhận }
+        '404': { description: Đối tượng không tồn tại }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ───────────────────────────── Owner (UC23–UC26) ─────────────────────────────
+  /places/{placeId}/claims:
+    post:
+      tags: [Owner]
+      summary: Yêu cầu xác nhận sở hữu kèm minh chứng (FR-31, UC23)
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [claim, evidence]
+              properties:
+                claim:
+                  type: object
+                  required: [contactPhone]
+                  properties:
+                    contactPhone: { type: string, maxLength: 20 }
+                    note: { type: string, maxLength: 1000 }
+                evidence: { type: array, minItems: 1, maxItems: 5, items: { type: string, format: binary } }
+            encoding:
+              claim: { contentType: application/json }
+      responses:
+        '201': { description: 'Đã gửi, chờ duyệt' }
+        '409': { description: Địa điểm đã có chủ hoặc đã có yêu cầu đang chờ }
+  /owner/places:
+    get:
+      tags: [Owner]
+      summary: Địa điểm tôi đang sở hữu
+      x-permission: place:update-own
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+  /owner/places/{placeId}:
+    patch:
+      tags: [Owner]
+      summary: Chủ cập nhật thông tin địa điểm (FR-32)
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceUpdateRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /owner/places/{placeId}/photos:
+    post:
+      tags: [Owner]
+      summary: Chủ thêm ảnh địa điểm
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary } }
+      responses:
+        '201': { description: 'Đã nhận, đang xử lý nền' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /owner/places/{placeId}/photos/{photoId}:
+    delete:
+      tags: [Owner]
+      summary: Chủ xóa ảnh
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' }, { name: photoId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /owner/places/{placeId}/stats:
+    get:
+      tags: [Owner]
+      summary: Thống kê địa điểm — lượt xem, check-in, phân bố sao (FR-34)
+      x-permission: place:stats-own
+      parameters:
+        - { $ref: '#/components/parameters/PlaceId' }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceStats' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /reviews/{reviewId}/reply:
+    put:
+      tags: [Owner]
+      summary: Chủ phản hồi review — tạo hoặc sửa, 1 phản hồi / review (FR-33, D6)
+      x-permission: review:reply-own-place
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OwnerReply' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Owner]
+      summary: Chủ xóa phản hồi
+      x-permission: review:reply-own-place
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '204': { description: OK }
+
+  # ───────────────────────────── Moderation (UC27–UC30) — MODERATOR, ADMIN ─────────────────────────────
+  /moderation/queue:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ gộp 4 loại việc, FIFO — cũ nhất trước, không đổi thứ tự
+      description: |
+        Chỉ gồm các loại người gọi có quyền (`place:approve`, `review:moderate`, `report:handle`, `claim:approve`).
+        Sắp xếp cố định `(submittedAt, type, id)` tăng dần; cursor mã hóa bộ ba này (keyset, không OFFSET).
+        Xử lý từng mục qua endpoint `decision` của loại tương ứng.
+      x-permission: 'any of: place:approve, review:moderate, report:handle, claim:approve'
+      parameters:
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ModerationItemType' }, description: Lọc theo loại; bỏ trống = tất cả }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationQueuePage' } } } }
+  /moderation/places:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ địa điểm
+      x-permission: place:approve
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PlaceStatus' } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+  /moderation/places/{placeId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt / từ chối địa điểm (FR-35) — ghi activity_log
+      x-permission: place:approve
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '409': { description: Đã được người khác xử lý (optimistic lock) }
+  /moderation/reviews:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ review — kèm trust tác giả, cờ nghi ngờ IP (FR-36, UC28)
+      x-permission: review:moderate
+      parameters:
+        - { name: ipFlagged, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationReviewPage' } } } }
+  /moderation/reviews/{reviewId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt / từ chối review — từ chối ghi 1 vi phạm cho tác giả (UC28)
+      x-permission: review:moderate
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '409': { description: Đã được người khác xử lý (optimistic lock) }
+  /moderation/reports:
+    get:
+      tags: [Moderation]
+      summary: Hàng đợi báo cáo gom theo đối tượng (FR-37, UC29)
+      x-permission: report:handle
+      parameters:
+        - { name: targetType, in: query, schema: { $ref: '#/components/schemas/ReportTargetType' } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReportGroupPage' } } } }
+  /moderation/reports/decision:
+    post:
+      tags: [Moderation]
+      summary: Xử lý mọi báo cáo về một đối tượng — HIDE (ẩn + ghi vi phạm) hoặc DISMISS
+      x-permission: report:handle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportDecision' }
+      responses:
+        '204': { description: OK }
+  /moderation/claims:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ yêu cầu sở hữu (FR-40)
+      x-permission: claim:approve
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClaimPage' } } } }
+  /moderation/claims/{claimId}/evidence/{index}:
+    get:
+      tags: [Moderation]
+      summary: Link tạm (presigned, 5 phút) xem file minh chứng trong bucket riêng tư
+      x-permission: claim:approve
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '302': { description: Chuyển hướng tới URL tạm }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /moderation/claims/{claimId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt → gán owner + role OWNER, tự từ chối các yêu cầu khác cùng địa điểm (UC30)
+      x-permission: claim:approve
+      parameters: [ { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '409': { description: Địa điểm đã có chủ / đã được xử lý }
+
+  # ───────────────────────────── Admin (UC31–UC33) — chỉ ADMIN ─────────────────────────────
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Tìm kiếm người dùng (FR-38)
+      x-permission: user:view
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { $ref: '#/components/schemas/RoleName' } }
+        - { name: locked, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserPage' } } } }
+  /admin/users/{userId}/lock:
+    post:
+      tags: [Admin]
+      summary: Khóa tài khoản — thu hồi mọi refresh token (UC29 luồng 3b)
+      x-permission: user:lock
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [until, reason]
+              properties:
+                until: { type: string, format: date-time }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '204': { description: OK }
+    delete:
+      tags: [Admin]
+      summary: Mở khóa
+      x-permission: user:lock
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: OK }
+  /admin/users/{userId}/roles:
+    put:
+      tags: [Admin]
+      summary: Gán danh sách role
+      x-permission: user:assign-role
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: array, minItems: 1, items: { $ref: '#/components/schemas/RoleName' } }
+      responses:
+        '204': { description: OK }
+  /admin/categories:
+    post:
+      tags: [Admin]
+      summary: Tạo danh mục (FR-39)
+      x-permission: category:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+  /admin/categories/{categoryId}:
+    put:
+      tags: [Admin]
+      summary: Sửa danh mục
+      x-permission: category:manage
+      parameters: [ { name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+    delete:
+      tags: [Admin]
+      summary: Xóa danh mục — chỉ khi không còn địa điểm / danh mục con (không xóa dữ liệu kéo theo)
+      x-permission: category:manage
+      parameters: [ { name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '409': { description: Danh mục đang được dùng }
+  /admin/amenities:
+    post:
+      tags: [Admin]
+      summary: Tạo tiện ích
+      x-permission: amenity:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AmenityRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+  /admin/amenities/{amenityId}:
+    put:
+      tags: [Admin]
+      summary: Sửa tiện ích
+      x-permission: amenity:manage
+      parameters: [ { name: amenityId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AmenityRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+    delete:
+      tags: [Admin]
+      summary: Xóa tiện ích — chỉ khi không địa điểm nào dùng
+      x-permission: amenity:manage
+      parameters: [ { name: amenityId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '409': { description: Tiện ích đang được dùng }
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Thống kê — người dùng mới, review theo ngày, địa điểm hot (FR-41)
+      x-permission: dashboard:view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } }
+  /admin/activity-log:
+    get:
+      tags: [Admin]
+      summary: Nhật ký thao tác quản trị (FR-42)
+      x-permission: dashboard:view
+      parameters:
+        - { name: actorId, in: query, schema: { type: integer, format: int64 } }
+        - { name: action, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ActivityLogPage' } } } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: Cursor mờ (opaque) từ `nextCursor` }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+    PlaceId: { name: placeId, in: path, required: true, schema: { type: integer, format: int64 } }
+    ReviewId: { name: reviewId, in: path, required: true, schema: { type: integer, format: int64 } }
+    UserId: { name: userId, in: path, required: true, schema: { type: integer, format: int64 } }
+    CollectionId: { name: collectionId, in: path, required: true, schema: { type: integer, format: int64 } }
+    NotificationId: { name: notificationId, in: path, required: true, schema: { type: integer, format: int64 } }
+    Lat: { name: lat, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+    Lng: { name: lng, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+
+  responses:
+    ValidationError:
+      description: Dữ liệu không hợp lệ
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Unauthorized:
+      description: Chưa xác thực / token không hợp lệ
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Forbidden:
+      description: Không có quyền
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    NotFound:
+      description: Không tìm thấy
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Conflict:
+      description: Xung đột trạng thái (trùng, đã xử lý...)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    TooManyRequests:
+      description: Vượt giới hạn tần suất
+      headers:
+        Retry-After: { schema: { type: integer }, description: Giây }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  schemas:
+    # ── Chung ──
+    Problem:
+      type: object
+      description: RFC 7807 ProblemDetail (Spring 6)
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string, description: 'Mã lỗi ổn định cho frontend, ví dụ REVIEW_ALREADY_EXISTS, EMAIL_NOT_VERIFIED' }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+    Password: { type: string, minLength: 8, maxLength: 72, pattern: '^(?=.*[A-Za-z])(?=.*\d).+$', description: '≥ 8 ký tự, có chữ và số (U1); tối đa 72 byte do giới hạn BCrypt' }
+    TokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    RoleName: { type: string, enum: [USER, OWNER, MODERATOR, ADMIN] }
+    PlaceStatus: { type: string, enum: [PENDING, APPROVED, REJECTED, HIDDEN] }
+    ReviewStatus: { type: string, enum: [PENDING, PUBLISHED, REJECTED, HIDDEN] }
+    PhotoStatus: { type: string, enum: [PROCESSING, READY, FAILED] }
+    ReportTargetType: { type: string, enum: [PLACE, REVIEW, COMMENT, USER] }
+    Photo:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/PhotoStatus' }
+        thumbUrl: { type: [string, 'null'], format: uri }
+        mediumUrl: { type: [string, 'null'], format: uri }
+        largeUrl: { type: [string, 'null'], format: uri }
+    GeoPoint:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+
+    # ── Auth / user ──
+    RegisterRequest:
+      type: object
+      required: [email, password, displayName]
+      properties:
+        email: { type: string, format: email, maxLength: 191 }
+        password: { $ref: '#/components/schemas/Password' }
+        displayName: { type: string, minLength: 2, maxLength: 100 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: Giây (900) }
+        user: { $ref: '#/components/schemas/MeResponse' }
+    UserSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+    MeResponse:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            email: { type: string, format: email }
+            bio: { type: [string, 'null'] }
+            emailVerified: { type: boolean }
+            roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            trustScore: { type: integer, minimum: 0, maximum: 100, description: 'Chỉ trả cho chính chủ — giải thích vì sao review vào hàng chờ' }
+            ownedPlaceIds: { type: array, items: { type: integer, format: int64 } }
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 100 }
+        bio: { type: string, maxLength: 500 }
+    PublicProfile:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            bio: { type: [string, 'null'] }
+            joinedAt: { type: string, format: date-time }
+            reviewCount: { type: integer }
+            followerCount: { type: integer }
+            followingCount: { type: integer }
+            contributionPoints: { type: integer }
+            badges: { type: array, items: { $ref: '#/components/schemas/Badge' } }
+            followedByMe: { type: boolean }
+    Badge:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        icon: { type: string }
+        awardedAt: { type: string, format: date-time }
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank: { type: integer }
+        user: { $ref: '#/components/schemas/UserSummary' }
+        points: { type: integer }
+    UserSummaryPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/UserSummary' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Catalog / place ──
+    CategoryNode:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        icon: { type: [string, 'null'] }
+        children: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+    CategoryRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        parentId: { type: [integer, 'null'], format: int64 }
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
+        icon: { type: string }
+        sortOrder: { type: integer }
+    Amenity:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        icon: { type: [string, 'null'] }
+    AmenityRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
+        icon: { type: string }
+    OpeningHour:
+      type: object
+      required: [dayOfWeek, openTime, closeTime]
+      properties:
+        dayOfWeek: { type: integer, minimum: 1, maximum: 7, description: 1 = Thứ Hai }
+        openTime: { type: string, pattern: '^\d{2}:\d{2}$' }
+        closeTime: { type: string, pattern: '^\d{2}:\d{2}$', description: Nhỏ hơn openTime = mở qua đêm }
+    PlaceSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/CategoryRef' }
+        address: { type: string }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+        priceMin: { type: [integer, 'null'] }
+        priceMax: { type: [integer, 'null'] }
+        bayesianScore: { type: number, description: Điểm xếp hạng hiển thị }
+        avgRating: { type: number, description: Trung bình thô }
+        reviewCount: { type: integer }
+        status: { $ref: '#/components/schemas/PlaceStatus' }
+        distanceM: { type: [integer, 'null'], description: Chỉ có ở /places/nearby }
+    CategoryRef:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+    PlaceDetail:
+      allOf:
+        - { $ref: '#/components/schemas/PlaceSummary' }
+        - type: object
+          properties:
+            description: { type: [string, 'null'] }
+            city: { type: string }
+            phone: { type: [string, 'null'] }
+            website: { type: [string, 'null'] }
+            photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
+            openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+            amenities: { type: array, items: { $ref: '#/components/schemas/Amenity' } }
+            tags: { type: array, items: { type: string } }
+            ratingDistribution:
+              type: object
+              description: Số review PUBLISHED theo sao
+              properties:
+                '1': { type: integer }
+                '2': { type: integer }
+                '3': { type: integer }
+                '4': { type: integer }
+                '5': { type: integer }
+            checkinCount: { type: integer }
+            owner: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
+            claimable: { type: boolean, description: Chưa có chủ và người xem chưa có yêu cầu đang chờ }
+            myReviewId: { type: [integer, 'null'], format: int64, description: 'Review của người xem (kể cả đã xóa → nút "Viết đánh giá" bị ẩn, D2)' }
+            rejectReason: { type: [string, 'null'], description: Chỉ người đề xuất / kiểm duyệt viên thấy }
+    PlaceCreateRequest:
+      type: object
+      required: [name, categoryId, address, city, location]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        categoryId: { type: integer, format: int64 }
+        description: { type: string, maxLength: 5000 }
+        address: { type: string, maxLength: 300 }
+        city: { type: string, maxLength: 100 }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        priceMin: { type: integer, minimum: 0 }
+        priceMax: { type: integer, minimum: 0 }
+        phone: { type: string, maxLength: 20 }
+        website: { type: string, format: uri, maxLength: 300 }
+        openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+        amenityIds: { type: array, items: { type: integer, format: int64 } }
+        tags: { type: array, maxItems: 10, items: { type: string, maxLength: 50 } }
+    PlaceUpdateRequest:
+      description: Chủ không đổi được vị trí và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý
+      type: object
+      properties:
+        description: { type: string, maxLength: 5000 }
+        address: { type: string, maxLength: 300 }
+        priceMin: { type: integer, minimum: 0 }
+        priceMax: { type: integer, minimum: 0 }
+        phone: { type: string, maxLength: 20 }
+        website: { type: string, format: uri, maxLength: 300 }
+        openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+        amenityIds: { type: array, items: { type: integer, format: int64 } }
+        version: { type: integer, description: Optimistic lock }
+    PlaceSummaryPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    HomeResponse:
+      type: object
+      properties:
+        featured: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        latest: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        categories: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+    PlaceStats:
+      type: object
+      properties:
+        viewsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
+        checkinsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
+        ratingDistribution: { type: object, additionalProperties: { type: integer } }
+        bayesianScore: { type: number }
+        reviewCount: { type: integer }
+
+    # ── Review / comment ──
+    ReviewCreateRequest:
+      type: object
+      required: [rating, content, visitedAt]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, minLength: 20, maxLength: 5000 }
+        visitedAt: { type: string, format: date, description: '≤ hôm nay' }
+    ReviewUpdateRequest:
+      type: object
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, minLength: 20, maxLength: 5000 }
+        visitedAt: { type: string, format: date }
+        version: { type: integer }
+    Review:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        placeId: { type: integer, format: int64 }
+        author: { $ref: '#/components/schemas/UserSummary' }
+        rating: { type: integer }
+        content: { type: string }
+        visitedAt: { type: string, format: date }
+        status: { $ref: '#/components/schemas/ReviewStatus' }
+        rejectReason: { type: [string, 'null'], description: Chỉ tác giả thấy }
+        photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
+        helpfulCount: { type: integer }
+        votedByMe: { type: boolean }
+        commentCount: { type: integer }
+        ownerReply: { oneOf: [ { $ref: '#/components/schemas/OwnerReply' }, { type: 'null' } ] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        version: { type: integer }
+    ReviewPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Review' } }
+        nextCursor: { type: [string, 'null'] }
+    VoteResult:
+      type: object
+      properties:
+        helpfulCount: { type: integer }
+        votedByMe: { type: boolean }
+    OwnerReply:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        owner: { $ref: '#/components/schemas/UserSummary' }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CommentCreateRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        parentId: { type: [integer, 'null'], format: int64, description: 'Phải là bình luận gốc (Q5: 2 cấp)' }
+    Comment:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        author: { $ref: '#/components/schemas/UserSummary' }
+        content: { type: string }
+        parentId: { type: [integer, 'null'], format: int64 }
+        replies: { type: array, items: { $ref: '#/components/schemas/Comment' }, description: Chỉ có ở bình luận gốc }
+        createdAt: { type: string, format: date-time }
+    CommentPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Check-in / collection / report ──
+    CheckInRequest:
+      type: object
+      required: [lat, lng, accuracyM]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        accuracyM: { type: number, minimum: 0, description: 'Từ Geolocation API; > 100 → 422' }
+    CheckInResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        placeId: { type: integer, format: int64 }
+        distanceM: { type: integer }
+        createdAt: { type: string, format: date-time }
+    CollectionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        isPublic: { type: boolean, default: false }
+    CollectionSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        isPublic: { type: boolean }
+        shareSlug: { type: [string, 'null'] }
+        placeCount: { type: integer }
+        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+    CollectionDetail:
+      allOf:
+        - { $ref: '#/components/schemas/CollectionSummary' }
+        - type: object
+          properties:
+            description: { type: [string, 'null'] }
+            owner: { $ref: '#/components/schemas/UserSummary' }
+            places:
+              type: array
+              items:
+                type: object
+                properties:
+                  place: { $ref: '#/components/schemas/PlaceSummary' }
+                  note: { type: [string, 'null'] }
+                  addedAt: { type: string, format: date-time }
+    ReportCreateRequest:
+      type: object
+      required: [targetType, targetId, reason]
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        reason: { type: string, enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER] }
+        detail: { type: string, maxLength: 1000 }
+
+    # ── Notification ──
+    Notification:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        type: { type: string, examples: [REVIEW_PUBLISHED, REVIEW_REJECTED, PLACE_APPROVED, OWNER_REPLIED, NEW_REVIEW_ON_MY_PLACE] }
+        data: { type: object, additionalProperties: true }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    NotificationPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Moderation / admin ──
+    ModerationDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        reason: { type: string, maxLength: 500, description: Bắt buộc khi REJECT }
+        version: { type: integer, description: 'Optimistic lock — lệch → 409' }
+    ModerationReview:
+      allOf:
+        - { $ref: '#/components/schemas/Review' }
+        - type: object
+          properties:
+            place: { $ref: '#/components/schemas/PlaceSummary' }
+            authorTrustScore: { type: integer }
+            authorActiveViolations: { type: integer }
+            ipFlagged: { type: boolean }
+            sameSubnetReviewCount24h: { type: integer }
+    ModerationReviewPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationReview' } }
+        nextCursor: { type: [string, 'null'] }
+    ModerationItemType:
+      type: string
+      enum: [PLACE, REVIEW, REPORT, CLAIM]
+    ModerationQueueItem:
+      type: object
+      required: [position, type, id, title, submittedAt]
+      properties:
+        position: { type: integer, description: Thứ tự xử lý (1 = cũ nhất) trong bộ lọc hiện tại }
+        type: { $ref: '#/components/schemas/ModerationItemType' }
+        id: { type: integer, format: int64, description: 'id của place / review / claim; với REPORT là id đối tượng bị báo cáo (nhóm theo targetType + targetId)' }
+        reportTargetType: { $ref: '#/components/schemas/ReportTargetType' }
+        title: { type: string, description: Tên địa điểm / trích đoạn review / đối tượng bị báo cáo }
+        submittedBy: { type: string, description: Tên người gửi (báo cáo nhóm → người báo cáo đầu tiên) }
+        submittedAt: { type: string, format: date-time, description: Thời điểm gửi — khóa sắp xếp FIFO }
+        flags: { type: array, items: { type: string, enum: [IP_FLAGGED, LOW_TRUST] } }
+        reportCount: { type: integer, description: Chỉ với REPORT }
+    ModerationQueuePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationQueueItem' } }
+        nextCursor: { type: [string, 'null'] }
+    ReportGroup:
+      type: object
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        targetPreview: { type: string, description: Tóm tắt nội dung bị báo cáo }
+        reportCount: { type: integer }
+        reasons: { type: object, additionalProperties: { type: integer } }
+        firstReportedAt: { type: string, format: date-time }
+    ReportGroupPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ReportGroup' } }
+        nextCursor: { type: [string, 'null'] }
+    ReportDecision:
+      type: object
+      required: [targetType, targetId, decision]
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        decision: { type: string, enum: [HIDE, DISMISS], description: 'HIDE: ẩn nội dung + ghi 1 vi phạm cho tác giả' }
+        note: { type: string, maxLength: 500 }
+    Claim:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        claimant: { $ref: '#/components/schemas/UserSummary' }
+        contactPhone: { type: string }
+        note: { type: [string, 'null'] }
+        evidenceCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        version: { type: integer }
+    ClaimPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Claim' } }
+        nextCursor: { type: [string, 'null'] }
+    AdminUser:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            email: { type: string }
+            roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            trustScore: { type: integer }
+            lockedUntil: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+    AdminUserPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        nextCursor: { type: [string, 'null'] }
+    Dashboard:
+      type: object
+      properties:
+        newUsersByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
+        reviewsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
+        hotPlaces: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        pendingCounts:
+          type: object
+          properties:
+            places: { type: integer }
+            reviews: { type: integer }
+            reports: { type: integer }
+            claims: { type: integer }
+    ActivityLogEntry:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        actor: { $ref: '#/components/schemas/UserSummary' }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: integer, format: int64 }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+    ActivityLogPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ActivityLogEntry' } }
+        nextCursor: { type: [string, 'null'] }
