@@ -364,6 +364,8 @@ Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên)
 - **Index thêm** ngoài bảng mô tả: `place_claims(status, created_at)` và `reports(status, created_at)` cho `UNION ALL` của hàng chờ gộp FIFO; `user_tokens(user_id, type)`; `place_photos` / `review_photos (…, sort_order)`; index đơn cho các cột FK chưa có index dẫn đầu.
 - **CHECK thêm**: `places.avg_rating`, `bayesian_score` trong [0, 5]; `taggables.taggable_type IN ('PLACE')` (thêm loại mới = migration nới CHECK).
 - Không `DEFAULT CURRENT_TIMESTAMP` cho cột thời gian: giá trị phụ thuộc `time_zone` của session; JPA Auditing điền UTC.
+- **Dữ liệu demo** (chỉ profile dev): `db/seed/dev/R__demo_01_users.sql` (60 tài khoản), `R__demo_02_places.sql` (300 địa điểm, giờ mở cửa, tiện ích). Script repeatable, idempotent (`INSERT IGNORE` theo khóa UNIQUE), sinh tất định bằng CTE — không nằm trong `db/migration` nên prod / test không có.
+- **Entity JPA**: 29 entity ở `com.localspot.entity` + 3 bảng nối map bằng `@ManyToMany` (`user_roles`, `role_permissions`, `place_amenity`). Thời gian `Instant` (UTC); tọa độ JTS `Point` qua hibernate-spatial, tạo bằng `GeoPoints.of(lat, lng)`.
 - Ghi chú cho exception handler: MySQL báo vi phạm CHECK bằng mã **3819**, Spring dịch thành `UncategorizedSQLException` (không phải `DataIntegrityViolationException`).
 
 ---

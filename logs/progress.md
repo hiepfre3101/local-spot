@@ -247,3 +247,31 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 **Phát hiện**: MySQL vi phạm CHECK (mã 3819) → Spring ném `UncategorizedSQLException`, không phải `DataIntegrityViolationException`. Phải xử lý riêng trong `@RestControllerAdvice` (D7), nếu không sẽ thành 500.
 
 **Kiểm chứng**: `./mvnw verify` xanh — 12 test (11 test schema mới trên MySQL 8.4 thật: đủ 32 bảng, collation, spatial index SRID 4326, thứ tự trục (lat, lng) qua `ST_Distance_Sphere` Hồ Gươm → Văn Miếu ≈ 1,27 km, UNIQUE review tính cả xóa mềm, UNIQUE vote, CHECK, 1 check-in/ngày, FK RESTRICT, RBAC kế thừa, cây danh mục), Spotless, SpotBugs 0 lỗi. Chưa áp dụng lên DB dev cục bộ (sẽ tự chạy khi khởi động backend).
+
+---
+
+## 2026-09-30 22:08 (+07) — Checklist D2: Entity JPA + dữ liệu demo
+
+**Bối cảnh**: supervisor duyệt D1 (đã commit `85e8ebb`) và yêu cầu "fake thêm một số data của users hay địa điểm".
+
+**Supervisor chốt (qua câu hỏi):**
+- **hibernate-spatial** để map `POINT SRID 4326` (dependency mới — module chính thức của Hibernate, version do Spring Boot quản lý). Phương án bị loại: tự viết converter sang định dạng nhị phân nội bộ MySQL — ít phụ thuộc hơn nhưng là code tự chế khó giải thích. Đã thêm vào plan §2 và CLAUDE.md §2.
+- **Quy mô seed: ~60 tài khoản, ~300 địa điểm** (khớp 200–500 của plan).
+
+**Quyết định kỹ thuật:**
+- **29 entity + 3 bảng nối `@ManyToMany`** (`user_roles`, `role_permissions`, `place_amenity` — không mang dữ liệu riêng nên không cần entity). Bảng khóa tổ hợp có cột riêng (`review_votes`, `collection_place`, `follows`, `user_badges`, `taggables`, `place_views`) dùng `@EmbeddedId` là record + `@MapsId`.
+- **Không Lombok** (ngoài stack) → getter/setter viết tay; chỉ có setter cho trường nghiệp vụ được sửa. Cột dẫn xuất `review_count / avg_rating / bayesian_score` **không có setter** — chỉ luồng tính lại rating được ghi (điểm lõi CLAUDE.md §3).
+- Mọi `@ManyToOne` là `LAZY` (tránh N+1 ngầm, khớp `open-in-view: false`). Chỉ `Place → openingHours` là aggregate con có cascade.
+- Thời gian dùng `Instant` + `DateTimeProvider` trả `Clock.instant()` (bean `Clock` UTC — test thay được). `@EnableJpaAuditing` đặt ở `JpaConfig` riêng để test slice web không kéo JPA.
+- `GeoPoints.of(lat, lng)` là nơi duy nhất tạo `Point` (JTS dùng x = lng) — test xác nhận hibernate-spatial ghi đúng thứ tự trục (lat, lng) của MySQL cho SRID 4326.
+- `day_of_week` dùng converter ISO 1–7 thay vì `@Enumerated(ORDINAL)` (ordinal bắt đầu từ 0 → lệch 1 ngày âm thầm).
+- Cột `TINYINT/SMALLINT UNSIGNED` cần `@JdbcTypeCode` để `ddl-auto: validate` chấp nhận `int`.
+- Bảng `collections` → entity `PlaceCollection` (tránh trùng `java.util.Collection`).
+
+**Seed demo** (`db/seed/dev/R__demo_01_users.sql`, `R__demo_02_places.sql`, chỉ `application-dev.yml` thêm vào `spring.flyway.locations`):
+- **Repeatable `R__` thay vì `V__`**: version dùng chung một dãy với migration schema; nếu seed chiếm V1000 thì V4 thêm sau sẽ bị Flyway coi là "out of order" và từ chối. Đánh đổi: script chạy lại mỗi khi sửa → mọi lệnh phải idempotent (`INSERT IGNORE` theo khóa UNIQUE, `NOT EXISTS`), không xóa / ghi đè (CLAUDE.md §4).
+- **Sinh hàng bằng SQL (CTE đệ quy + công thức số học, không `RAND`)** thay vì dán 300 dòng từ script ngoài: vẫn là "Flyway SQL riêng cho dev" như supervisor chọn, nhưng file gọn, sửa danh sách tên / đường phố ngay trong file, tất định giữa các máy, không cần thêm công cụ sinh (Python...) vào repo.
+- Email `@localspot.test` (TLD dành riêng), mật khẩu chung `LocalSpot2026`; **phone để trống** vì số bịa có thể trùng số thật. Tên / địa chỉ hư cấu.
+- **Chưa seed review / vote / check-in**: `review_count`, `bayesian_score` phải khớp review; seed thẳng SQL sẽ phải chép công thức Bayesian và trust ra SQL (hai nguồn sự thật cho điểm lõi). Làm ở E: seed review thô rồi chạy job tính lại rating. Hệ quả tạm thời: mọi tài khoản demo trust < 30, mọi địa điểm điểm 0.
+
+**Kiểm chứng**: `./mvnw verify` xanh — 24 test (thêm `EntityMappingTests` 6: trục tọa độ, auditing, giờ mở cửa ISO + qua đêm, xóa mềm, JSON, khóa tổ hợp + role/permission; `DemoSeedTests` 6: 60 tài khoản đúng vai trò, mật khẩu khớp `BCryptPasswordEncoder`, 300 địa điểm đúng phân bổ thành phố / trạng thái, tọa độ < 7 km quanh tâm, giờ mở cửa & tiện ích theo loại hình, **chạy lại script không đổi số dòng**), SpotBugs 0 lỗi. Chưa khởi động backend trên DB dev cục bộ — seed sẽ nạp ở lần `spring-boot:run` tới.

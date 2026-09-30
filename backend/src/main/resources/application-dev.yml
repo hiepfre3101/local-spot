@@ -16,6 +16,9 @@ spring:
     port: 5672
     username: ${RABBITMQ_USER}
     password: ${RABBITMQ_PASSWORD}
+  flyway:
+    # Thêm dữ liệu demo (R__demo_*.sql: tài khoản mật khẩu công khai, địa điểm giả) — chỉ dev, không bao giờ prod
+    locations: classpath:db/migration,classpath:db/seed/dev
   jpa:
     properties:
       hibernate:
