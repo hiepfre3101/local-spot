@@ -1,0 +1,266 @@
+@startuml class-domain
+' Sơ đồ lớp 1/2 — Mô hình miền (JPA entity, package com.localspot.entity)
+' Cột đầy đủ: docs/design/database.md. Ở đây chỉ giữ thuộc tính & phương thức mang nghiệp vụ.
+' Mọi quan hệ @ManyToOne / @OneToMany dùng FetchType.LAZY (tránh N+1, nạp bằng @EntityGraph khi cần).
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+hide empty members
+
+package "Tài khoản & phân quyền" {
+  abstract class BaseEntity <<@MappedSuperclass>> {
+    # id : Long
+    # createdAt : Instant
+    # updatedAt : Instant
+  }
+  abstract class SoftDeletableEntity <<@MappedSuperclass>> {
+    # deletedAt : Instant
+    + softDelete() : void
+  }
+  class User {
+    - email : String
+    - passwordHash : String
+    - displayName : String
+    - emailVerifiedAt : Instant
+    - helpfulVotesCount : int
+    - contributionPoints : int
+    - lockedUntil : Instant
+    + isEmailVerified() : boolean
+    + isLocked(now : Instant) : boolean
+    + lock(until : Instant, reason : String) : void
+    + anonymize() : void
+  }
+  class Role {
+    - name : RoleName
+  }
+  class Permission {
+    - name : String
+  }
+  class RefreshToken {
+    - tokenHash : String
+    - familyId : UUID
+    - expiresAt : Instant
+    - usedAt : Instant
+    - revokedAt : Instant
+    + isUsable(now : Instant) : boolean
+    + markUsed(now : Instant) : void
+  }
+  class UserToken {
+    - type : UserTokenType
+    - tokenHash : String
+    - expiresAt : Instant
+    - usedAt : Instant
+  }
+  class UserViolation {
+    - sourceType : ViolationSource
+    - sourceId : Long
+    - points : int
+    - expiresAt : Instant
+    + isActive(now : Instant) : boolean
+  }
+  enum RoleName {
+    USER
+    OWNER
+    MODERATOR
+    ADMIN
+  }
+}
+
+package "Địa điểm" {
+  class Category {
+    - name : String
+    - slug : String
+    - sortOrder : int
+  }
+  class Place {
+    - name : String
+    - slug : String
+    - address : String
+    - location : org.locationtech.jts.geom.Point
+    - priceMin : Integer
+    - priceMax : Integer
+    - status : PlaceStatus
+    - reviewCount : int
+    - avgRating : BigDecimal
+    - bayesianScore : BigDecimal
+    - checkinCount : int
+    - version : int
+    + approve(moderator : User) : void
+    + reject(moderator : User, reason : String) : void
+    + applyRating(v : int, r : BigDecimal, score : BigDecimal) : void
+    + assignOwner(owner : User) : void
+    + hasOwner() : boolean
+  }
+  class PlacePhoto {
+    - storageKey : String
+    - status : PhotoStatus
+    - cover : boolean
+  }
+  class OpeningHour {
+    - dayOfWeek : DayOfWeek
+    - openTime : LocalTime
+    - closeTime : LocalTime
+    + isOvernight() : boolean
+  }
+  class Amenity {
+    - name : String
+    - slug : String
+  }
+  class PlaceClaim {
+    - contactPhone : String
+    - evidenceKeys : List<String>
+    - status : ClaimStatus
+    + approve(moderator : User) : void
+    + reject(moderator : User, reason : String) : void
+  }
+  class Tag {
+    - name : String
+    - slug : String
+  }
+  enum PlaceStatus {
+    PENDING
+    APPROVED
+    REJECTED
+    HIDDEN
+  }
+}
+
+package "Đánh giá & tương tác" {
+  class Review {
+    - rating : int
+    - content : String
+    - visitedAt : LocalDate
+    - status : ReviewStatus
+    - ipAddress : String
+    - ipPrefix : String
+    - ipFlagged : boolean
+    - helpfulCount : int
+    - version : int
+    + publish(moderator : User) : void
+    + reject(moderator : User, reason : String) : void
+    + hide() : void
+    + isPublished() : boolean
+    + isAuthoredBy(user : User) : boolean
+  }
+  class ReviewPhoto {
+    - storageKey : String
+    - status : PhotoStatus
+  }
+  class ReviewVote <<@EmbeddedId>> {
+    - counted : boolean
+  }
+  class Comment {
+    - content : String
+    - status : CommentStatus
+    + isRoot() : boolean
+  }
+  class OwnerReply {
+    - content : String
+  }
+  class CheckIn {
+    - location : Point
+    - accuracyM : int
+    - distanceM : int
+    - checkinDate : LocalDate
+  }
+  enum ReviewStatus {
+    PENDING
+    PUBLISHED
+    REJECTED
+    HIDDEN
+  }
+}
+
+package "Cộng đồng & vận hành" {
+  class Collection {
+    - name : String
+    - publicVisible : boolean
+    - shareSlug : String
+  }
+  class CollectionPlace <<@EmbeddedId>> {
+    - note : String
+  }
+  class Follow <<@EmbeddedId>>
+  class Badge {
+    - code : String
+    - name : String
+  }
+  class UserBadge <<@EmbeddedId>>
+  class Report {
+    - targetType : ReportTargetType
+    - targetId : Long
+    - reason : ReportReason
+    - status : ReportStatus
+    + resolve(moderator : User) : void
+    + dismiss(moderator : User) : void
+  }
+  class Notification {
+    - type : String
+    - data : Map<String, Object>
+    - readAt : Instant
+  }
+  class ActivityLog {
+    - action : String
+    - targetType : String
+    - targetId : Long
+    - metadata : Map<String, Object>
+  }
+}
+
+' Kế thừa
+BaseEntity <|-- SoftDeletableEntity
+SoftDeletableEntity <|-- User
+SoftDeletableEntity <|-- Place
+SoftDeletableEntity <|-- Review
+SoftDeletableEntity <|-- Comment
+BaseEntity <|-- Category
+BaseEntity <|-- PlaceClaim
+BaseEntity <|-- Report
+
+' Tài khoản
+User "*" -- "*" Role : user_roles
+Role "*" -- "*" Permission : role_permissions
+Role ..> RoleName
+User "1" *-- "*" RefreshToken
+User "1" *-- "*" UserToken
+User "1" -- "*" UserViolation
+
+' Địa điểm
+Category "0..1" -- "*" Category : parent
+Category "1" -- "*" Place
+Place "*" --> "1" User : createdBy
+Place "*" --> "0..1" User : owner
+Place "1" *-- "*" PlacePhoto
+Place "1" *-- "*" OpeningHour
+Place "*" -- "*" Amenity : place_amenity
+Place "1" -- "*" PlaceClaim
+PlaceClaim "*" --> "1" User : claimant
+Tag "*" .. "*" Place : taggables
+Place ..> PlaceStatus
+
+' Đánh giá
+Place "1" -- "*" Review
+Review "*" --> "1" User : author
+Review "1" *-- "*" ReviewPhoto
+Review "1" *-- "*" ReviewVote
+ReviewVote "*" --> "1" User : voter
+Review "1" *-- "*" Comment
+Comment "0..1" -- "*" Comment : replies
+Review "1" *-- "0..1" OwnerReply
+Place "1" -- "*" CheckIn
+CheckIn "*" --> "1" User
+Review ..> ReviewStatus
+
+' Cộng đồng
+User "1" *-- "*" Collection
+Collection "1" *-- "*" CollectionPlace
+CollectionPlace "*" --> "1" Place
+User "1" -- "*" Follow : follower / following
+User "1" -- "*" UserBadge
+UserBadge "*" --> "1" Badge
+Report "*" --> "1" User : reporter
+User "1" -- "*" Notification
+ActivityLog "*" --> "1" User : actor
+@enduml

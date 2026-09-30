@@ -1,0 +1,50 @@
+@startuml sequence-search
+' Sơ đồ tuần tự — Tìm kiếm địa điểm (UC08; FR-09/10, NFR-02)
+' Luật: fallback MySQL LIKE khi Meilisearch lỗi (U9)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Người dùng" as U
+participant "Vue SPA\n(Vue Query)" as FE
+participant "SearchController" as C
+participant "PlaceSearchService" as S
+participant "Meilisearch\nclient" as MC
+database "Meilisearch\n(index places)" as MS
+participant "PlaceRepository" as PR
+database "MySQL" as DB
+
+U -> FE : Nhập "bun cha", chọn danh mục, ≥ 4 sao
+FE -> FE : debounce 300 ms
+FE -> C : GET /api/v1/search?q=bun cha&category=..&minRating=4&cursor=..
+C -> S : search(query, filters, cursor)
+S -> MC : search("bun cha", filter: status = approved\nAND category_id = .. AND rating >= 4, sort, limit)
+alt Meilisearch hoạt động
+  MC -> MS : POST /indexes/places/search
+  MS -> MS : bỏ dấu, chịu lỗi chính tả,\nsynonym ("bún chả", "bun cha", "bún trả")
+  MS --> MC : [placeId...] theo độ liên quan
+  MC --> S : placeIds
+else Meilisearch lỗi / timeout
+  MC --> S : exception
+  S -> S : log WARN "search fallback"
+  S -> PR : findByNameLike(%bun cha%, filters, cursor)
+  PR -> DB : SELECT ... WHERE name LIKE ... AND status = 'approved'
+  DB --> PR : rows
+  PR --> S : placeIds
+end
+S -> PR : findSummariesByIds(placeIds)\n(@EntityGraph: category, ảnh đại diện — tránh N+1)
+PR -> DB : SELECT ... WHERE id IN (...)
+DB --> PR : rows
+PR --> S : places
+S -> S : sắp lại theo thứ tự placeIds,\nmap sang PlaceSummaryResponse (MapStruct)
+S --> C : page {items, nextCursor}
+C --> FE : 200 JSON
+FE --> U : Hiển thị danh sách, cuộn → tải trang kế tiếp
+
+== Đồng bộ index (bất đồng bộ, khi địa điểm được duyệt / sửa / đổi điểm) ==
+participant "SearchReindexConsumer" as RC
+queue "RabbitMQ" as Q
+Q -> RC : PlaceChangedMessage(placeId)
+RC -> PR : findById(placeId)
+RC -> MC : addOrReplaceDocument(place)
+MC -> MS : PUT /indexes/places/documents
+@enduml

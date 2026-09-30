@@ -1,0 +1,122 @@
+@startuml erd-community
+' ERD 3/3 — Cộng đồng & vận hành. Chi tiết cột: docs/design/database.md §3.4
+' users, places được vẽ rút gọn (đầy đủ ở erd-account, erd-place-review)
+hide circle
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+
+entity users {
+  * id : BIGINT <<PK>>
+  --
+  ...
+}
+
+entity places {
+  * id : BIGINT <<PK>>
+  --
+  ...
+}
+
+entity collections {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * name : VARCHAR(150)
+  description : VARCHAR(1000)
+  * is_public : BOOLEAN
+  share_slug : VARCHAR(40) <<UQ>>
+  * created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity collection_place {
+  * collection_id : BIGINT <<PK, FK>>
+  * place_id : BIGINT <<PK, FK>>
+  --
+  note : VARCHAR(500)
+  * added_at : DATETIME
+}
+
+entity follows {
+  * follower_id : BIGINT <<PK, FK>>
+  * following_id : BIGINT <<PK, FK>>
+  --
+  * created_at : DATETIME
+}
+
+entity badges {
+  * id : BIGINT <<PK>>
+  --
+  * code : VARCHAR(50) <<UQ>>
+  * name : VARCHAR(100)
+  description : VARCHAR(500)
+  icon : VARCHAR(100)
+}
+
+entity user_badges {
+  * user_id : BIGINT <<PK, FK>>
+  * badge_id : BIGINT <<PK, FK>>
+  --
+  * awarded_at : DATETIME
+}
+
+entity reports {
+  * id : BIGINT <<PK>>
+  --
+  * reporter_id : BIGINT <<FK>>
+  * target_type : VARCHAR(20)
+  * target_id : BIGINT
+  * reason : VARCHAR(30)
+  detail : VARCHAR(1000)
+  * status : VARCHAR(20)
+  handled_by : BIGINT <<FK>>
+  handled_at : DATETIME
+  * version : INT
+  * created_at : DATETIME
+  ..
+  UQ(reporter_id, target_type, target_id)
+}
+
+entity notifications {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * type : VARCHAR(50)
+  * data : JSON
+  read_at : DATETIME
+  * created_at : DATETIME
+}
+
+entity activity_log {
+  * id : BIGINT <<PK>>
+  --
+  * actor_id : BIGINT <<FK>>
+  * action : VARCHAR(50)
+  * target_type : VARCHAR(20)
+  * target_id : BIGINT
+  metadata : JSON
+  ip_address : VARCHAR(45)
+  * created_at : DATETIME
+}
+
+users ||--o{ collections
+collections ||--o{ collection_place
+places ||--o{ collection_place
+users ||--o{ follows : theo dõi
+users ||--o{ follows : được theo dõi
+badges ||--o{ user_badges
+users ||--o{ user_badges
+users ||--o{ reports : gửi
+users |o--o{ reports : xử lý
+users ||--o{ notifications
+users ||--o{ activity_log
+
+note bottom of reports
+  target_type + target_id: quan hệ đa hình
+  (PLACE / REVIEW / COMMENT / USER) — không có FK,
+  toàn vẹn kiểm tra ở ReportService
+end note
+@enduml

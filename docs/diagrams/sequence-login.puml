@@ -1,0 +1,69 @@
+@startuml sequence-login
+' Sơ đồ tuần tự — Đăng nhập & làm mới phiên (UC03, UC04; FR-03/04, NFR-06/10)
+' Đã chốt (S1): refresh token gửi qua cookie HttpOnly; access token chỉ giữ trong bộ nhớ (Pinia)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Người dùng" as U
+participant "Vue SPA\n(auth store)" as FE
+participant "AuthController" as C
+participant "LoginRateLimiter" as RL
+participant "AuthService" as S
+participant "UserRepository" as UR
+participant "PasswordEncoder\n(BCrypt)" as PE
+participant "JwtService" as J
+participant "RefreshTokenRepository" as RR
+database "Redis" as R
+database "MySQL" as DB
+
+== Đăng nhập ==
+U -> FE : Nhập email, mật khẩu
+FE -> C : POST /api/v1/auth/login {email, password}
+C -> RL : check(email, ip)
+RL -> R : INCR login:{email}:{ip} (TTL 15 phút)
+alt Quá 5 lần / 15 phút
+  RL --> C : vượt ngưỡng
+  C --> FE : 429 Too Many Requests (ProblemDetail)
+else Trong ngưỡng
+  C -> S : login(email, password)
+  S -> UR : findByEmail(email)
+  UR -> DB : SELECT users ...
+  DB --> UR : user | null
+  alt Không có user hoặc sai mật khẩu
+    S -> PE : matches(password, hash)
+    PE --> S : false
+    S --> C : BadCredentialsException
+    C --> FE : 401 "Email hoặc mật khẩu không đúng"
+  else Tài khoản bị khóa
+    S --> C : AccountLockedException
+    C --> FE : 403 kèm lý do
+  else Hợp lệ
+    S -> J : createAccessToken(userId, roles) — 15 phút
+    J --> S : accessToken (JWT)
+    S -> S : sinh refreshToken ngẫu nhiên, băm SHA-256
+    S -> RR : save(hash, userId, familyId, expiresAt = +7 ngày)
+    RR -> DB : INSERT refresh_tokens
+    S -> RL : reset(email, ip)
+    S --> C : tokens + thông tin user
+    C --> FE : 200 {accessToken, user}\nSet-Cookie: refresh_token (HttpOnly, Secure,\nSameSite=Strict, Path=/api/v1/auth)
+    FE -> FE : lưu accessToken trong bộ nhớ
+  end
+end
+
+== Gọi API khi access token hết hạn ==
+FE -> C : GET /api/v1/... (Authorization: Bearer <hết hạn>)
+C --> FE : 401
+FE -> C : POST /api/v1/auth/refresh (cookie refresh_token)
+C -> S : refresh(token)
+S -> RR : findByHash(sha256(token))
+RR -> DB : SELECT refresh_tokens
+alt Token hợp lệ, chưa dùng
+  S -> RR : đánh dấu token cũ đã dùng, lưu token mới cùng familyId
+  S -> J : createAccessToken(...)
+  C --> FE : 200 {accessToken} + Set-Cookie refresh_token mới
+  FE -> C : gửi lại request ban đầu
+else Token đã bị dùng (nghi bị đánh cắp)
+  S -> RR : thu hồi toàn bộ refresh token của user
+  C --> FE : 401 → chuyển về trang đăng nhập
+end
+@enduml

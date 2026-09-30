@@ -17,3 +17,6 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Design system (bản xuất từ Claude Design — nguồn gốc nằm trên claude.ai)
+docs/design-system/

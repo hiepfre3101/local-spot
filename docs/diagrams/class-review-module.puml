@@ -1,0 +1,168 @@
+@startuml class-review-module
+' Sơ đồ lớp 2/2 — Module đánh giá theo phân lớp (plan §3):
+' Controller → DTO → Service → Repository → Entity, cùng event / listener cho tác vụ phụ.
+' Đây là module chứa 3 điểm khác biệt cốt lõi: chống review ảo, trust score, Bayesian.
+skinparam classAttributeIconSize 0
+skinparam class {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+hide empty members
+
+package controller {
+  class ReviewController <<@RestController>> {
+    + create(placeId : Long, req : ReviewRequest, files : List<MultipartFile>) : ResponseEntity<ReviewResponse>
+    + update(id : Long, req : ReviewUpdateRequest) : ReviewResponse
+    + delete(id : Long) : void
+    + listByPlace(placeId : Long, cursor : String, sort : ReviewSort) : CursorPage<ReviewResponse>
+  }
+  class ReviewModerationController <<@RestController>> {
+    + queue(cursor : String) : CursorPage<ReviewModerationResponse>
+    + approve(id : Long) : void
+    + reject(id : Long, req : RejectRequest) : void
+  }
+}
+
+package dto {
+  class ReviewRequest <<record>> {
+    @Min(1) @Max(5) rating : int
+    @Size(min = 20) content : String
+    @PastOrPresent visitedAt : LocalDate
+  }
+  class ReviewResponse <<record>> {
+    id : Long
+    rating : int
+    content : String
+    status : ReviewStatus
+    author : UserSummary
+    photos : List<PhotoResponse>
+    helpfulCount : int
+  }
+}
+
+package service {
+  class ReviewService <<@Service>> {
+    + create(placeId, userId, req, files, clientIp) : ReviewResponse
+    + update(id, userId, req) : ReviewResponse
+    + delete(id, userId) : void
+  }
+  class ReviewModerationService <<@Service>> {
+    + approve(reviewId, moderatorId) : void
+    + reject(reviewId, moderatorId, reason) : void
+  }
+  class TrustScoreService <<@Service>> {
+    + computeTrust(userId : Long) : int
+  }
+  class ReviewRateLimiter <<@Component>> {
+    + check(userId : Long) : void
+  }
+  class IpAnomalyDetector <<@Component>> {
+    + isSuspicious(placeId : Long, ipPrefix : String) : boolean
+  }
+  class RatingCalculator <<@Component>> {
+    + bayesian(v : int, r : double, m : int, c : double) : double
+  }
+  class RatingService <<@Service>> {
+    + recalculate(placeId : Long) : void
+    + recalculateAll() : void
+  }
+  class ViolationService <<@Service>> {
+    + record(userId, source : ViolationSource, sourceId, moderatorId) : void
+  }
+  class MediaService <<@Service>> {
+    + storeOriginal(file : MultipartFile) : String
+  }
+  class AntiFakeProperties <<@ConfigurationProperties>> {
+    trustThreshold : int = 30
+    maxReviewsPerDay : int = 5
+    ipAlertCount : int = 3
+    bayesianM : int = 10
+    violationPoints : int = 25
+    violationTtl : Duration = 30d
+  }
+}
+
+package repository {
+  interface ReviewRepository <<JpaRepository<Review, Long>>> {
+    + existsByPlaceIdAndUserId(placeId, userId) : boolean
+    + countByUserIdAndCreatedAtAfter(userId, since) : long
+    + countByPlaceIdAndIpPrefixAndCreatedAtAfter(placeId, prefix, since) : long
+    + ratingStats(placeId) : RatingStats
+    + globalAverage() : double
+  }
+  interface PlaceRepository <<JpaRepository<Place, Long>>>
+  interface UserViolationRepository <<JpaRepository<UserViolation, Long>>> {
+    + sumActivePoints(userId, now) : int
+  }
+}
+
+package event {
+  class ReviewCreatedEvent <<record>> {
+    reviewId : Long
+    placeId : Long
+    status : ReviewStatus
+    hasPhotos : boolean
+  }
+  class ReviewStatusChangedEvent <<record>> {
+    reviewId : Long
+    placeId : Long
+    from : ReviewStatus
+    to : ReviewStatus
+  }
+}
+
+package listener {
+  class RecalculateRatingListener <<@TransactionalEventListener AFTER_COMMIT, @Async>> {
+    + on(e : ReviewCreatedEvent) : void
+    + on(e : ReviewStatusChangedEvent) : void
+  }
+  class PhotoUploadedListener <<@TransactionalEventListener AFTER_COMMIT>> {
+    + on(e : ReviewCreatedEvent) : void
+  }
+  class RatingRecalculationJob <<@Scheduled cron 0 0 3 * * *>> {
+    + run() : void
+  }
+}
+
+package mapper {
+  interface ReviewMapper <<@Mapper MapStruct>> {
+    + toResponse(review : Review) : ReviewResponse
+  }
+}
+
+ReviewController --> ReviewService
+ReviewController ..> ReviewRequest
+ReviewController ..> ReviewResponse
+ReviewModerationController --> ReviewModerationService
+
+ReviewService --> ReviewRepository
+ReviewService --> PlaceRepository
+ReviewService --> TrustScoreService
+ReviewService --> ReviewRateLimiter
+ReviewService --> IpAnomalyDetector
+ReviewService --> MediaService
+ReviewService --> ReviewMapper
+ReviewService ..> ReviewCreatedEvent : publish
+
+ReviewModerationService --> ReviewRepository
+ReviewModerationService --> ViolationService
+ReviewModerationService ..> ReviewStatusChangedEvent : publish
+
+TrustScoreService --> UserViolationRepository
+TrustScoreService --> AntiFakeProperties
+ReviewRateLimiter --> AntiFakeProperties
+IpAnomalyDetector --> AntiFakeProperties
+
+RecalculateRatingListener --> RatingService
+RatingRecalculationJob --> RatingService
+RatingService --> RatingCalculator
+RatingService --> ReviewRepository
+RatingService --> PlaceRepository
+RatingCalculator --> AntiFakeProperties
+
+note right of RatingCalculator
+  score = v/(v+m)·R + m/(v+m)·C
+  Hàm thuần (không I/O) → unit test
+  độc lập (checklist G)
+end note
+@enduml

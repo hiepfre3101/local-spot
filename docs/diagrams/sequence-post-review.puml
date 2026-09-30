@@ -1,0 +1,83 @@
+@startuml sequence-post-review
+' Sơ đồ tuần tự — Đăng đánh giá kèm ảnh (UC12; FR-17/19/22/23)
+' Đã chốt (S2): gửi review + ảnh trong MỘT request multipart qua API
+' (không dùng presigned URL upload thẳng lên MinIO)
+autonumber
+skinparam responseMessageBelowArrow true
+
+actor "Thành viên" as U
+participant "Vue SPA" as FE
+participant "JwtFilter" as JF
+participant "ReviewController" as C
+participant "ReviewService" as S
+participant "ReviewRateLimiter" as RL
+participant "TrustScoreService" as T
+participant "ReviewRepository" as RR
+participant "MediaService" as M
+database "MySQL" as DB
+database "MinIO / S3" as S3
+participant "ApplicationEventPublisher" as EP
+participant "RecalculateRatingListener\n(@Async, AFTER_COMMIT)" as L
+participant "RatingCalculator" as RC
+participant "PhotoUploadedListener\n(AFTER_COMMIT)" as PL
+queue "RabbitMQ" as Q
+participant "ImageProcessingConsumer" as IC
+
+U -> FE : Chấm sao, viết nội dung, chọn & crop ảnh
+FE -> JF : POST /api/v1/places/{id}/reviews\n(multipart: review JSON + files)
+JF -> JF : xác thực JWT, nạp userId + roles
+JF -> C : request đã xác thực
+C -> C : Bean Validation (sao 1–5, ≥ 20 ký tự,\nngày đến ≤ hôm nay, ≤ 10 ảnh, ≤ 5 MB/ảnh)
+C -> S : create(placeId, userId, dto, files)
+
+group @Transactional
+  S -> S : kiểm tra email đã xác thực, place approved
+  S -> RR : existsByPlaceIdAndUserId
+  RR -> DB : SELECT
+  alt Đã có review
+    S --> C : ConflictException → 409
+  end
+  S -> RL : check(userId) — tối đa 5 / 24 h
+  alt Vượt ngưỡng
+    S --> C : TooManyRequestsException → 429
+  end
+  S -> T : computeTrust(userId)
+  T --> S : trust
+  S -> RR : countRecentFromSameSubnet(placeId, ip/24, 24 h)
+  note right: cần lưu IP (dải /24) trên reviews
+  RR --> S : n
+  S -> S : status = (trust ≥ 30 && n < 3) ? PUBLISHED : PENDING\n(n ≥ 3 → gắn cờ ip_flagged)
+  S -> RR : save(review)
+  RR -> DB : INSERT reviews\n(UNIQUE(place_id, user_id) chặn request đồng thời)
+  loop mỗi ảnh
+    S -> M : storeOriginal(file)
+    M -> M : kiểm tra MIME thật (magic bytes)
+    M -> S3 : PUT tmp/{uuid}
+    S -> DB : INSERT review_photos (status = processing)
+  end
+  S -> EP : publish(ReviewCreatedEvent)
+end
+
+S --> C : ReviewResponse
+C --> FE : 201 Created
+FE --> U : Hiển thị review / nhãn "Chờ duyệt"
+
+== Sau khi transaction commit (bất đồng bộ) ==
+EP -> L : ReviewCreatedEvent
+alt review PUBLISHED
+  L -> RC : recalculate(placeId)
+  RC -> DB : SELECT COUNT(*) v, AVG(rating) R\nFROM reviews WHERE place_id = ? AND status = 'published'
+  RC -> RC : score = v/(v+m)·R + m/(v+m)·C  (m = 10)
+  RC -> DB : UPDATE places SET avg_rating, bayesian_score, review_count
+  L -> Q : PlaceChangedMessage (đồng bộ Meilisearch)
+  L -> Q : NotificationMessage (chủ địa điểm)
+end
+EP -> PL : ReviewCreatedEvent (có ảnh)
+PL -> Q : ImageProcessingMessage(photoIds)
+
+Q -> IC : ImageProcessingMessage
+IC -> S3 : GET tmp/{uuid}
+IC -> IC : resize, nén, gỡ EXIF (Thumbnailator, metadata-extractor)
+IC -> S3 : PUT reviews/{id}/{size}.jpg
+IC -> DB : UPDATE review_photos SET status = ready, urls
+@enduml

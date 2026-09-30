@@ -1,0 +1,131 @@
+@startuml use-case-overview
+' Sơ đồ use case tổng quát — LocalSpot
+' Nguồn: docs/analysis/use-cases.md (danh sách UC ↔ FR)
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+skinparam usecase {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+
+actor "Khách vãng lai" as Guest
+actor "Thành viên" as Member
+actor "Chủ địa điểm" as Owner
+actor "Kiểm duyệt viên" as Mod
+actor "Quản trị viên" as Admin
+
+Member -|> Guest
+Owner -|> Member
+Admin -|> Mod
+
+rectangle "LocalSpot" {
+
+  package "Tài khoản" {
+    usecase "UC01 Đăng ký" as UC01
+    usecase "UC02 Xác thực email" as UC02
+    usecase "UC03 Đăng nhập" as UC03
+    usecase "UC04 Đăng xuất / làm mới phiên" as UC04
+    usecase "UC05 Khôi phục mật khẩu" as UC05
+    usecase "UC06 Quản lý hồ sơ, đổi mật khẩu" as UC06
+  }
+
+  package "Khám phá" {
+    usecase "UC07 Xem trang chủ" as UC07
+    usecase "UC08 Tìm kiếm & lọc địa điểm" as UC08
+    usecase "UC09 Tìm quanh vị trí trên bản đồ" as UC09
+    usecase "UC10 Xem chi tiết địa điểm" as UC10
+  }
+
+  package "Đóng góp & đánh giá" {
+    usecase "UC11 Đề xuất địa điểm mới" as UC11
+    usecase "UC12 Viết đánh giá" as UC12
+    usecase "UC13 Sửa / xóa đánh giá" as UC13
+    usecase "UC14 Vote hữu ích" as UC14
+    usecase "UC15 Bình luận đánh giá" as UC15
+    usecase "UC16 Check-in" as UC16
+    usecase "UC17 Báo cáo vi phạm" as UC17
+    usecase "Upload ảnh" as UCPhoto
+  }
+
+  package "Cộng đồng" {
+    usecase "UC18 Quản lý bộ sưu tập" as UC18
+    usecase "UC19 Xem thông báo" as UC19
+    usecase "UC20 Theo dõi người dùng" as UC20
+    usecase "UC21 Xem bảng xếp hạng, huy hiệu" as UC21
+    usecase "UC22 Gắn thẻ địa điểm" as UC22
+  }
+
+  package "Chủ địa điểm" {
+    usecase "UC23 Yêu cầu xác nhận sở hữu" as UC23
+    usecase "UC24 Cập nhật thông tin địa điểm" as UC24
+    usecase "UC25 Phản hồi đánh giá" as UC25
+    usecase "UC26 Xem thống kê địa điểm" as UC26
+  }
+
+  package "Kiểm duyệt" {
+    usecase "UC27 Duyệt địa điểm" as UC27
+    usecase "UC28 Duyệt đánh giá trong hàng chờ" as UC28
+    usecase "UC29 Xử lý báo cáo vi phạm" as UC29
+    usecase "UC30 Duyệt yêu cầu sở hữu" as UC30
+  }
+
+  package "Quản trị" {
+    usecase "UC31 Quản lý người dùng & vai trò" as UC31
+    usecase "UC32 Quản lý danh mục & tiện ích" as UC32
+    usecase "UC33 Xem dashboard thống kê" as UC33
+  }
+}
+
+' Khách vãng lai
+Guest --> UC01
+Guest --> UC03
+Guest --> UC05
+Guest --> UC07
+Guest --> UC08
+Guest --> UC09
+Guest --> UC10
+
+' Thành viên
+Member --> UC02
+Member --> UC04
+Member --> UC06
+Member --> UC11
+Member --> UC12
+Member --> UC13
+Member --> UC14
+Member --> UC15
+Member --> UC16
+Member --> UC17
+Member --> UC18
+Member --> UC19
+Member --> UC20
+Member --> UC21
+Member --> UC22
+Member --> UC23
+
+' Chủ địa điểm
+Owner --> UC24
+Owner --> UC25
+Owner --> UC26
+
+' Kiểm duyệt viên (Quản trị viên kế thừa)
+Mod --> UC27
+Mod --> UC28
+Mod --> UC29
+Mod --> UC30
+
+' Quản trị viên
+Admin --> UC31
+Admin --> UC32
+Admin --> UC33
+
+' Quan hệ include / extend
+UC01 ..> UC02 : <<include>>
+' <<extend>>: mũi tên đi từ use case mở rộng tới use case gốc
+UCPhoto ..> UC11 : <<extend>>
+UCPhoto ..> UC12 : <<extend>>
+UCPhoto ..> UC24 : <<extend>>
+UC09 ..> UC08 : <<extend>>
+
+@enduml

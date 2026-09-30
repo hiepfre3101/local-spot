@@ -1,0 +1,59 @@
+@startuml activity-approve-place
+' Sơ đồ hoạt động — Đề xuất & duyệt địa điểm (UC11 → UC27, FR-15/16/35)
+' Luật: docs/requirements.md §5 (U7); docs/analysis/use-cases.md §3.5
+skinparam ActivityBackgroundColor #FDFDFD
+skinparam ActivityBorderColor #555555
+
+|Thành viên|
+start
+:Mở form đề xuất địa điểm;
+:Nhập tên, danh mục, địa chỉ, khoảng giá,\ngiờ mở cửa, tiện ích, mô tả;
+:Chọn vị trí trên bản đồ;
+if (Tải ảnh?) then (có)
+  :Chọn ảnh;
+endif
+:Gửi đề xuất;
+
+|Hệ thống|
+if (Dữ liệu hợp lệ?) then (không)
+  :Trả 422;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+:Tìm địa điểm tên gần giống trong bán kính 50 m;
+if (Có địa điểm nghi trùng?) then (có)
+  :Hiển thị danh sách nghi trùng;
+  |Thành viên|
+  if (Xác nhận "Đây là địa điểm khác"?) then (không)
+    :Hủy đề xuất;
+    stop
+  endif
+endif
+|Hệ thống|
+:Lưu địa điểm, status = **pending**, sinh slug;
+:Đưa ảnh vào hàng đợi xử lý\n(resize, nén, gỡ EXIF);
+:Thông báo kiểm duyệt viên có đề xuất mới;
+
+|Kiểm duyệt viên|
+:Mở hàng chờ địa điểm;
+:Xem thông tin, vị trí trên bản đồ, ảnh,\nđịa điểm lân cận;
+if (Quyết định?) then (duyệt)
+  |Hệ thống|
+  :status = **approved**;
+  :Đồng bộ địa điểm lên Meilisearch;
+  :Ghi activity_log;
+  :Thông báo người đề xuất "Đã được duyệt";
+else (từ chối)
+  |Kiểm duyệt viên|
+  :Nhập lý do từ chối;
+  |Hệ thống|
+  :status = **rejected**, lưu lý do;
+  :Ghi activity_log;
+  :Thông báo người đề xuất kèm lý do;
+endif
+
+|Thành viên|
+:Xem kết quả trong thông báo / trang cá nhân;
+stop
+@enduml

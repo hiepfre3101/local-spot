@@ -1,0 +1,50 @@
+@startuml activity-check-in
+' Sơ đồ hoạt động — Check-in (UC16, FR-24)
+' Luật: bán kính 200 m, accuracy ≤ 100 m, 1 lần / địa điểm / ngày (docs/requirements.md §5, U5)
+skinparam ActivityBackgroundColor #FDFDFD
+skinparam ActivityBorderColor #555555
+
+|Thành viên|
+start
+:Bấm "Check-in" trên trang địa điểm;
+
+|Trình duyệt|
+if (Đã cấp quyền vị trí?) then (chưa)
+  :Hỏi quyền vị trí;
+  if (Người dùng đồng ý?) then (không)
+    :Hiển thị hướng dẫn bật vị trí;
+    |Thành viên|
+    stop
+  endif
+endif
+|Trình duyệt|
+:Lấy tọa độ (lat, lng) và accuracy\nqua Geolocation API;
+:Gửi POST /places/{id}/check-in;
+
+|Hệ thống|
+if (accuracy ≤ 100 m?) then (không)
+  :Trả 422 "Tín hiệu GPS chưa đủ chính xác";
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+if (Đã check-in địa điểm này hôm nay?) then (có)
+  :Trả 409;
+  |Thành viên|
+  stop
+endif
+|Hệ thống|
+:Tính d = ST_Distance_Sphere(vị trí gửi lên, places.location);
+if (d ≤ 200 m?) then (có)
+  :Lưu check_ins (user, place, tọa độ, thời gian);
+  :Cộng lượt check-in vào thống kê địa điểm;
+  |Thành viên|
+  :Thấy "Check-in thành công";
+  stop
+else (không)
+  |Hệ thống|
+  :Trả 422 "Bạn đang cách địa điểm d m";
+  |Thành viên|
+  stop
+endif
+@enduml

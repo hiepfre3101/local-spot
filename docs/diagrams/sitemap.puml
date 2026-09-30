@@ -1,0 +1,38 @@
+@startwbs sitemap
+' Sitemap frontend — chi tiết route, quyền, UC: docs/design/sitemap.md
+title LocalSpot — Sitemap
+
+* LocalSpot
+** Trang công khai (DefaultLayout)
+*** / Trang chủ\nUC07
+**** /search Tìm kiếm & bản đồ\nUC08, UC09
+***** /places/:slug Chi tiết địa điểm\nUC10, UC13–17, UC22, UC25
+****** /places/:slug/review Viết / sửa đánh giá\nUC12, UC13 [auth]
+****** [Hộp thoại] Check-in P12\nUC16 [auth]
+*** /propose Đề xuất địa điểm\nUC11 [auth]
+*** /leaderboard Bảng xếp hạng\nUC21
+*** /users/:id Trang cá nhân\nUC18, UC20, UC21
+**** /collections/:id Bộ sưu tập [auth]
+**** /c/:shareSlug Bộ sưu tập chia sẻ
+*** /settings Cài đặt tài khoản\nUC06 [auth]
+**** /settings/profile
+**** /settings/password
+*** /owner Địa điểm của tôi\nUC23 [auth]
+**** /owner/places/:id\nUC24–26 [chủ địa điểm]
+*** [Thả xuống] Thông báo\nUC19 [auth]
+** Tài khoản (AuthLayout)
+*** /login\nUC03
+*** /register\nUC01
+*** /verify-email\nUC02
+*** /forgot-password\nUC05
+*** /reset-password\nUC05
+** Quản trị (AdminLayout)
+*** /admin/dashboard Tổng quan\nUC33 [quản trị viên]
+*** /admin/queue Hàng chờ gộp FIFO\nUC27–30 [kiểm duyệt viên]
+**** /admin/moderation/places/:id\nUC27
+**** /admin/moderation/reviews/:id\nUC28
+**** /admin/moderation/reports/:type/:id\nUC29
+**** /admin/moderation/claims/:id\nUC30
+*** /admin/users Người dùng & vai trò\nUC31 [quản trị viên]
+*** /admin/catalog Danh mục & tiện ích\nUC32 [quản trị viên]
+@endwbs

@@ -1,0 +1,236 @@
+@startuml erd-place-review
+' ERD 2/3 — Địa điểm & đánh giá. Chi tiết cột: docs/design/database.md §3.2, §3.3
+' users được vẽ rút gọn (đầy đủ ở erd-account)
+hide circle
+skinparam linetype ortho
+skinparam class {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+
+entity users {
+  * id : BIGINT <<PK>>
+  --
+  ...
+}
+
+entity categories {
+  * id : BIGINT <<PK>>
+  --
+  parent_id : BIGINT <<FK>>
+  * name : VARCHAR(100)
+  * slug : VARCHAR(120) <<UQ>>
+  icon : VARCHAR(100)
+  * sort_order : INT
+}
+
+entity places {
+  * id : BIGINT <<PK>>
+  --
+  * category_id : BIGINT <<FK>>
+  * created_by : BIGINT <<FK>>
+  owner_id : BIGINT <<FK>>
+  * name : VARCHAR(200)
+  * slug : VARCHAR(220) <<UQ>>
+  description : TEXT
+  * address : VARCHAR(300)
+  * city : VARCHAR(100)
+  * location : POINT SRID 4326 <<SPATIAL IX>>
+  price_min : INT
+  price_max : INT
+  phone : VARCHAR(20)
+  website : VARCHAR(300)
+  * status : VARCHAR(20)
+  reject_reason : VARCHAR(500)
+  moderated_by : BIGINT <<FK>>
+  moderated_at : DATETIME
+  * review_count : INT
+  * avg_rating : DECIMAL(3,2)
+  * bayesian_score : DECIMAL(4,3)
+  * checkin_count : INT
+  * version : INT
+  * created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity place_photos {
+  * id : BIGINT <<PK>>
+  --
+  * place_id : BIGINT <<FK>>
+  * uploaded_by : BIGINT <<FK>>
+  * storage_key : VARCHAR(300)
+  * status : VARCHAR(20)
+  * is_cover : BOOLEAN
+  * sort_order : INT
+  width : INT
+  height : INT
+  * created_at : DATETIME
+}
+
+entity opening_hours {
+  * id : BIGINT <<PK>>
+  --
+  * place_id : BIGINT <<FK>>
+  * day_of_week : TINYINT
+  * open_time : TIME
+  * close_time : TIME
+}
+
+entity amenities {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(100)
+  * slug : VARCHAR(120) <<UQ>>
+  icon : VARCHAR(100)
+}
+
+entity place_amenity {
+  * place_id : BIGINT <<PK, FK>>
+  * amenity_id : BIGINT <<PK, FK>>
+}
+
+entity place_views {
+  * place_id : BIGINT <<PK, FK>>
+  * view_date : DATE <<PK>>
+  --
+  * view_count : INT
+}
+
+entity place_claims {
+  * id : BIGINT <<PK>>
+  --
+  * place_id : BIGINT <<FK>>
+  * user_id : BIGINT <<FK>>
+  * contact_phone : VARCHAR(20)
+  evidence_note : VARCHAR(1000)
+  * evidence_keys : JSON
+  * status : VARCHAR(20)
+  reject_reason : VARCHAR(500)
+  reviewed_by : BIGINT <<FK>>
+  reviewed_at : DATETIME
+  * version : INT
+  * created_at : DATETIME
+}
+
+entity tags {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(50)
+  * slug : VARCHAR(60) <<UQ>>
+}
+
+entity taggables {
+  * tag_id : BIGINT <<PK, FK>>
+  * taggable_type : VARCHAR(20) <<PK>>
+  * taggable_id : BIGINT <<PK>>
+  --
+  created_by : BIGINT <<FK>>
+}
+
+entity reviews {
+  * id : BIGINT <<PK>>
+  --
+  * place_id : BIGINT <<FK>>
+  * user_id : BIGINT <<FK>>
+  * rating : TINYINT (1–5)
+  * content : TEXT
+  * visited_at : DATE
+  * status : VARCHAR(20)
+  * ip_address : VARCHAR(45)
+  * ip_prefix : VARCHAR(45)
+  * ip_flagged : BOOLEAN
+  * helpful_count : INT
+  reject_reason : VARCHAR(500)
+  moderated_by : BIGINT <<FK>>
+  moderated_at : DATETIME
+  * version : INT
+  * created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+  ..
+  UQ(place_id, user_id)
+}
+
+entity review_photos {
+  * id : BIGINT <<PK>>
+  --
+  * review_id : BIGINT <<FK>>
+  * uploaded_by : BIGINT <<FK>>
+  * storage_key : VARCHAR(300)
+  * status : VARCHAR(20)
+  * sort_order : INT
+  width : INT
+  height : INT
+  * created_at : DATETIME
+}
+
+entity review_votes {
+  * review_id : BIGINT <<PK, FK>>
+  * user_id : BIGINT <<PK, FK>>
+  --
+  * counted : BOOLEAN
+  * created_at : DATETIME
+}
+
+entity comments {
+  * id : BIGINT <<PK>>
+  --
+  * review_id : BIGINT <<FK>>
+  * user_id : BIGINT <<FK>>
+  parent_id : BIGINT <<FK>>
+  * content : VARCHAR(2000)
+  * status : VARCHAR(20)
+  * created_at : DATETIME
+  updated_at : DATETIME
+  deleted_at : DATETIME
+}
+
+entity owner_replies {
+  * id : BIGINT <<PK>>
+  --
+  * review_id : BIGINT <<FK, UQ>>
+  * user_id : BIGINT <<FK>>
+  * content : VARCHAR(2000)
+  * created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity check_ins {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * place_id : BIGINT <<FK>>
+  * location : POINT SRID 4326
+  * accuracy_m : SMALLINT
+  * distance_m : SMALLINT
+  * checkin_date : DATE
+  * created_at : DATETIME
+  ..
+  UQ(user_id, place_id, checkin_date)
+}
+
+categories |o--o{ categories : cha
+categories ||--o{ places
+users ||--o{ places : đề xuất
+users |o--o{ places : sở hữu
+places ||--o{ place_photos
+places ||--o{ opening_hours
+places ||--o{ place_amenity
+amenities ||--o{ place_amenity
+places ||--o{ place_views
+places ||--o{ place_claims
+users ||--o{ place_claims
+tags ||--o{ taggables
+places ||--o{ reviews
+users ||--o{ reviews
+reviews ||--o{ review_photos
+reviews ||--o{ review_votes
+users ||--o{ review_votes
+reviews ||--o{ comments
+comments |o--o{ comments : trả lời
+users ||--o{ comments
+reviews ||--o| owner_replies
+places ||--o{ check_ins
+users ||--o{ check_ins
+@enduml
