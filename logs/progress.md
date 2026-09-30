@@ -224,3 +224,26 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 - Font Be Vietnam Pro qua Google Fonts `<link>` — không thêm package.
 
 **Kiểm chứng:** `./mvnw verify` xanh (1 smoke test trên MySQL/RabbitMQ/Redis thật, Spotless, SpotBugs 0 lỗi); frontend lint + format + type-check + Vitest + build xanh; `docker compose --profile app up --build`: backend profile prod kết nối MySQL, Flyway chạy, SPA 200, deep link 200, `/api` qua nginx tới Spring Security (401 — đúng, SecurityConfig làm ở D); profile dev trên host đọc `.env`, health 200. CI chưa chạy trên GitHub (chạy khi push).
+
+---
+
+## 2026-09-30 21:20 (+07) — Checklist D1: Flyway migration + khóa ngoại + index
+
+**Bối cảnh**: bắt đầu D (backend nền tảng) trên nhánh `feature/be-foundation` (tách từ `feature/infra-dev-environment` vì nhánh đó chưa merge vào `develop` mà D cần scaffold backend). Supervisor chọn nhịp **dừng sau mỗi mục** để duyệt.
+
+**Supervisor chốt trước khi viết schema:**
+- **O2 = về PENDING cả bài**: tác giả trust < 30 sửa đánh giá đã đăng → đánh giá quay về `PENDING`, rời trang và điểm xếp hạng tới khi duyệt lại. Không cần bảng lưu bản sửa → `reviews` giữ nguyên một trạng thái. Đánh đổi: bài biến mất tạm thời; đổi lại không thêm bảng / loại mục hàng chờ, và event tính lại rating vốn đã xử lý chuyển trạng thái PUBLISHED ↔ khác. Phương án "sửa không cần duyệt" bị loại vì mở lỗ hổng đăng sạch rồi sửa thành spam.
+- **Seed demo = Flyway SQL riêng cho dev** (làm ở D2): file SQL đặt ngoài `db/migration`, chỉ bật ở profile dev.
+
+**Quyết định kỹ thuật (D1):**
+- 3 migration: `V1__init.sql` (32 bảng, đúng database.md), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`. Tách seed tham chiếu khỏi schema để đọc/duyệt riêng; dữ liệu tham chiếu nằm trong Flyway vì **mọi** môi trường đều cần (khác demo).
+- **Khóa ngoại RESTRICT mặc định**, CASCADE chỉ ở bảng nối thuần. Lý do: bảng nghiệp vụ xóa mềm, một lệnh `DELETE` cứng là lỗi lập trình → CSDL nên chặn thay vì xóa dây chuyền review/ảnh (CLAUDE.md §4 cấm mất dữ liệu). Test `refusesToHardDeleteUserWithContent` khẳng định.
+- **Permission = đúng 17 giá trị `x-permission` trong openapi.yaml**, không tự thêm. Kế thừa: OWNER ⊇ USER (plan §4), ADMIN ⊇ MODERATOR (Q2); MODERATOR không kèm quyền USER — tài khoản nhân sự được gán thêm role USER. `user:view` chỉ cho ADMIN (Q2 xếp quản lý người dùng vào admin).
+- **Danh mục / tiện ích khởi đầu** seed ở V3 (mọi môi trường): UC11 bắt buộc chọn danh mục nên hệ thống mới không dùng được nếu rỗng; admin sửa qua UC32. Danh sách do agent đề xuất theo phạm vi plan (quán ăn / cà phê / check-in) — supervisor có thể đổi bằng migration mới hoặc qua UC32. `icon` NULL (chưa có bộ icon). **Badges không seed** vì O3 chưa chốt.
+- Index / CHECK bổ sung ngoài database.md (index hàng chờ `(status, created_at)` cho `place_claims`, `reports`; CHECK điểm trong [0, 5]…) — đã ghi ở database.md §3.5.
+- Không `DEFAULT CURRENT_TIMESTAMP`: phụ thuộc `time_zone` session, dễ lệch UTC.
+- `TestcontainersConfiguration` đổi sang `public` để test ở package con dùng được.
+
+**Phát hiện**: MySQL vi phạm CHECK (mã 3819) → Spring ném `UncategorizedSQLException`, không phải `DataIntegrityViolationException`. Phải xử lý riêng trong `@RestControllerAdvice` (D7), nếu không sẽ thành 500.
+
+**Kiểm chứng**: `./mvnw verify` xanh — 12 test (11 test schema mới trên MySQL 8.4 thật: đủ 32 bảng, collation, spatial index SRID 4326, thứ tự trục (lat, lng) qua `ST_Distance_Sphere` Hồ Gươm → Văn Miếu ≈ 1,27 km, UNIQUE review tính cả xóa mềm, UNIQUE vote, CHECK, 1 check-in/ngày, FK RESTRICT, RBAC kế thừa, cây danh mục), Spotless, SpotBugs 0 lỗi. Chưa áp dụng lên DB dev cục bộ (sẽ tự chạy khi khởi động backend).

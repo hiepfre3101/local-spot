@@ -13,7 +13,7 @@ import org.testcontainers.utility.DockerImageName;
  * MySQL/RabbitMQ/Redis của môi trường dev và deploy (spatial index, hành vi collation...).
  */
 @TestConfiguration(proxyBeanMethods = false)
-class TestcontainersConfiguration {
+public class TestcontainersConfiguration {
 
     @Bean
     @ServiceConnection

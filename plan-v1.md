@@ -378,7 +378,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] GitHub Actions chạy lint + test — [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 ### D. Backend — nền tảng
-- [ ] Toàn bộ Flyway migration + khóa ngoại + index
+- [x] Toàn bộ Flyway migration + khóa ngoại + index — `V1__init.sql` (32 bảng), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`; xem [database.md §3.5](docs/design/database.md)
 - [ ] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner`
 - [ ] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token
 - [ ] Xác thực email, quên mật khẩu, đổi mật khẩu
