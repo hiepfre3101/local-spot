@@ -88,6 +88,7 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET trong .env (openssl rand -base64 32)}
     depends_on:
       mysql:
         condition: service_healthy

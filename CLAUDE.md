@@ -20,7 +20,7 @@ Nguồn sự thật đầy đủ nằm ở [plan-v1.md](plan-v1.md) — đọc l
 - **Điểm khác biệt cốt lõi** (không được làm hời hợt): chống review ảo bằng trust score, xếp hạng Bayesian average (không phải trung bình cộng đơn thuần), tìm kiếm tiếng Việt chịu lỗi chính tả/không dấu, truy vấn không gian theo bán kính bằng spatial index.
 - **Stack**:
   - Frontend: Vue 3 + TypeScript + Pinia + Vue Router + TailwindCSS + Vue Query + Leaflet.
-  - Backend: **Spring Boot 4.1 + Java 21** (đổi từ 3.3 ngày 2026-09-29 — 3.x hết hỗ trợ) (đã đổi từ Laravel — xem ghi chú "Đổi stack backend (v2)" trong plan-v1.md), Spring Security + JWT, Spring Data JPA/Hibernate (+ hibernate-spatial cho cột POINT), Flyway, MapStruct, RabbitMQ, Meilisearch.
+  - Backend: **Spring Boot 4.1 + Java 21** (đổi từ 3.3 ngày 2026-09-29 — 3.x hết hỗ trợ) (đã đổi từ Laravel — xem ghi chú "Đổi stack backend (v2)" trong plan-v1.md), Spring Security + JWT (OAuth2 Resource Server / Nimbus), Spring Data JPA/Hibernate (+ hibernate-spatial cho cột POINT), Flyway, MapStruct, RabbitMQ, Meilisearch.
   - Hạ tầng: MySQL 8 (spatial index), Redis, RabbitMQ, MinIO/S3, Docker Compose.
 - **Trạng thái hiện tại**: đã xong phân tích & thiết kế (checklist A, B) và thiết lập môi trường (C): `backend/`, `frontend/` đã scaffold. Code mới bám cấu trúc thư mục ở mục 7 của plan-v1.md; cách chạy xem README.md.
 - Đây là **đồ án tốt nghiệp** — quyết định kỹ thuật cần có lý do có thể giải thích được trước hội đồng, không chỉ "chạy được là xong".

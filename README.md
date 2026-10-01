@@ -26,7 +26,7 @@ cd backend && ./mvnw spring-boot:run
 cd frontend && npm ci && npm run dev
 ```
 
-Chạy cả hệ thống trong Docker (giống môi trường deploy): `docker compose --profile app up -d --build` → http://localhost:8088 (đổi cổng bằng `APP_PORT` trong `.env`).
+Chạy cả hệ thống trong Docker (giống môi trường deploy): `docker compose --profile app up -d --build` → http://localhost:8088 (đổi cổng bằng `APP_PORT` trong `.env`; bắt buộc đặt `JWT_SECRET` — tạo bằng `openssl rand -base64 32`).
 
 **Dữ liệu demo** (chỉ profile dev — Flyway nạp `backend/src/main/resources/db/seed/dev/` khi backend khởi động): 60 tài khoản và 300 địa điểm giả ở 5 thành phố. Mật khẩu chung `LocalSpot2026`:
 

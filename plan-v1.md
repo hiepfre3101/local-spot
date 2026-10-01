@@ -55,7 +55,7 @@
 | Hạng mục | Lựa chọn | Ghi chú |
 |---|---|---|
 | Framework | Spring Boot 4.1 + Java 21 (LTS) | API-only (REST), Maven Wrapper. *Đổi từ 3.3 (2026-09-29): dòng 3.x đã hết hỗ trợ OSS, Initializr không còn cung cấp* |
-| Auth | Spring Security + JWT (jjwt) | Access token + refresh token; giải thích rõ luồng trong báo cáo |
+| Auth | Spring Security + JWT (OAuth2 Resource Server / Nimbus, HS256) | Access token + refresh token; giải thích rõ luồng trong báo cáo. *(2026-10-01: đổi từ jjwt + filter tự viết sang module chính thức của Spring Security — filter Bearer token có sẵn, ít code bảo mật tự viết; vẫn tự phát hành token, không dùng máy chủ OAuth2 / Keycloak)* |
 | Phân quyền | RBAC tự thiết kế + `@PreAuthorize` | Bảng `roles`/`permissions` riêng (Spring không có sẵn như Spatie); Role: user, owner, moderator, admin |
 | ORM | Spring Data JPA + Hibernate (+ hibernate-spatial) | Entity, Repository interface, tránh N+1 bằng `@EntityGraph`/fetch join; hibernate-spatial map cột `POINT SRID 4326` sang JTS `Point` *(thêm 2026-09-30)* |
 | Spatial | `hibernate-spatial` (JTS `Point`) | Map cột `POINT SRID 4326` sang entity, viết truy vấn không gian trong JPQL — thêm 2026-09-28 (C1) |
@@ -244,7 +244,7 @@ backend/
 │   ├── event/{ReviewCreatedEvent,PlaceApprovedEvent}.java
 │   ├── listener/{RecalculateRatingListener,SendOwnerNotificationListener}.java
 │   ├── amqp/{ImageProcessingConsumer,SearchReindexConsumer}.java
-│   ├── security/{JwtFilter,SecurityConfig,PermissionEvaluator}.java
+│   ├── security/{SecurityConfig,UserJwtAuthenticationConverter,JwtService,PermissionEvaluator}.java  # filter Bearer có sẵn của Spring Security
 │   ├── config/{WebSocketConfig,OpenApiConfig,RedisConfig}.java
 │   └── exception/{GlobalExceptionHandler,ApiException}.java
 ├── src/main/resources/
@@ -380,7 +380,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 ### D. Backend — nền tảng
 - [x] Toàn bộ Flyway migration + khóa ngoại + index — `V1__init.sql` (32 bảng), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`; xem [database.md §3.5](docs/design/database.md)
 - [x] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner` — 29 entity + 3 bảng nối `@ManyToMany`; seed demo Flyway `db/seed/dev/R__demo_*.sql` chỉ ở profile dev (60 tài khoản, 300 địa điểm; review demo làm ở E sau khi có service tính rating/trust)
-- [ ] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token
+- [x] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token — kèm `GET /me` và trust score (requirements §5.1)
 - [ ] Xác thực email, quên mật khẩu, đổi mật khẩu
 - [ ] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize`
 - [ ] Method security / `PermissionEvaluator` cho Place, Review, Comment

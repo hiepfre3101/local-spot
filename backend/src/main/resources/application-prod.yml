@@ -19,3 +19,8 @@ spring:
 
 server:
   forward-headers-strategy: framework # Sau nginx: lấy scheme/host/IP từ X-Forwarded-* (luật cảnh báo IP cần IP thật)
+
+localspot:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}

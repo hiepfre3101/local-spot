@@ -18,6 +18,7 @@
     <spotless.version>3.10.3</spotless.version>
     <palantir-java-format.version>2.100.0</palantir-java-format.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
+    <mapstruct.version>1.6.3</mapstruct.version>
   </properties>
   <dependencies>
     <dependency>
@@ -44,6 +45,11 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
+    <!-- Ký / xác thực JWT (HS256) bằng Nimbus; dùng BearerTokenAuthenticationFilter có sẵn thay vì filter tự viết -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-validation</artifactId>
@@ -64,6 +70,12 @@
     <dependency>
       <groupId>org.hibernate.orm</groupId>
       <artifactId>hibernate-spatial</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.mapstruct</groupId>
+      <artifactId>mapstruct</artifactId>
+      <version>${mapstruct.version}</version>
     </dependency>
 
     <dependency>
@@ -161,10 +173,21 @@
             </goals>
             <phase>compile</phase>
             <configuration>
+              <compilerArgs>
+                <!-- Mapper là Spring bean (constructor injection) -->
+                <arg>-Amapstruct.defaultComponentModel=spring</arg>
+                <!-- Trường DTO chưa được map → lỗi biên dịch, không âm thầm trả null -->
+                <arg>-Amapstruct.unmappedTargetPolicy=ERROR</arg>
+              </compilerArgs>
               <annotationProcessorPaths>
                 <path>
                   <groupId>org.springframework.boot</groupId>
                   <artifactId>spring-boot-configuration-processor</artifactId>
+                </path>
+                <path>
+                  <groupId>org.mapstruct</groupId>
+                  <artifactId>mapstruct-processor</artifactId>
+                  <version>${mapstruct.version}</version>
                 </path>
               </annotationProcessorPaths>
             </configuration>

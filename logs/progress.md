@@ -275,3 +275,30 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 - **Chưa seed review / vote / check-in**: `review_count`, `bayesian_score` phải khớp review; seed thẳng SQL sẽ phải chép công thức Bayesian và trust ra SQL (hai nguồn sự thật cho điểm lõi). Làm ở E: seed review thô rồi chạy job tính lại rating. Hệ quả tạm thời: mọi tài khoản demo trust < 30, mọi địa điểm điểm 0.
 
 **Kiểm chứng**: `./mvnw verify` xanh — 24 test (thêm `EntityMappingTests` 6: trục tọa độ, auditing, giờ mở cửa ISO + qua đêm, xóa mềm, JSON, khóa tổ hợp + role/permission; `DemoSeedTests` 6: 60 tài khoản đúng vai trò, mật khẩu khớp `BCryptPasswordEncoder`, 300 địa điểm đúng phân bổ thành phố / trạng thái, tọa độ < 7 km quanh tâm, giờ mở cửa & tiện ích theo loại hình, **chạy lại script không đổi số dòng**), SpotBugs 0 lỗi. Chưa khởi động backend trên DB dev cục bộ — seed sẽ nạp ở lần `spring-boot:run` tới.
+
+---
+
+## 2026-10-01 22:30 (+07) — Checklist D3: Spring Security + JWT, đăng ký / đăng nhập / đăng xuất / refresh
+
+**Bối cảnh**: supervisor duyệt D2 (commit `10699e7`, đã push `feature/be-foundation`) và cho làm tiếp. O3 (bộ huy hiệu / điểm đóng góp) giải thích cho supervisor: chưa cần chốt tới mục huy hiệu ở E.
+
+**Supervisor chốt (qua câu hỏi):**
+- **JWT bằng OAuth2 Resource Server (Nimbus)** thay vì jjwt + `JwtFilter` tự viết. Lý do: filter Bearer token của Spring Security đã kiểm chứng rộng rãi (hạn dùng, chữ ký, thuật toán), giảm code bảo mật tự viết — chỗ dễ có lỗ hổng nhất. Đánh đổi: ít "tự tay" hơn khi trình bày cơ chế; bù lại phần tự viết vẫn có (phát hành token, xoay vòng refresh, nạp quyền). Vẫn tự phát hành token, **không** dùng máy chủ OAuth2/Keycloak. **Lưu ý**: plan §2 ghi rõ `jjwt` — câu hỏi lúc đó chỉ nhắc §7 (`JwtFilter`); đã sửa cả §2, §7 và CLAUDE.md cho khớp.
+- **Quyền đọc CSDL mỗi request**: JWT chỉ mang `sub` = id người dùng; converter nạp user + role + permission (1 truy vấn `@EntityGraph`). Khóa tài khoản / gỡ role / xóa tài khoản có hiệu lực ngay (test `lockingAnAccountRevokesItsAccessImmediately`). Đánh đổi: +1 truy vấn / request — cache Redis nếu đo thấy cần.
+- **Trust score làm ngay** (`TrustScoreCalculator` thuần + `TrustScoreService`), vì `MeResponse.trustScore` cần và công thức đã chốt đủ ở requirements §5.1. Tham số trong `localspot.trust.*` (application.yml).
+
+**Quyết định kỹ thuật:**
+- **HS256, khóa base64 ≥ 32 byte**, từ chối khởi động nếu khóa ngắn hơn; decoder chỉ chấp nhận HS256 (chặn đổi thuật toán) + kiểm issuer + hạn dùng. Một backend vừa phát hành vừa xác thực nên khóa đối xứng đủ; RS256 chỉ cần khi có dịch vụ khác xác thực token.
+- **Khóa JWT theo môi trường**: dev có mặc định trong `application-dev.yml` (không bắt sửa `.env` hiện có), prod `${JWT_SECRET}` không mặc định; `docker-compose.yml` thêm `JWT_SECRET: ${JWT_SECRET:?...}` cho service backend (thay đổi Compose — cần để profile prod khởi động; báo lỗi rõ nếu thiếu). `.env.example` thêm biến.
+- **Refresh token xoay vòng**: 32 byte ngẫu nhiên base64url, DB lưu SHA-256. Đánh dấu đã dùng bằng `UPDATE ... WHERE used_at IS NULL` nguyên tử → hai request đồng thời cùng token chỉ một thắng. Token đã dùng bị gửi lại → **thu hồi mọi token còn hiệu lực của người dùng** (U2), `@Transactional(noRollbackFor = ApiException.class)` để lệnh thu hồi được commit dù trả 401 (test `reusingRotatedTokenRevokesEverySession`). Token đã bị thu hồi do đăng xuất mà gửi lại → chỉ 401, không thu hồi hàng loạt (không đăng xuất các thiết bị khác vô cớ).
+  - **Hệ quả cho frontend (checklist F)**: interceptor phải gộp các lần refresh đồng thời (single-flight); hai tab refresh cùng lúc sẽ bị coi là dùng lại → đăng xuất mọi nơi. Chấp nhận vì đúng U2; không thêm "cửa sổ ân hạn".
+- **Đăng nhập chống dò email**: email không tồn tại vẫn chạy BCrypt với hash giả → cùng thời gian phản hồi, cùng thông báo lỗi. Chưa xác thực email vẫn đăng nhập được (FR-02 chỉ chặn viết review). Khóa → 403 `ACCOUNT_LOCKED` kèm thời hạn + lý do. Giới hạn 5 lần / 15 phút để ở D8.
+- **Đăng ký**: email chuẩn hóa chữ thường; trùng → 409 (kiểm tra trước + bắt `DataIntegrityViolationException` cho trường hợp chen nhau). DTO chỉ có 3 trường → gửi kèm `roles`, `emailVerifiedAt` bị bỏ qua (test mass assignment). Gửi mail xác thực để D4.
+- **Mật khẩu**: validator `@ValidPassword` — ≥ 8 ký tự, có chữ và số, **≤ 72 byte UTF-8** (BCrypt bỏ qua phần thừa; tiếng Việt có dấu 2–3 byte / ký tự). BCrypt cost 10, không dùng `{bcrypt}` prefix (khớp seed).
+- **CSRF tắt**: access token trong header; cookie duy nhất là refresh token với SameSite=Strict + Path=/api/v1/auth.
+- **Danh sách trắng endpoint công khai** (`POST /api/v1/auth/**`, health, info); còn lại mặc định cần đăng nhập — quên khai báo thì lỗi theo hướng an toàn.
+- **Một định dạng lỗi**: 401/403 trong filter chuyển qua `HandlerExceptionResolver` tới `GlobalExceptionHandler` → `application/problem+json` có `code`. Khách chạm `@PreAuthorize` nhận 401, không phải 403. Validate → 422 + `errors[]`. Handler hiện bản tối thiểu; D7 bổ sung phần còn lại (404, optimistic lock, mã 3819, 500).
+- Thêm **MapStruct** (đã có trong stack) với `unmappedTargetPolicy=ERROR` — trường DTO quên map là lỗi biên dịch. Thêm `GET /api/v1/me` (đã có trong openapi) vì frontend cần nạp lại hồ sơ khi tải lại trang.
+- `AuthenticatedUser` (record bất biến) làm principal thay vì entity — không lazy loading ngoài transaction. SpotBugs bắt `Authentication` phải serializable → sửa đúng gốc (record `Serializable`), không thêm loại trừ.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **56 test** (thêm `TrustScoreCalculatorTest` 10 ca = bảng ví dụ §5.1 + biên; `ValidPasswordValidatorTest` 9; `AuthFlowTests` 13 qua HTTP trên MySQL thật: đăng ký/đăng nhập + thuộc tính cookie, trùng email không phân biệt hoa thường, 422, mass assignment, sai mật khẩu ≡ sai email, tài khoản khóa, token hết hạn / sai issuer / giả chữ ký, khóa có hiệu lực ngay, xoay vòng, dùng lại → thu hồi toàn bộ, đăng xuất), SpotBugs 0 lỗi.

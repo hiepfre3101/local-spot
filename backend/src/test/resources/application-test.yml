@@ -1,0 +1,5 @@
+# Profile test (Testcontainers cung cấp datasource / RabbitMQ / Redis qua @ServiceConnection)
+localspot:
+  security:
+    jwt:
+      secret: OLLUfFKO+AakIdej2snU9x/jBFZ0H+YxmNMVrQWKKjM=
