@@ -43,6 +43,10 @@
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-mail</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-security</artifactId>
     </dependency>
     <!-- Ký / xác thực JWT (HS256) bằng Nimbus; dùng BearerTokenAuthenticationFilter có sẵn thay vì filter tự viết -->

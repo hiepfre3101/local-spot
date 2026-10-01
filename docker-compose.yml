@@ -73,6 +73,15 @@ services:
     volumes:
       - minio_data:/data
 
+  # Hộp thư giả cho dev: bắt mọi mail SMTP, xem tại http://localhost:8025 (không gửi ra ngoài)
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: localspot-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
   backend:
     profiles: [app]
     build: ./backend
@@ -88,7 +97,18 @@ services:
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: ${RABBITMQ_USER}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET:?Đặt JWT_SECRET trong .env (openssl rand -base64 32)}
+      # Không dùng ${JWT_SECRET:?...}: Compose nội suy cả service đang tắt → `docker compose up -d` (chỉ hạ tầng) sẽ
+      # lỗi. Thiếu biến thì backend prod tự từ chối khởi động (@NotBlank trên localspot.security.jwt.secret).
+      JWT_SECRET: ${JWT_SECRET:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8088}
+      # Mặc định gửi vào Mailpit; deploy thật đặt SMTP trong .env
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-LocalSpot <no-reply@localspot.test>}
     depends_on:
       mysql:
         condition: service_healthy

@@ -5,10 +5,12 @@ import static org.assertj.core.api.Assertions.within;
 
 import com.localspot.TestcontainersConfiguration;
 import jakarta.persistence.EntityManager;
+import java.sql.Timestamp;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -51,6 +53,24 @@ class EntityMappingTests {
         Place reloaded = em.find(Place.class, place.getId());
         assertThat(GeoPoints.lat(reloaded.getLocation())).isCloseTo(21.0288, within(1e-9));
         assertThat(GeoPoints.lng(reloaded.getLocation())).isCloseTo(105.8525, within(1e-9));
+    }
+
+    @Test
+    void hibernateAndPlainJdbcAgreeOnUtcTimestamps() {
+        Place place = persistPlace("mui-gio", 21.0, 105.8);
+
+        // Ghi qua Hibernate, đọc qua JDBC thuần: phải ra cùng một thời điểm (không lệch theo múi giờ JVM).
+        // MySQL làm tròn phần lẻ giây về micro giây → so với sai số 1 µs.
+        Timestamp viaJdbc =
+                jdbc.queryForObject("SELECT created_at FROM places WHERE id = ?", Timestamp.class, place.getId());
+        // Giá trị lưu trong CSDL là giờ UTC: gần UTC_TIMESTAMP() của chính MySQL (lệch +07 sẽ ra ~25.200 giây)
+        Long secondsBehindUtcNow = jdbc.queryForObject(
+                "SELECT TIMESTAMPDIFF(SECOND, created_at, UTC_TIMESTAMP(6)) FROM places WHERE id = ?",
+                Long.class,
+                place.getId());
+
+        assertThat(viaJdbc.toInstant()).isCloseTo(place.getCreatedAt(), within(1, ChronoUnit.MICROS));
+        assertThat(secondsBehindUtcNow).isBetween(-5L, 120L);
     }
 
     @Test

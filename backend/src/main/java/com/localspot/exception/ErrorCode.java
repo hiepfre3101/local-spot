@@ -12,6 +12,8 @@ public final class ErrorCode {
     public static final String ACCOUNT_LOCKED = "ACCOUNT_LOCKED";
     public static final String REFRESH_TOKEN_INVALID = "REFRESH_TOKEN_INVALID";
     public static final String REFRESH_TOKEN_REUSED = "REFRESH_TOKEN_REUSED";
+    public static final String TOKEN_INVALID = "TOKEN_INVALID";
+    public static final String INVALID_CURRENT_PASSWORD = "INVALID_CURRENT_PASSWORD";
 
     private ErrorCode() {}
 }

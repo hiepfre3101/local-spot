@@ -51,6 +51,10 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Gửi lại mail xác thực cần biết là ai → phải đăng nhập (khai báo trước luật permitAll bên
+                        // dưới)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/resend-verification")
+                        .authenticated()
                         // Đăng ký, đăng nhập, refresh, đăng xuất, xác thực email, quên / đặt lại mật khẩu
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**")
                         .permitAll()

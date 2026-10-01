@@ -76,7 +76,8 @@
 ### Hạ tầng
 - **CSDL**: MySQL 8 (cột `POINT` + `SPATIAL INDEX` cho tìm theo bán kính).
 - **Lưu trữ ảnh**: MinIO khi dev, Cloudflare R2 / AWS S3 khi deploy.
-- **Container**: Docker Compose (app, nginx, mysql, redis, rabbitmq, meilisearch, minio).
+- **Container**: Docker Compose (app, nginx, mysql, redis, rabbitmq, meilisearch, minio, mailpit).
+- **Email**: Spring Mail (SMTP) gửi qua hàng đợi RabbitMQ (retry + dead-letter, NFR-13); dev dùng **Mailpit** bắt mọi thư (http://localhost:8025), deploy dùng SMTP thật qua biến môi trường. *(thêm 2026-10-01)*
 - **CI/CD**: GitHub Actions — chạy JUnit + Vitest + Spotless/SpotBugs + ESLint/Prettier, build jar và image.
 - **Deploy**: VPS Ubuntu + Nginx (reverse proxy) + systemd hoặc Docker chạy jar, hoặc Railway/Render nếu muốn nhanh.
 - **Giám sát**: Sentry (bản free) + Spring Boot Actuator.
@@ -381,7 +382,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Toàn bộ Flyway migration + khóa ngoại + index — `V1__init.sql` (32 bảng), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`; xem [database.md §3.5](docs/design/database.md)
 - [x] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner` — 29 entity + 3 bảng nối `@ManyToMany`; seed demo Flyway `db/seed/dev/R__demo_*.sql` chỉ ở profile dev (60 tài khoản, 300 địa điểm; review demo làm ở E sau khi có service tính rating/trust)
 - [x] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token — kèm `GET /me` và trust score (requirements §5.1)
-- [ ] Xác thực email, quên mật khẩu, đổi mật khẩu
+- [x] Xác thực email, quên mật khẩu, đổi mật khẩu — mail qua RabbitMQ (retry 4 lần → DLQ `mail.send.dlq`), Mailpit cho dev
 - [ ] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize`
 - [ ] Method security / `PermissionEvaluator` cho Place, Review, Comment
 - [ ] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`)

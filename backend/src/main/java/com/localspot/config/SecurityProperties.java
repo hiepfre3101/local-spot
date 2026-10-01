@@ -7,11 +7,17 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
-/** {@code localspot.security.*} — thời hạn token theo NFR-06, cookie refresh token theo S1. */
+/**
+ * {@code localspot.security.*} — thời hạn token theo NFR-06, cookie refresh token theo S1, hạn link xác thực email /
+ * đặt lại mật khẩu theo U1.
+ */
 @Validated
 @ConfigurationProperties("localspot.security")
 public record SecurityProperties(
-        @Valid @NotNull Jwt jwt, @Valid @NotNull RefreshToken refreshToken) {
+        @Valid @NotNull Jwt jwt,
+        @Valid @NotNull RefreshToken refreshToken,
+        @NotNull Duration emailVerificationTtl,
+        @NotNull Duration passwordResetTtl) {
 
     /**
      * @param secret base64 của khóa HS256, tối thiểu 32 byte (kiểm tra khi tạo khóa); không có mặc định ở prod

@@ -17,7 +17,7 @@ Nền tảng tìm & đánh giá địa điểm địa phương do cộng đồng
 
 ```bash
 cp .env.example .env            # đổi các giá trị changeme_*
-docker compose up -d            # chỉ hạ tầng
+docker compose up -d            # chỉ hạ tầng (gồm Mailpit — xem email dev tại http://localhost:8025)
 
 # Backend (trong WSL) — profile dev đọc ../.env, API tại http://localhost:8080
 cd backend && ./mvnw spring-boot:run

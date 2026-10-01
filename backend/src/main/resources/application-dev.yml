@@ -7,6 +7,10 @@ spring:
     url: jdbc:mysql://localhost:3306/${MYSQL_DATABASE}
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
+  mail:
+    # Mailpit trong docker compose — xem thư tại http://localhost:8025
+    host: localhost
+    port: 1025
   data:
     redis:
       host: localhost

@@ -34,6 +34,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokens;
     private final ProfileService profiles;
+    private final AccountService accounts;
     private final Clock clock;
 
     /**
@@ -49,6 +50,7 @@ public class AuthService {
             JwtService jwtService,
             RefreshTokenService refreshTokens,
             ProfileService profiles,
+            AccountService accounts,
             Clock clock) {
         this.users = users;
         this.roles = roles;
@@ -56,13 +58,14 @@ public class AuthService {
         this.jwtService = jwtService;
         this.refreshTokens = refreshTokens;
         this.profiles = profiles;
+        this.accounts = accounts;
         this.clock = clock;
         this.dummyHash = passwordEncoder.encode("timing-equalizer-not-a-password");
     }
 
     /**
-     * Tạo tài khoản role USER, chưa xác thực email (được đăng nhập, chưa được viết review — FR-02). Gửi mail xác thực
-     * làm ở D4.
+     * Tạo tài khoản role USER, chưa xác thực email (được đăng nhập, chưa được viết review — FR-02) và xếp hàng gửi mail
+     * xác thực. Mail chỉ lên queue sau commit; gửi lỗi được retry ở consumer, đăng ký vẫn thành công (UC01 5a).
      */
     @Transactional
     public void register(RegisterRequest request) {
@@ -82,6 +85,7 @@ public class AuthService {
             // Hai request đăng ký cùng email chen nhau: UNIQUE(email) ở CSDL là chốt chặn cuối
             throw emailTaken();
         }
+        accounts.sendEmailVerification(user);
     }
 
     @Transactional

@@ -4,6 +4,13 @@ spring:
     name: localspot
   profiles:
     default: dev
+  datasource:
+    hikari:
+      data-source-properties:
+        # Driver MySQL quy đổi thời gian theo UTC cho MỌI truy cập (JdbcTemplate, native query), khớp
+        # hibernate.jdbc.time_zone bên dưới — nếu không, JDBC thuần dùng múi giờ JVM (+07) và lệch 7 giờ
+        connectionTimeZone: UTC
+        forceConnectionTimeZoneToSession: true
   jpa:
     open-in-view: false # Không giữ session tới view — buộc nạp dữ liệu trong service, lộ N+1 sớm
     hibernate:
@@ -16,6 +23,19 @@ spring:
     locations: classpath:db/migration
   jackson:
     time-zone: UTC
+  mail:
+    default-encoding: UTF-8
+  rabbitmq:
+    listener:
+      simple:
+        # NFR-13: lỗi tác vụ nền (gửi mail...) được thử lại rồi chuyển sang dead-letter queue, không làm hỏng request
+        default-requeue-rejected: false # hết lượt retry → reject không requeue → DLX
+        retry:
+          enabled: true
+          max-attempts: 4
+          initial-interval: 2s
+          multiplier: 3
+          max-interval: 30s
 
 server:
   port: 8080
@@ -34,11 +54,18 @@ localspot:
       issuer: localspot
       access-token-ttl: 15m # NFR-06
       # secret: theo profile — base64 của ≥ 32 byte ngẫu nhiên (HS256)
+    email-verification-ttl: 24h # U1
+    password-reset-ttl: 30m # U1
     refresh-token:
       ttl: 7d # NFR-06
       cookie-name: refresh_token
       cookie-path: /api/v1/auth # S1: trình duyệt chỉ gửi cookie tới các endpoint auth
       cookie-secure: true
+  app:
+    # URL trang web (frontend) — link trong email trỏ về đây: /verify-email?token=, /reset-password?token= (sitemap)
+    public-url: http://localhost:5173
+  mail:
+    from: "LocalSpot <no-reply@localspot.test>"
   # requirements §5.1 — đặt ở đây để thử nghiệm với dữ liệu seed và báo cáo ở Chương 5
   trust:
     base: 10 # chỉ cộng khi đã xác thực email

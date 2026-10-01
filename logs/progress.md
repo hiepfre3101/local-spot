@@ -302,3 +302,32 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 - `AuthenticatedUser` (record bất biến) làm principal thay vì entity — không lazy loading ngoài transaction. SpotBugs bắt `Authentication` phải serializable → sửa đúng gốc (record `Serializable`), không thêm loại trừ.
 
 **Kiểm chứng**: `./mvnw verify` xanh — **56 test** (thêm `TrustScoreCalculatorTest` 10 ca = bảng ví dụ §5.1 + biên; `ValidPasswordValidatorTest` 9; `AuthFlowTests` 13 qua HTTP trên MySQL thật: đăng ký/đăng nhập + thuộc tính cookie, trùng email không phân biệt hoa thường, 422, mass assignment, sai mật khẩu ≡ sai email, tài khoản khóa, token hết hạn / sai issuer / giả chữ ký, khóa có hiệu lực ngay, xoay vòng, dùng lại → thu hồi toàn bộ, đăng xuất), SpotBugs 0 lỗi.
+
+---
+
+## 2026-10-01 23:00 (+07) — Checklist D4: xác thực email, quên / đặt lại mật khẩu, đổi mật khẩu
+
+**Bối cảnh**: supervisor duyệt D3 (commit `959bec7`, chưa push).
+
+**Supervisor chốt (qua câu hỏi):** gửi mail bằng **RabbitMQ + spring-boot-starter-mail + Mailpit** (dependency mới chính thức của Spring + container mới trong Compose). Lý do: NFR-13 yêu cầu tác vụ nền có retry + dead-letter; `@Async` mất mail khi restart. Mailpit cho thấy email thật khi demo mà không gửi ra ngoài.
+
+**Quyết định kỹ thuật:**
+- **Luồng mail**: service phát `MailRequestedEvent` → `MailQueuePublisher` (`@TransactionalEventListener(AFTER_COMMIT)`) đẩy `EmailMessage` (JSON) lên exchange `localspot.tasks` → queue `mail.send` → `MailConsumer` gửi SMTP. Lỗi SMTP → retry 4 lần (2 s, ×3, tối đa 30 s) → reject → `localspot.dlx` → `mail.send.dlq` (giữ lại để xem / chạy lại trong Management UI).
+  - **Sau commit**: không gửi link cho tài khoản bị rollback; token chắc chắn có trong CSDL khi người dùng bấm. Đánh đổi: RabbitMQ sập đúng giữa commit và publish thì mất mail (không có transactional outbox) — người dùng tự khắc phục bằng "gửi lại" / "quên mật khẩu"; outbox đủ tốt hơn nhưng thêm bảng + job, chưa đáng ở quy mô đồ án.
+  - Nội dung mail dựng ở phía gửi (text + HTML tự viết, `HtmlUtils.htmlEscape` tên người dùng — không thêm template engine ngoài stack). Consumer generic, không truy cập CSDL. Log lỗi không ghi email người nhận (NFR-11).
+- **Token một lần** (`user_tokens`): 32 byte ngẫu nhiên, lưu SHA-256; 24 h / 30 phút (U1, cấu hình `localspot.security.*-ttl`). Cấp link mới → link cũ cùng loại bị vô hiệu (đặt `used_at`, không xóa — UC01 7a). Dùng bằng `UPDATE ... WHERE used_at IS NULL` nguyên tử. Không tồn tại / hết hạn / đã dùng → cùng **410 `TOKEN_INVALID`** (không cho dò).
+- **Link** theo sitemap: `{localspot.app.public-url}/verify-email?token=`, `/reset-password?token=`; prod lấy `APP_PUBLIC_URL`.
+- **Gửi lại mail xác thực** cần đăng nhập (openapi không có `security: []`) → thêm luật `authenticated()` cho `/api/v1/auth/resend-verification` **trước** luật `permitAll` của `/api/v1/auth/**` trong `SecurityConfig`. Đã xác thực rồi thì 204 mà không gửi.
+- **Quên mật khẩu** luôn 204 kể cả email không tồn tại. Còn chênh thời gian xử lý nhỏ (có email thì thêm 1 insert + publish) — chấp nhận; giới hạn tần suất ở D8 làm việc dò không đáng kể.
+- **Đặt lại mật khẩu** → đổi hash + thu hồi mọi refresh token (kẻ giữ phiên cũ bị đăng xuất). Không tự đánh dấu email đã xác thực (đặc tả không yêu cầu — không tự thêm hành vi).
+- **Đổi mật khẩu** (FR-06 "thu hồi các refresh token khác"): cookie refresh token có `Path=/api/v1/auth` nên `PUT /me/password` không biết token hiện tại → thu hồi tất cả rồi cấp family mới, trả `Set-Cookie` cho thiết bị đang thao tác. Kết quả đúng yêu cầu: thiết bị này giữ phiên, thiết bị khác bị đăng xuất. Access token cũ ở thiết bị khác còn ≤ 15 phút (đánh đổi stateless từ D3).
+- **Đề xuất sửa đặc tả (chưa sửa)**: `PUT /me/password` sai mật khẩu hiện tại trả **401** theo openapi. Interceptor frontend thường hiểu 401 = hết phiên → tự refresh / đăng xuất. Hiện phân biệt bằng `code = INVALID_CURRENT_PASSWORD`; đề xuất đổi sang 422 kèm lỗi trường `currentPassword` — chờ supervisor.
+
+**Lỗi phát hiện và đã sửa:**
+1. **Lệch múi giờ JDBC**: Hibernate ghi UTC (`hibernate.jdbc.time_zone`), còn JDBC thuần (JdbcTemplate, native query) dùng múi giờ JVM (+07) → giá trị ghi bằng JDBC lệch 7 giờ. Lộ ra khi test "link hết hạn" vẫn được chấp nhận. Sửa ở gốc: `spring.datasource.hikari.data-source-properties.connectionTimeZone=UTC` + `forceConnectionTimeZoneToSession=true`; thêm test hồi quy `hibernateAndPlainJdbcAgreeOnUtcTimestamps`. Dữ liệu hiện có không bị ảnh hưởng (chỉ Hibernate và seed SQL — đều UTC — từng ghi).
+2. **Compose hỏng từ commit D3**: `${JWT_SECRET:?...}` làm `docker compose up -d` (chỉ hạ tầng) lỗi khi `.env` chưa có biến, vì Compose nội suy cả service đang tắt. Đổi thành `${JWT_SECRET:-}`; thiếu biến thì backend prod tự từ chối khởi động (`@NotBlank` + kiểm tra độ dài khóa). Commit D3 chưa push nên chưa ảnh hưởng ai; sửa nằm trong commit D4.
+3. Mock `JavaMailSender` làm health check mail của Actuator lỗi → tắt `management.health.mail` ở profile test (dev / prod vẫn bật).
+
+**Test**: consumer RabbitMQ tắt ở profile test (`auto-startup: false`), chỉ bật trong `MailFlowTests` — test khác không đụng mail.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **67 test** (thêm `MailFlowTests` 10 ca đầu-cuối API → RabbitMQ → consumer → đọc token trong mail → API: xác thực email một lần + trust lên 10, nội dung mail, gửi lại vô hiệu link cũ, gửi lại cần đăng nhập, link hết hạn 410, đặt lại mật khẩu thu hồi mọi phiên, quên mật khẩu không lộ email, mật khẩu yếu 422, đổi mật khẩu giữ thiết bị này / đăng xuất thiết bị khác, **SMTP lỗi → 4 lần thử → DLQ** mà đăng ký vẫn 201; + 1 test hồi quy múi giờ), SpotBugs 0 lỗi. `docker compose config` hợp lệ cả chế độ hạ tầng lẫn `--profile app`.

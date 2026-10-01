@@ -10,6 +10,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail(String email);
 
+    Optional<User> findByEmail(String email);
+
     /** Đăng nhập: cần role để dựng MeResponse. */
     @EntityGraph(attributePaths = "roles")
     Optional<User> findWithRolesByEmail(String email);
