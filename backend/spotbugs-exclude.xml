@@ -10,4 +10,12 @@
     <Match>
         <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
     </Match>
+
+    <!-- RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE trong mã MapStruct sinh ra: với method một nguồn đối tượng
+         (vd. toAdminUserResponse(User, int)) MapStruct viết `if (user == null) return null;` rồi lại
+         `if (user != null) {...}`. Mã sinh tự động, không sửa tay được; chỉ loại trừ đúng mẫu này ở lớp *MapperImpl. -->
+    <Match>
+        <Class name="~com\.localspot\.mapper\..*MapperImpl"/>
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+    </Match>
 </FindBugsFilter>

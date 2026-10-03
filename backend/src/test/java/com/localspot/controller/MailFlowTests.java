@@ -199,9 +199,11 @@ class MailFlowTests {
         String otherDevice = refreshCookieOf(login(email, PASSWORD).andReturn());
         String accessToken = JsonPath.read(thisDevice.getResponse().getContentAsString(), "$.accessToken");
 
+        // 422 + lỗi trường, không phải 401 — frontend không được hiểu nhầm là hết phiên
         changePassword(accessToken, "SaiMatKhau1", NEW_PASSWORD)
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("INVALID_CURRENT_PASSWORD"));
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.code").value("INVALID_CURRENT_PASSWORD"))
+                .andExpect(jsonPath("$.errors[0].field").value("currentPassword"));
 
         MvcResult changed = changePassword(accessToken, PASSWORD, NEW_PASSWORD)
                 .andExpect(status().isNoContent())

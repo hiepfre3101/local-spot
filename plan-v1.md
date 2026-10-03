@@ -383,7 +383,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner` — 29 entity + 3 bảng nối `@ManyToMany`; seed demo Flyway `db/seed/dev/R__demo_*.sql` chỉ ở profile dev (60 tài khoản, 300 địa điểm; review demo làm ở E sau khi có service tính rating/trust)
 - [x] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token — kèm `GET /me` và trust score (requirements §5.1)
 - [x] Xác thực email, quên mật khẩu, đổi mật khẩu — mail qua RabbitMQ (retry 4 lần → DLQ `mail.send.dlq`), Mailpit cho dev
-- [ ] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize`
+- [x] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize` — `@EnableMethodSecurity`, hằng số `Permissions` (test đối chiếu CSDL ↔ code ↔ openapi, quét endpoint `/admin|/moderation|/owner` thiếu `@PreAuthorize`); API UC31 `/admin/users` (tìm kiếm, khóa / mở khóa, gán role) làm sớm từ E
 - [ ] Method security / `PermissionEvaluator` cho Place, Review, Comment
 - [ ] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`)
 - [ ] Rate limiting cho API nhạy cảm (Bucket4j hoặc Redis)
@@ -407,6 +407,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [ ] Phản hồi của chủ quán
 - [ ] Thông báo (bảng `notifications` + Spring WebSocket/STOMP)
 - [ ] API quản trị và thống kê
+- [ ] Nhật ký thao tác quản trị (FR-42): `@Audited` + Spring AOP aspect ghi `activity_logs` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho 4 endpoint `/admin/users` của D5
 
 ### F. Frontend
 - [ ] Layout, router, navigation guard

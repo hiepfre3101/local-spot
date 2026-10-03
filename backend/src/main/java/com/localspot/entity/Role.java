@@ -22,6 +22,9 @@ public class Role {
     public static final String MODERATOR = "MODERATOR";
     public static final String ADMIN = "ADMIN";
 
+    /** Tập role cố định (openapi {@code RoleName}); role mới cần migration seed + cập nhật hằng số này. */
+    public static final Set<String> NAMES = Set.of(USER, OWNER, MODERATOR, ADMIN);
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

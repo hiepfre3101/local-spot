@@ -8,6 +8,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -33,10 +34,15 @@ import org.springframework.security.web.SecurityFilterChain;
  *       xuất phát từ site khác.
  *   <li><b>Mặc định cần đăng nhập</b>: endpoint công khai phải khai báo rõ ở đây (danh sách trắng) — quên khai báo thì
  *       lỗi theo hướng an toàn (401), không lộ dữ liệu.
+ *   <li><b>Phân quyền ở tầng phương thức</b>: luật URL ở đây chỉ phân biệt công khai / cần đăng nhập; quyền cụ thể khai
+ *       báo bằng {@code @PreAuthorize} theo permission ({@link Permissions}) ngay trên endpoint, cạnh nơi đọc được
+ *       {@code x-permission} của openapi. {@code AccessDeniedException} được {@code GlobalExceptionHandler} chuyển thành
+ *       403 (hoặc 401 nếu chưa đăng nhập).
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private static final int MIN_HS256_KEY_BYTES = 32;

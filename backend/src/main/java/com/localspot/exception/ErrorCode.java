@@ -14,6 +14,15 @@ public final class ErrorCode {
     public static final String REFRESH_TOKEN_REUSED = "REFRESH_TOKEN_REUSED";
     public static final String TOKEN_INVALID = "TOKEN_INVALID";
     public static final String INVALID_CURRENT_PASSWORD = "INVALID_CURRENT_PASSWORD";
+    public static final String INVALID_CURSOR = "INVALID_CURSOR";
+
+    public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
+    /** Admin tự khóa mình / tự gỡ ADMIN của mình (chốt 2026-10-03). */
+    public static final String SELF_ACTION_FORBIDDEN = "SELF_ACTION_FORBIDDEN";
+    /** Mọi tài khoản phải giữ role USER (chốt 2026-10-03). */
+    public static final String ROLE_USER_REQUIRED = "ROLE_USER_REQUIRED";
+    /** OWNER chỉ gán qua duyệt yêu cầu sở hữu (UC30), không gán / gỡ tay (chốt O6 2026-10-03). */
+    public static final String OWNER_ROLE_MANAGED_BY_CLAIM = "OWNER_ROLE_MANAGED_BY_CLAIM";
 
     private ErrorCode() {}
 }

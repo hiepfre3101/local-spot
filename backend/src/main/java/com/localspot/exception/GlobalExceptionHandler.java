@@ -33,7 +33,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ApiException.class)
     ResponseEntity<ProblemDetail> handleApiException(ApiException ex) {
-        return problem(ex.getStatus(), ex.getCode(), ex.getMessage());
+        ProblemDetail body = problemBody(ex.getStatus(), ex.getCode(), ex.getMessage());
+        if (!ex.getErrors().isEmpty()) {
+            body.setProperty("errors", ex.getErrors());
+        }
+        return ResponseEntity.status(ex.getStatus()).body(body);
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -76,8 +80,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     private static ResponseEntity<ProblemDetail> problem(HttpStatus status, String code, String detail) {
+        return ResponseEntity.status(status).body(problemBody(status, code, detail));
+    }
+
+    private static ProblemDetail problemBody(HttpStatus status, String code, String detail) {
         ProblemDetail body = ProblemDetail.forStatusAndDetail(status, detail);
         body.setProperty("code", code);
-        return ResponseEntity.status(status).body(body);
+        return body;
     }
 }

@@ -95,8 +95,9 @@ public class AccountService {
     public String changePassword(Long userId, String currentPassword, String newPassword, ClientInfo client) {
         User user = users.findById(userId).orElseThrow(AccountService::accountGone);
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            throw new ApiException(
-                    HttpStatus.UNAUTHORIZED, ErrorCode.INVALID_CURRENT_PASSWORD, "Mật khẩu hiện tại không đúng.");
+            // 422 thay vì 401 (chốt 2026-10-03): interceptor frontend hiểu 401 là hết phiên và sẽ refresh / đăng xuất
+            throw ApiException.fieldError(
+                    ErrorCode.INVALID_CURRENT_PASSWORD, "currentPassword", "Mật khẩu hiện tại không đúng.");
         }
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         refreshTokens.revokeAll(user.getId());
