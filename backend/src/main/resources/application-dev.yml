@@ -1,0 +1,48 @@
+# Dev: backend chạy trên host (./mvnw spring-boot:run), hạ tầng chạy bằng `docker compose up -d` ở thư mục gốc.
+# Thông tin đăng nhập đọc từ ../.env (cùng file docker compose dùng) — không lặp mật khẩu ở đây.
+spring:
+  config:
+    import: optional:file:../.env[.properties]
+  datasource:
+    url: jdbc:mysql://localhost:3306/${MYSQL_DATABASE}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+  mail:
+    # Mailpit trong docker compose — xem thư tại http://localhost:8025
+    host: localhost
+    port: 1025
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RABBITMQ_USER}
+    password: ${RABBITMQ_PASSWORD}
+  flyway:
+    # Thêm dữ liệu demo (R__demo_*.sql: tài khoản mật khẩu công khai, địa điểm giả) — chỉ dev, không bao giờ prod
+    locations: classpath:db/migration,classpath:db/seed/dev
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug # Soát N+1 (checklist G)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,flyway
+  endpoint:
+    health:
+      show-details: always
+
+localspot:
+  security:
+    jwt:
+      # Mặc định chỉ dùng cho dev cục bộ; đặt JWT_SECRET trong ../.env để thay. Prod không có mặc định.
+      secret: ${JWT_SECRET:PQW9uJd59Fqhe9r7bUVf/AmdF89MMTW8YhaDJO34Hwo=}

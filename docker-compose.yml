@@ -1,8 +1,9 @@
 name: localspot
 
 # Hạ tầng hỗ trợ (mục 2 - Hạ tầng trong plan-v1.md).
-# Chưa có service `backend` / `frontend` / `nginx` vì backend/ và frontend/
-# chưa được scaffold — thêm khi có Dockerfile tương ứng (mục 7 plan-v1.md).
+#   Dev (mặc định):  docker compose up -d                → chỉ hạ tầng; backend/frontend chạy trên host
+#   Full stack:      docker compose --profile app up -d --build
+#                    → thêm backend + nginx (SPA + proxy /api, /ws) tại http://localhost:${APP_PORT:-8088}
 
 services:
   mysql:
@@ -71,6 +72,60 @@ services:
       - "9001:9001"  # Console
     volumes:
       - minio_data:/data
+
+  # Hộp thư giả cho dev: bắt mọi mail SMTP, xem tại http://localhost:8025 (không gửi ra ngoài)
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: localspot-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
+  backend:
+    profiles: [app]
+    build: ./backend
+    container_name: localspot-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      # Không dùng ${JWT_SECRET:?...}: Compose nội suy cả service đang tắt → `docker compose up -d` (chỉ hạ tầng) sẽ
+      # lỗi. Thiếu biến thì backend prod tự từ chối khởi động (@NotBlank trên localspot.security.jwt.secret).
+      JWT_SECRET: ${JWT_SECRET:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8088}
+      # Mặc định gửi vào Mailpit; deploy thật đặt SMTP trong .env
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-LocalSpot <no-reply@localspot.test>}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+
+  nginx:
+    profiles: [app]
+    build: ./frontend
+    container_name: localspot-nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8088}:80"
+    depends_on:
+      - backend
 
 volumes:
   mysql_data:

@@ -1,0 +1,7 @@
+package com.localspot.dto.request;
+
+import com.localspot.validation.ValidPassword;
+import jakarta.validation.constraints.NotBlank;
+
+public record ChangePasswordRequest(
+        @NotBlank String currentPassword, @ValidPassword String newPassword) {}

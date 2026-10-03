@@ -203,3 +203,202 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
   - Check-in (P12) và thông báo (P07) là hộp thoại / bảng thả xuống, không có route.
 - Sơ đồ `sitemap.puml` dạng WBS (PlantUML, cùng công cụ các sơ đồ khác), render bằng JDK trong WSL.
 - `docs/design-system/` đưa vào `.gitignore` theo yêu cầu supervisor. Hệ quả: token phải chép vào cấu hình Tailwind trong `frontend/` (được commit) khi scaffold ở checklist C.
+
+---
+
+## 2026-09-29 (+07) — Checklist C: thiết lập môi trường
+
+**Quyết định (supervisor chốt qua câu hỏi):**
+- **Spring Boot 4.1.1** thay 3.3: dòng 3.x hết hỗ trợ OSS (3.3 từ 06/2025), Initializr chỉ còn 4.0/4.1. Khởi đầu dự án mới trên bản EOL không có bản vá bảo mật là điểm yếu khi bảo vệ. Đánh đổi: kéo theo Spring Security 7, Hibernate 7, Jackson 3, Testcontainers 2 — tài liệu/ví dụ trên mạng ít hơn 3.x. Đã sửa plan §2 và CLAUDE.md.
+- **Build backend trong WSL** (JDK 21, Docker đã có). Đánh đổi: I/O qua `/mnt/d` chậm hơn (verify lần đầu ~3,5 phút gồm tải dependency + image).
+- **Dev: hạ tầng trong Docker, app chạy host**; backend + nginx dưới profile `app` cho chạy full stack / deploy. Lý do: hot reload & debug trên host; không thay đổi hành vi `docker compose up` hiện có của nhóm.
+- **Spotless (palantir-java-format) + SpotBugs, bỏ Checkstyle**: formatter tự sửa được, Checkstyle trùng phần lớn và dễ xung đột rule.
+
+**Quyết định kỹ thuật khác:**
+- `application-dev.yml` import `../.env` (`optional:file:../.env[.properties]`) → một nguồn thông tin đăng nhập cho cả compose và backend. `application-prod.yml` không có giá trị mặc định cho bí mật → thiếu biến thì khởi động lỗi ngay.
+- `open-in-view: false`, `ddl-auto: validate`, JDBC time zone UTC (khớp database.md §1).
+- Testcontainers ghim `mysql:8.4`, `rabbitmq:3.13-management-alpine`, `redis:7-alpine` = đúng image compose (Initializr sinh `:latest` → test có thể chạy trên MySQL khác production).
+- **Gỡ oxlint** mà create-vue tự thêm: công cụ ngoài stack (CLAUDE.md §4); ESLint dùng `flat/recommended` thay `essential`.
+- **Tailwind 4 theme = design system**: reset `--color-*`, `--shadow-*`, `--text-*`, `--radius-*`, `--font-*` về `initial`, chỉ khai báo token LocalSpot → `bg-blue-500`, `shadow-md`, `text-sm` không sinh CSS, lệch design system lộ khi review. Màu dùng `@theme inline` trỏ `var(--surface)`… để đổi theme bằng `data-theme`. Khoảng cách giữ mặc định (lưới 4px trùng `space-*`). Token màu chép vào `frontend/src/assets/tokens.css` (được commit) vì `docs/design-system/` bị ignore.
+- nginx: SPA fallback, proxy `/api` + `/ws` (cùng origin → cookie refresh token SameSite=Strict — S1), `client_max_body_size 55m` (10 ảnh × 5 MB — S2/NFR-09); backend `forward-headers-strategy: framework` để lấy IP thật cho luật cảnh báo IP.
+- Font Be Vietnam Pro qua Google Fonts `<link>` — không thêm package.
+
+**Kiểm chứng:** `./mvnw verify` xanh (1 smoke test trên MySQL/RabbitMQ/Redis thật, Spotless, SpotBugs 0 lỗi); frontend lint + format + type-check + Vitest + build xanh; `docker compose --profile app up --build`: backend profile prod kết nối MySQL, Flyway chạy, SPA 200, deep link 200, `/api` qua nginx tới Spring Security (401 — đúng, SecurityConfig làm ở D); profile dev trên host đọc `.env`, health 200. CI chưa chạy trên GitHub (chạy khi push).
+
+---
+
+## 2026-09-30 21:20 (+07) — Checklist D1: Flyway migration + khóa ngoại + index
+
+**Bối cảnh**: bắt đầu D (backend nền tảng) trên nhánh `feature/be-foundation` (tách từ `feature/infra-dev-environment` vì nhánh đó chưa merge vào `develop` mà D cần scaffold backend). Supervisor chọn nhịp **dừng sau mỗi mục** để duyệt.
+
+**Supervisor chốt trước khi viết schema:**
+- **O2 = về PENDING cả bài**: tác giả trust < 30 sửa đánh giá đã đăng → đánh giá quay về `PENDING`, rời trang và điểm xếp hạng tới khi duyệt lại. Không cần bảng lưu bản sửa → `reviews` giữ nguyên một trạng thái. Đánh đổi: bài biến mất tạm thời; đổi lại không thêm bảng / loại mục hàng chờ, và event tính lại rating vốn đã xử lý chuyển trạng thái PUBLISHED ↔ khác. Phương án "sửa không cần duyệt" bị loại vì mở lỗ hổng đăng sạch rồi sửa thành spam.
+- **Seed demo = Flyway SQL riêng cho dev** (làm ở D2): file SQL đặt ngoài `db/migration`, chỉ bật ở profile dev.
+
+**Quyết định kỹ thuật (D1):**
+- 3 migration: `V1__init.sql` (32 bảng, đúng database.md), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`. Tách seed tham chiếu khỏi schema để đọc/duyệt riêng; dữ liệu tham chiếu nằm trong Flyway vì **mọi** môi trường đều cần (khác demo).
+- **Khóa ngoại RESTRICT mặc định**, CASCADE chỉ ở bảng nối thuần. Lý do: bảng nghiệp vụ xóa mềm, một lệnh `DELETE` cứng là lỗi lập trình → CSDL nên chặn thay vì xóa dây chuyền review/ảnh (CLAUDE.md §4 cấm mất dữ liệu). Test `refusesToHardDeleteUserWithContent` khẳng định.
+- **Permission = đúng 17 giá trị `x-permission` trong openapi.yaml**, không tự thêm. Kế thừa: OWNER ⊇ USER (plan §4), ADMIN ⊇ MODERATOR (Q2); MODERATOR không kèm quyền USER — tài khoản nhân sự được gán thêm role USER. `user:view` chỉ cho ADMIN (Q2 xếp quản lý người dùng vào admin).
+- **Danh mục / tiện ích khởi đầu** seed ở V3 (mọi môi trường): UC11 bắt buộc chọn danh mục nên hệ thống mới không dùng được nếu rỗng; admin sửa qua UC32. Danh sách do agent đề xuất theo phạm vi plan (quán ăn / cà phê / check-in) — supervisor có thể đổi bằng migration mới hoặc qua UC32. `icon` NULL (chưa có bộ icon). **Badges không seed** vì O3 chưa chốt.
+- Index / CHECK bổ sung ngoài database.md (index hàng chờ `(status, created_at)` cho `place_claims`, `reports`; CHECK điểm trong [0, 5]…) — đã ghi ở database.md §3.5.
+- Không `DEFAULT CURRENT_TIMESTAMP`: phụ thuộc `time_zone` session, dễ lệch UTC.
+- `TestcontainersConfiguration` đổi sang `public` để test ở package con dùng được.
+
+**Phát hiện**: MySQL vi phạm CHECK (mã 3819) → Spring ném `UncategorizedSQLException`, không phải `DataIntegrityViolationException`. Phải xử lý riêng trong `@RestControllerAdvice` (D7), nếu không sẽ thành 500.
+
+**Kiểm chứng**: `./mvnw verify` xanh — 12 test (11 test schema mới trên MySQL 8.4 thật: đủ 32 bảng, collation, spatial index SRID 4326, thứ tự trục (lat, lng) qua `ST_Distance_Sphere` Hồ Gươm → Văn Miếu ≈ 1,27 km, UNIQUE review tính cả xóa mềm, UNIQUE vote, CHECK, 1 check-in/ngày, FK RESTRICT, RBAC kế thừa, cây danh mục), Spotless, SpotBugs 0 lỗi. Chưa áp dụng lên DB dev cục bộ (sẽ tự chạy khi khởi động backend).
+
+---
+
+## 2026-09-30 22:08 (+07) — Checklist D2: Entity JPA + dữ liệu demo
+
+**Bối cảnh**: supervisor duyệt D1 (đã commit `85e8ebb`) và yêu cầu "fake thêm một số data của users hay địa điểm".
+
+**Supervisor chốt (qua câu hỏi):**
+- **hibernate-spatial** để map `POINT SRID 4326` (dependency mới — module chính thức của Hibernate, version do Spring Boot quản lý). Phương án bị loại: tự viết converter sang định dạng nhị phân nội bộ MySQL — ít phụ thuộc hơn nhưng là code tự chế khó giải thích. Đã thêm vào plan §2 và CLAUDE.md §2.
+- **Quy mô seed: ~60 tài khoản, ~300 địa điểm** (khớp 200–500 của plan).
+
+**Quyết định kỹ thuật:**
+- **29 entity + 3 bảng nối `@ManyToMany`** (`user_roles`, `role_permissions`, `place_amenity` — không mang dữ liệu riêng nên không cần entity). Bảng khóa tổ hợp có cột riêng (`review_votes`, `collection_place`, `follows`, `user_badges`, `taggables`, `place_views`) dùng `@EmbeddedId` là record + `@MapsId`.
+- **Không Lombok** (ngoài stack) → getter/setter viết tay; chỉ có setter cho trường nghiệp vụ được sửa. Cột dẫn xuất `review_count / avg_rating / bayesian_score` **không có setter** — chỉ luồng tính lại rating được ghi (điểm lõi CLAUDE.md §3).
+- Mọi `@ManyToOne` là `LAZY` (tránh N+1 ngầm, khớp `open-in-view: false`). Chỉ `Place → openingHours` là aggregate con có cascade.
+- Thời gian dùng `Instant` + `DateTimeProvider` trả `Clock.instant()` (bean `Clock` UTC — test thay được). `@EnableJpaAuditing` đặt ở `JpaConfig` riêng để test slice web không kéo JPA.
+- `GeoPoints.of(lat, lng)` là nơi duy nhất tạo `Point` (JTS dùng x = lng) — test xác nhận hibernate-spatial ghi đúng thứ tự trục (lat, lng) của MySQL cho SRID 4326.
+- `day_of_week` dùng converter ISO 1–7 thay vì `@Enumerated(ORDINAL)` (ordinal bắt đầu từ 0 → lệch 1 ngày âm thầm).
+- Cột `TINYINT/SMALLINT UNSIGNED` cần `@JdbcTypeCode` để `ddl-auto: validate` chấp nhận `int`.
+- Bảng `collections` → entity `PlaceCollection` (tránh trùng `java.util.Collection`).
+
+**Seed demo** (`db/seed/dev/R__demo_01_users.sql`, `R__demo_02_places.sql`, chỉ `application-dev.yml` thêm vào `spring.flyway.locations`):
+- **Repeatable `R__` thay vì `V__`**: version dùng chung một dãy với migration schema; nếu seed chiếm V1000 thì V4 thêm sau sẽ bị Flyway coi là "out of order" và từ chối. Đánh đổi: script chạy lại mỗi khi sửa → mọi lệnh phải idempotent (`INSERT IGNORE` theo khóa UNIQUE, `NOT EXISTS`), không xóa / ghi đè (CLAUDE.md §4).
+- **Sinh hàng bằng SQL (CTE đệ quy + công thức số học, không `RAND`)** thay vì dán 300 dòng từ script ngoài: vẫn là "Flyway SQL riêng cho dev" như supervisor chọn, nhưng file gọn, sửa danh sách tên / đường phố ngay trong file, tất định giữa các máy, không cần thêm công cụ sinh (Python...) vào repo.
+- Email `@localspot.test` (TLD dành riêng), mật khẩu chung `LocalSpot2026`; **phone để trống** vì số bịa có thể trùng số thật. Tên / địa chỉ hư cấu.
+- **Chưa seed review / vote / check-in**: `review_count`, `bayesian_score` phải khớp review; seed thẳng SQL sẽ phải chép công thức Bayesian và trust ra SQL (hai nguồn sự thật cho điểm lõi). Làm ở E: seed review thô rồi chạy job tính lại rating. Hệ quả tạm thời: mọi tài khoản demo trust < 30, mọi địa điểm điểm 0.
+
+**Kiểm chứng**: `./mvnw verify` xanh — 24 test (thêm `EntityMappingTests` 6: trục tọa độ, auditing, giờ mở cửa ISO + qua đêm, xóa mềm, JSON, khóa tổ hợp + role/permission; `DemoSeedTests` 6: 60 tài khoản đúng vai trò, mật khẩu khớp `BCryptPasswordEncoder`, 300 địa điểm đúng phân bổ thành phố / trạng thái, tọa độ < 7 km quanh tâm, giờ mở cửa & tiện ích theo loại hình, **chạy lại script không đổi số dòng**), SpotBugs 0 lỗi. Chưa khởi động backend trên DB dev cục bộ — seed sẽ nạp ở lần `spring-boot:run` tới.
+
+---
+
+## 2026-10-01 22:30 (+07) — Checklist D3: Spring Security + JWT, đăng ký / đăng nhập / đăng xuất / refresh
+
+**Bối cảnh**: supervisor duyệt D2 (commit `10699e7`, đã push `feature/be-foundation`) và cho làm tiếp. O3 (bộ huy hiệu / điểm đóng góp) giải thích cho supervisor: chưa cần chốt tới mục huy hiệu ở E.
+
+**Supervisor chốt (qua câu hỏi):**
+- **JWT bằng OAuth2 Resource Server (Nimbus)** thay vì jjwt + `JwtFilter` tự viết. Lý do: filter Bearer token của Spring Security đã kiểm chứng rộng rãi (hạn dùng, chữ ký, thuật toán), giảm code bảo mật tự viết — chỗ dễ có lỗ hổng nhất. Đánh đổi: ít "tự tay" hơn khi trình bày cơ chế; bù lại phần tự viết vẫn có (phát hành token, xoay vòng refresh, nạp quyền). Vẫn tự phát hành token, **không** dùng máy chủ OAuth2/Keycloak. **Lưu ý**: plan §2 ghi rõ `jjwt` — câu hỏi lúc đó chỉ nhắc §7 (`JwtFilter`); đã sửa cả §2, §7 và CLAUDE.md cho khớp.
+- **Quyền đọc CSDL mỗi request**: JWT chỉ mang `sub` = id người dùng; converter nạp user + role + permission (1 truy vấn `@EntityGraph`). Khóa tài khoản / gỡ role / xóa tài khoản có hiệu lực ngay (test `lockingAnAccountRevokesItsAccessImmediately`). Đánh đổi: +1 truy vấn / request — cache Redis nếu đo thấy cần.
+- **Trust score làm ngay** (`TrustScoreCalculator` thuần + `TrustScoreService`), vì `MeResponse.trustScore` cần và công thức đã chốt đủ ở requirements §5.1. Tham số trong `localspot.trust.*` (application.yml).
+
+**Quyết định kỹ thuật:**
+- **HS256, khóa base64 ≥ 32 byte**, từ chối khởi động nếu khóa ngắn hơn; decoder chỉ chấp nhận HS256 (chặn đổi thuật toán) + kiểm issuer + hạn dùng. Một backend vừa phát hành vừa xác thực nên khóa đối xứng đủ; RS256 chỉ cần khi có dịch vụ khác xác thực token.
+- **Khóa JWT theo môi trường**: dev có mặc định trong `application-dev.yml` (không bắt sửa `.env` hiện có), prod `${JWT_SECRET}` không mặc định; `docker-compose.yml` thêm `JWT_SECRET: ${JWT_SECRET:?...}` cho service backend (thay đổi Compose — cần để profile prod khởi động; báo lỗi rõ nếu thiếu). `.env.example` thêm biến.
+- **Refresh token xoay vòng**: 32 byte ngẫu nhiên base64url, DB lưu SHA-256. Đánh dấu đã dùng bằng `UPDATE ... WHERE used_at IS NULL` nguyên tử → hai request đồng thời cùng token chỉ một thắng. Token đã dùng bị gửi lại → **thu hồi mọi token còn hiệu lực của người dùng** (U2), `@Transactional(noRollbackFor = ApiException.class)` để lệnh thu hồi được commit dù trả 401 (test `reusingRotatedTokenRevokesEverySession`). Token đã bị thu hồi do đăng xuất mà gửi lại → chỉ 401, không thu hồi hàng loạt (không đăng xuất các thiết bị khác vô cớ).
+  - **Hệ quả cho frontend (checklist F)**: interceptor phải gộp các lần refresh đồng thời (single-flight); hai tab refresh cùng lúc sẽ bị coi là dùng lại → đăng xuất mọi nơi. Chấp nhận vì đúng U2; không thêm "cửa sổ ân hạn".
+- **Đăng nhập chống dò email**: email không tồn tại vẫn chạy BCrypt với hash giả → cùng thời gian phản hồi, cùng thông báo lỗi. Chưa xác thực email vẫn đăng nhập được (FR-02 chỉ chặn viết review). Khóa → 403 `ACCOUNT_LOCKED` kèm thời hạn + lý do. Giới hạn 5 lần / 15 phút để ở D8.
+- **Đăng ký**: email chuẩn hóa chữ thường; trùng → 409 (kiểm tra trước + bắt `DataIntegrityViolationException` cho trường hợp chen nhau). DTO chỉ có 3 trường → gửi kèm `roles`, `emailVerifiedAt` bị bỏ qua (test mass assignment). Gửi mail xác thực để D4.
+- **Mật khẩu**: validator `@ValidPassword` — ≥ 8 ký tự, có chữ và số, **≤ 72 byte UTF-8** (BCrypt bỏ qua phần thừa; tiếng Việt có dấu 2–3 byte / ký tự). BCrypt cost 10, không dùng `{bcrypt}` prefix (khớp seed).
+- **CSRF tắt**: access token trong header; cookie duy nhất là refresh token với SameSite=Strict + Path=/api/v1/auth.
+- **Danh sách trắng endpoint công khai** (`POST /api/v1/auth/**`, health, info); còn lại mặc định cần đăng nhập — quên khai báo thì lỗi theo hướng an toàn.
+- **Một định dạng lỗi**: 401/403 trong filter chuyển qua `HandlerExceptionResolver` tới `GlobalExceptionHandler` → `application/problem+json` có `code`. Khách chạm `@PreAuthorize` nhận 401, không phải 403. Validate → 422 + `errors[]`. Handler hiện bản tối thiểu; D7 bổ sung phần còn lại (404, optimistic lock, mã 3819, 500).
+- Thêm **MapStruct** (đã có trong stack) với `unmappedTargetPolicy=ERROR` — trường DTO quên map là lỗi biên dịch. Thêm `GET /api/v1/me` (đã có trong openapi) vì frontend cần nạp lại hồ sơ khi tải lại trang.
+- `AuthenticatedUser` (record bất biến) làm principal thay vì entity — không lazy loading ngoài transaction. SpotBugs bắt `Authentication` phải serializable → sửa đúng gốc (record `Serializable`), không thêm loại trừ.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **56 test** (thêm `TrustScoreCalculatorTest` 10 ca = bảng ví dụ §5.1 + biên; `ValidPasswordValidatorTest` 9; `AuthFlowTests` 13 qua HTTP trên MySQL thật: đăng ký/đăng nhập + thuộc tính cookie, trùng email không phân biệt hoa thường, 422, mass assignment, sai mật khẩu ≡ sai email, tài khoản khóa, token hết hạn / sai issuer / giả chữ ký, khóa có hiệu lực ngay, xoay vòng, dùng lại → thu hồi toàn bộ, đăng xuất), SpotBugs 0 lỗi.
+
+---
+
+## 2026-10-01 23:00 (+07) — Checklist D4: xác thực email, quên / đặt lại mật khẩu, đổi mật khẩu
+
+**Bối cảnh**: supervisor duyệt D3 (commit `959bec7`, chưa push).
+
+**Supervisor chốt (qua câu hỏi):** gửi mail bằng **RabbitMQ + spring-boot-starter-mail + Mailpit** (dependency mới chính thức của Spring + container mới trong Compose). Lý do: NFR-13 yêu cầu tác vụ nền có retry + dead-letter; `@Async` mất mail khi restart. Mailpit cho thấy email thật khi demo mà không gửi ra ngoài.
+
+**Quyết định kỹ thuật:**
+- **Luồng mail**: service phát `MailRequestedEvent` → `MailQueuePublisher` (`@TransactionalEventListener(AFTER_COMMIT)`) đẩy `EmailMessage` (JSON) lên exchange `localspot.tasks` → queue `mail.send` → `MailConsumer` gửi SMTP. Lỗi SMTP → retry 4 lần (2 s, ×3, tối đa 30 s) → reject → `localspot.dlx` → `mail.send.dlq` (giữ lại để xem / chạy lại trong Management UI).
+  - **Sau commit**: không gửi link cho tài khoản bị rollback; token chắc chắn có trong CSDL khi người dùng bấm. Đánh đổi: RabbitMQ sập đúng giữa commit và publish thì mất mail (không có transactional outbox) — người dùng tự khắc phục bằng "gửi lại" / "quên mật khẩu"; outbox đủ tốt hơn nhưng thêm bảng + job, chưa đáng ở quy mô đồ án.
+  - Nội dung mail dựng ở phía gửi (text + HTML tự viết, `HtmlUtils.htmlEscape` tên người dùng — không thêm template engine ngoài stack). Consumer generic, không truy cập CSDL. Log lỗi không ghi email người nhận (NFR-11).
+- **Token một lần** (`user_tokens`): 32 byte ngẫu nhiên, lưu SHA-256; 24 h / 30 phút (U1, cấu hình `localspot.security.*-ttl`). Cấp link mới → link cũ cùng loại bị vô hiệu (đặt `used_at`, không xóa — UC01 7a). Dùng bằng `UPDATE ... WHERE used_at IS NULL` nguyên tử. Không tồn tại / hết hạn / đã dùng → cùng **410 `TOKEN_INVALID`** (không cho dò).
+- **Link** theo sitemap: `{localspot.app.public-url}/verify-email?token=`, `/reset-password?token=`; prod lấy `APP_PUBLIC_URL`.
+- **Gửi lại mail xác thực** cần đăng nhập (openapi không có `security: []`) → thêm luật `authenticated()` cho `/api/v1/auth/resend-verification` **trước** luật `permitAll` của `/api/v1/auth/**` trong `SecurityConfig`. Đã xác thực rồi thì 204 mà không gửi.
+- **Quên mật khẩu** luôn 204 kể cả email không tồn tại. Còn chênh thời gian xử lý nhỏ (có email thì thêm 1 insert + publish) — chấp nhận; giới hạn tần suất ở D8 làm việc dò không đáng kể.
+- **Đặt lại mật khẩu** → đổi hash + thu hồi mọi refresh token (kẻ giữ phiên cũ bị đăng xuất). Không tự đánh dấu email đã xác thực (đặc tả không yêu cầu — không tự thêm hành vi).
+- **Đổi mật khẩu** (FR-06 "thu hồi các refresh token khác"): cookie refresh token có `Path=/api/v1/auth` nên `PUT /me/password` không biết token hiện tại → thu hồi tất cả rồi cấp family mới, trả `Set-Cookie` cho thiết bị đang thao tác. Kết quả đúng yêu cầu: thiết bị này giữ phiên, thiết bị khác bị đăng xuất. Access token cũ ở thiết bị khác còn ≤ 15 phút (đánh đổi stateless từ D3).
+- **Đề xuất sửa đặc tả (chưa sửa)**: `PUT /me/password` sai mật khẩu hiện tại trả **401** theo openapi. Interceptor frontend thường hiểu 401 = hết phiên → tự refresh / đăng xuất. Hiện phân biệt bằng `code = INVALID_CURRENT_PASSWORD`; đề xuất đổi sang 422 kèm lỗi trường `currentPassword` — chờ supervisor.
+
+**Lỗi phát hiện và đã sửa:**
+1. **Lệch múi giờ JDBC**: Hibernate ghi UTC (`hibernate.jdbc.time_zone`), còn JDBC thuần (JdbcTemplate, native query) dùng múi giờ JVM (+07) → giá trị ghi bằng JDBC lệch 7 giờ. Lộ ra khi test "link hết hạn" vẫn được chấp nhận. Sửa ở gốc: `spring.datasource.hikari.data-source-properties.connectionTimeZone=UTC` + `forceConnectionTimeZoneToSession=true`; thêm test hồi quy `hibernateAndPlainJdbcAgreeOnUtcTimestamps`. Dữ liệu hiện có không bị ảnh hưởng (chỉ Hibernate và seed SQL — đều UTC — từng ghi).
+2. **Compose hỏng từ commit D3**: `${JWT_SECRET:?...}` làm `docker compose up -d` (chỉ hạ tầng) lỗi khi `.env` chưa có biến, vì Compose nội suy cả service đang tắt. Đổi thành `${JWT_SECRET:-}`; thiếu biến thì backend prod tự từ chối khởi động (`@NotBlank` + kiểm tra độ dài khóa). Commit D3 chưa push nên chưa ảnh hưởng ai; sửa nằm trong commit D4.
+3. Mock `JavaMailSender` làm health check mail của Actuator lỗi → tắt `management.health.mail` ở profile test (dev / prod vẫn bật).
+
+**Test**: consumer RabbitMQ tắt ở profile test (`auto-startup: false`), chỉ bật trong `MailFlowTests` — test khác không đụng mail.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **67 test** (thêm `MailFlowTests` 10 ca đầu-cuối API → RabbitMQ → consumer → đọc token trong mail → API: xác thực email một lần + trust lên 10, nội dung mail, gửi lại vô hiệu link cũ, gửi lại cần đăng nhập, link hết hạn 410, đặt lại mật khẩu thu hồi mọi phiên, quên mật khẩu không lộ email, mật khẩu yếu 422, đổi mật khẩu giữ thiết bị này / đăng xuất thiết bị khác, **SMTP lỗi → 4 lần thử → DLQ** mà đăng ký vẫn 201; + 1 test hồi quy múi giờ), SpotBugs 0 lỗi. `docker compose config` hợp lệ cả chế độ hạ tầng lẫn `--profile app`.
+
+---
+
+## 2026-10-03 16:20 (+07) — Checklist D5: RBAC + `@PreAuthorize`
+
+**Bối cảnh**: D4 đã commit (`afbce9e`). Bảng role / permission và việc nạp authority mỗi request đã có từ D1 / D3 — phần còn thiếu của D5 là phân quyền ở tầng phương thức và endpoint thật dùng nó.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Phạm vi D5 = hạ tầng + API UC31** (`GET /admin/users`, `POST/DELETE /admin/users/{id}/lock`, `PUT /admin/users/{id}/roles`) — kéo sớm một phần mục E "API quản trị". Lý do: D5 không có endpoint thật nào được bảo vệ thì `@PreAuthorize` chỉ kiểm chứng được bằng controller giả trong test; UC31 chính là màn quản trị RBAC.
+- **Luật gán role (đóng O6)**: mọi tài khoản luôn có USER (thiếu → 422 `ROLE_USER_REQUIRED`); **OWNER không gán / gỡ qua API này** — chỉ cấp qua duyệt yêu cầu sở hữu UC30, vì OWNER đi cùng `places.owner_id`: gỡ tay để lại chủ quán mất quyền nhưng vẫn là `owner_id`. Danh sách gửi lên có OWNER khác hiện trạng → 422 `OWNER_ROLE_MANAGED_BY_CLAIM` (báo lỗi thay vì âm thầm bỏ qua; gửi lại nguyên danh sách từ `GET` vẫn hợp lệ).
+- **Admin tự bảo vệ**: không tự khóa, không tự gỡ ADMIN của mình (409 `SELF_ACTION_FORBIDDEN`) → luôn còn ≥ 1 admin. Vẫn khóa / hạ quyền admin khác được. Phương án "không đụng admin khác" bị loại vì phải sửa CSDL mới hạ được một admin.
+- **`PUT /me/password` sai mật khẩu hiện tại: 401 → 422** (câu treo từ D4) kèm `errors[0].field = currentPassword`. Lý do: interceptor frontend coi 401 là hết phiên → tự refresh / đăng xuất. Đã sửa openapi + test.
+
+**Quyết định kỹ thuật:**
+- `@EnableMethodSecurity` trong `SecurityConfig`; luật URL vẫn chỉ phân biệt công khai / cần đăng nhập, **quyền cụ thể khai báo bằng `@PreAuthorize` theo permission** ngay trên endpoint (đọc cạnh `x-permission` của openapi). Theo permission chứ không theo role → đổi quyền của role chỉ cần migration dữ liệu.
+- **Hằng số `Permissions`** + nối chuỗi trong annotation (`"hasAuthority('" + Permissions.USER_LOCK + "')"`): gõ sai là lỗi biên dịch. Chuỗi trần `hasAuthority('user:lok')` sẽ âm thầm chặn mọi người.
+- **`PermissionCatalogTests`** giữ ba nơi khai báo khớp nhau: bảng `permissions` (V2) = `Permissions.ALL` = mọi `x-permission` trong openapi; đồng thời quét `RequestMappingHandlerMapping`: endpoint `/api/v1/admin|moderation|owner/**` **bắt buộc có `@PreAuthorize`** (quên chú thích = mở cho mọi thành viên đã đăng nhập) và authority trong `@PreAuthorize` phải là permission có thật. Không thêm luật URL `hasRole('ADMIN')` cho `/admin/**` (phòng thủ kép) vì gắn cứng role, trùng nguồn sự thật; test quét thay thế vai trò đó.
+- **Tìm kiếm người dùng**: keyset cursor theo id giảm dần (`KeysetCursor`, base64url mờ) — không OFFSET. Truy vấn 2 bước: lấy id có LIMIT, rồi nạp user + roles bằng `@EntityGraph` — gộp fetch collection với LIMIT sẽ buộc Hibernate phân trang trong bộ nhớ. Trust score cả trang tính với **một** truy vấn `GROUP BY` điểm phạt (`trustScoresOf`) thay vì N truy vấn. LIKE thoát `! % _` (ESCAPE `'!'` — không dùng `\` vì MySQL hiểu `\` trong literal là ký tự thoát chuỗi). Collation `utf8mb4_0900_ai_ci` → "quan tri" khớp "Quản Trị". LIKE `%q%` quét toàn bảng `users` — chấp nhận ở quy mô màn quản trị; tìm kiếm người dùng không cần Meilisearch.
+- **Khóa**: `until` bắt buộc ở tương lai, lý do 1–500 ký tự; khóa lại = cập nhật thời hạn / lý do; thu hồi mọi refresh token. Access token cũ bị chặn ngay nhờ nạp quyền mỗi request (D3). Mở khóa idempotent. **Không ghi `user_violations`**: requirements §5.1 chỉ tính vi phạm từ review bị từ chối / báo cáo được xác nhận.
+- **Gán role có hiệu lực ngay** ở request kế tiếp của người bị đổi quyền (không cần thu hồi token) — test `grantedRoleTakesEffectWithoutNewToken`.
+- `ApiException` thêm `errors[]` theo trường (cùng dạng lỗi validate) + `ApiException.fieldError(...)`; mã lỗi mới `USER_NOT_FOUND`, `SELF_ACTION_FORBIDDEN`, `ROLE_USER_REQUIRED`, `OWNER_ROLE_MANAGED_BY_CLAIM`, `INVALID_CURSOR`. `CursorPage<T>` dùng chung cho các danh sách sau.
+- **Chưa ghi `activity_logs`** (FR-42, Should): đặc tả yêu cầu ghi qua Spring AOP cho **mọi** thao tác admin / moderator — làm một lần ở E cùng API quản trị, không rải tay từng endpoint.
+- SpotBugs: thêm loại trừ hẹp `RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE` chỉ cho lớp `*MapperImpl` — MapStruct sinh `if (user == null) return null;` rồi lại `if (user != null)` cho method một nguồn đối tượng; mã sinh tự động, không sửa được. Cảnh báo NP trong `GlobalExceptionHandler` sửa ở gốc.
+- Sitemap: đánh dấu O6 ✅ và O2 ✅ (O2 đã chốt ngày 2026-09-30 ở D1 nhưng bảng chưa cập nhật).
+
+**Kiểm chứng**: `./mvnw verify` xanh — **85 test** (thêm `AdminUserFlowTests` 14 ca qua HTTP trên MySQL thật: khách 401, thành viên 403 trên cả 4 endpoint, moderator không khóa được (UC29 3b), role mới có hiệu lực với access token cũ, tìm không dấu + phân trang cursor, lọc role / trạng thái khóa, LIKE thoát ký tự đại diện, tham số sai 422, khóa thu hồi phiên + mở khóa idempotent, không tự khóa nhưng khóa admin khác được, validate khóa + 404, luật USER / OWNER / tự gỡ ADMIN; `PermissionCatalogTests` 4 ca; sửa ca đổi mật khẩu sang 422), Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.
+- **Bổ sung sau duyệt (supervisor)**: giữ nguyên các chỗ sửa tài liệu ở trên; thêm mục checklist E "Nhật ký thao tác quản trị (FR-42)" vào plan §10 — làm AOP cùng mục E đầu tiên có thao tác duyệt (duyệt địa điểm, openapi đã ghi "ghi activity_log"), không đợi tới mục cuối "API quản trị" để các thao tác kiểm duyệt làm ở giữa không phải gắn log bù.
+
+---
+
+## 2026-10-03 17:04 (+07) — Checklist D6: `PermissionEvaluator` cho Place, Review, Comment
+
+**Bối cảnh**: supervisor duyệt D5 (commit `cf2ad4c`, chưa push), giữ nguyên các chỗ sửa tài liệu và thêm mục FR-42 vào checklist E. Các endpoint cần kiểm tra quyền sở hữu (`PATCH/DELETE /reviews/{id}`, `DELETE /comments/{id}`, `/owner/places/{id}/**`, `PUT/DELETE /reviews/{id}/reply`) đều thuộc mục E.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Phạm vi = chỉ evaluator + test**, không kéo endpoint từ E. Endpoint ở E chỉ cần gắn `@PreAuthorize("hasPermission(#id, 'Review', 'review:update-own')")`. Phương án kéo `/owner/places` bị loại: đụng module địa điểm trước E1 (CRUD + luồng duyệt), dễ phải sửa lại.
+- **Không có đường vượt quyền** cho moderator / admin trên quyền `*-own`: nhân sự xử lý nội dung người khác qua endpoint `/moderation` (có log, có tính vi phạm vào trust) — đúng cách openapi đã tách; không cho nhân sự âm thầm sửa chữ trong review của người khác.
+
+**Quyết định kỹ thuật:**
+- **`OwnershipPermissionEvaluator`** — bảng luật permission → (loại đối tượng, truy vấn sở hữu): `review:update-own` / `review:delete-own` → tác giả review; `comment:delete-own` → tác giả bình luận; `place:update-own` / `place:stats-own` → `places.owner_id`; `review:reply-own-place` → chủ địa điểm của review. Permission trong `hasPermission` vừa là authority RBAC vừa chọn luật → một biểu thức kiểm cả hai, và `PermissionCatalogTests` (D5) tự kiểm tên permission trong biểu thức.
+- **Thứ tự**: (1) thiếu authority → 403 ngay, không chạm CSDL, không cho dò id; (2) bản ghi không tồn tại / đã xóa mềm → **404** mã theo loại (`PLACE_NOT_FOUND`, `REVIEW_NOT_FOUND`, `COMMENT_NOT_FOUND`); (3) không phải chủ → 403. Chọn 404 thay vì gộp vào 403: nội dung review / bình luận / địa điểm vốn công khai nên phân biệt không lộ gì đáng kể; đổi lại client nhận đúng ngữ nghĩa REST (xóa lần hai → 404). Đánh đổi nhỏ: id review đang chờ duyệt của người khác trả 403 thay vì 404 → biết id đó tồn tại.
+- **Kiểm theo id, không nạp entity**: mỗi luật là một truy vấn `SELECT CASE WHEN … THEN TRUE ELSE FALSE END` chỉ đọc khóa ngoại → `Optional<Boolean>` (rỗng = không tồn tại, `false` = của người khác). `LEFT JOIN owner` để địa điểm chưa có chủ trả `false` thay vì mất dòng (bị hiểu nhầm là 404). Xóa mềm tự loại nhờ `@SQLRestriction`. Thêm `ReviewRepository`, `CommentRepository` (mới chỉ có truy vấn sở hữu).
+- **Luật theo trạng thái** (vd. tác giả có được sửa review đang `HIDDEN` / `REJECTED`?) **không** đặt trong evaluator — đó là luật nghiệp vụ của service ở E; evaluator chỉ trả lời "người này có phải chủ không".
+- **Gọi sai là lỗi lập trình**: permission không phải loại sở hữu, hoặc loại đối tượng không khớp permission → `IllegalArgumentException` (500, test bắt được) thay vì âm thầm `false` — chuỗi sai trong annotation sẽ lộ ngay ở lần chạy đầu thay vì chặn mọi người.
+- **Đăng ký**: bean `static MethodSecurityExpressionHandler` nhận `@Lazy PermissionEvaluator` — hạ tầng method security tạo rất sớm, tiêm thẳng evaluator (phụ thuộc repository) sẽ kéo JPA khởi tạo sớm theo. Lớp evaluator `final` (SpotBugs `CT_CONSTRUCTOR_THROW`: constructor có thể ném — `Map.of` trùng khóa — lớp con có thể giữ đối tượng dở dang qua finalizer); không cần proxy CGLIB vì tiêm qua interface.
+- **Test qua đúng đường chạy thật** (`OwnershipPermissionEvaluatorTests`, 11 ca): bean `Guarded` chỉ có trong test, chú thích `@PreAuthorize` y hệt endpoint E sẽ dùng; quyền nạp từ CSDL bằng `UserJwtAuthenticationConverter` như request có access token. Khẳng định `ApiException` 404 ném ra từ evaluator **không bị SpEL / Spring Security bọc lại** → `GlobalExceptionHandler` sẽ chuyển đúng thành 404.
+
+**Sự cố môi trường**: lần `verify` đầu, container MySQL của Testcontainers mất kết nối khi context MockMvc đầu tiên khởi động (`Communications link failure`) → các lớp dùng chung context bị bỏ qua (ngưỡng lỗi context = 1). Không liên quan code: chạy lại các lớp đó và hai lần `verify` toàn bộ sau đó đều xanh. Theo dõi — nếu lặp lại thường xuyên thì xem tài nguyên Docker trong WSL.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **96 test** (+11: tác giả / người lạ, nhân sự không vượt quyền, tác giả thiếu authority bị chặn, review không tồn tại / xóa mềm → 404, kiểm quyền trước tồn tại, bình luận, chủ / không chủ / địa điểm chưa có chủ, `owner_id` lệch role bị chặn, phản hồi chỉ chủ địa điểm của review, cấu hình sai ném lỗi, mọi permission `*-own` có luật), Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.
+
+---
+
+## 2026-10-03 17:33 (+07) — Checklist D7: `@RestControllerAdvice` chuẩn hóa response và exception
+
+**Bối cảnh**: supervisor duyệt D6 (commit `146e44e`, chưa push). `GlobalExceptionHandler` đã có bản tối thiểu từ D3 (lỗi xác thực, 401/403, validate DTO, `ApiException`); D7 phủ phần còn lại.
+
+**Supervisor chốt (qua câu hỏi):**
+- **400 `MALFORMED_REQUEST`** cho request không đọc được (JSON hỏng, sai kiểu / thiếu tham số), **422** cho đọc được nhưng sai luật — đúng RFC 9110. Frontend gửi đúng kiểu thì không bao giờ gặp 400 → 400 là lỗi lập trình phía client. Phương án "gộp hết vào 422" bị loại vì lẫn lỗi cú pháp với lỗi nghiệp vụ. openapi thêm quy ước chung + response `BadRequest`, không liệt kê 400 ở từng operation.
+- **500 kèm `errorId`** (UUID): body chỉ có câu chung chung (không stack trace, không SQL), log ghi cùng `errorId` + stack trace → người dùng / tester báo mã là tra đúng dòng log. Thêm thuộc tính tùy chọn `errorId` vào schema `Problem`.
+
+**Quyết định kỹ thuật:**
+- **Không bọc envelope cho response thành công** — trả thẳng DTO như openapi; HTTP status đã mang thông tin thành công / thất bại. "Chuẩn hóa response" của checklist = chuẩn hóa định dạng lỗi.
+- **Mọi lỗi Spring MVC** (lớp cha `ResponseEntityExceptionHandler` xử lý: JSON hỏng, sai kiểu tham số, 404 không có route, 405, 406, 413, 415…) đi qua `handleExceptionInternal` → gắn `code` + câu tiếng Việt **theo HTTP status** (`Problems.forStatus`). Ánh xạ theo status thay vì theo từng lớp ngoại lệ: phủ toàn bộ, không lỗi nào lọt ra thiếu `code` khi Spring thêm loại ngoại lệ mới.
+- **Ràng buộc trên tham số controller** (`@Min` trên `@RequestParam`) → 422 `VALIDATION_FAILED` cùng dạng `errors[]` như lỗi DTO, thay vì 400 mặc định.
+- **Optimistic lock** (`OptimisticLockingFailureException` của Spring + `OptimisticLockException` JPA gốc) → 409 `CONCURRENT_MODIFICATION` ("tải lại rồi thử lại").
+- **Lỗi CSDL phân loại theo mã lỗi MySQL** trong chuỗi nguyên nhân, không theo lớp ngoại lệ Spring — vì Spring dịch không đồng nhất (CHECK 3819 có SQLSTATE HY000 nên thành `UncategorizedSQLException`, phát hiện ở D1): 1062 trùng UNIQUE → 409 `DUPLICATE_RESOURCE`; 3819 CHECK và 1452 khóa ngoại thiếu cha → 422 `VALIDATION_FAILED`; còn lại (mất kết nối, 1451 khi xóa cứng — lỗi lập trình, cú pháp SQL…) → 500. Tới được nhánh 409/422 này nghĩa là service chưa chặn trước (hoặc hai request chen nhau) → log WARN để sửa; service vẫn nên ném `ApiException` mã cụ thể (vd. `EMAIL_ALREADY_EXISTS`).
+- **Log không ghi query string** (chỉ method + path) — query có thể chứa dữ liệu cá nhân (NFR-11, vd. `?q=email`).
+- **`FallbackErrorController` thay `BasicErrorController` ở `/error`**: lỗi phát sinh ngoài Spring MVC (vd. CSDL sập đúng lúc filter JWT nạp quyền) không tới được `@RestControllerAdvice`; container chuyển tới `/error` và mặc định Spring Boot trả JSON dạng khác (`timestamp, status, error, path`) không có `code` / `errorId`. Không khai báo `produces` để trang lỗi trả được cho mọi `Accept`. Hàm dựng body dùng chung (`Problems`) để hai nơi trả cùng định dạng.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **109 test** (+13 `ErrorHandlingTests`: JSON hỏng 400, sai kiểu / thiếu tham số 400, ràng buộc tham số 422 kèm trường, route không tồn tại 404, sai method 405, sai content type 415, optimistic lock 409, trùng khóa thật trên MySQL 409, CHECK 3819 thật → 422 (không phải 500), FK 1452 → 422, lỗi bất ngờ 500 không lộ chi tiết + `errorId` trùng log, lỗi SQL chưa phân loại 500, `/error` cùng định dạng). Lỗi CSDL thử bằng bảng tạm `TEMPORARY TABLE` hoặc lệnh bị chặn hoàn toàn — không ghi dữ liệu thật. Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.

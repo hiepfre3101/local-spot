@@ -54,10 +54,10 @@
 ### Backend
 | Hạng mục | Lựa chọn | Ghi chú |
 |---|---|---|
-| Framework | Spring Boot 3.3 + Java 21 (LTS) | API-only (REST), Maven (hoặc Gradle) |
-| Auth | Spring Security + JWT (jjwt) | Access token + refresh token; giải thích rõ luồng trong báo cáo |
+| Framework | Spring Boot 4.1 + Java 21 (LTS) | API-only (REST), Maven Wrapper. *Đổi từ 3.3 (2026-09-29): dòng 3.x đã hết hỗ trợ OSS, Initializr không còn cung cấp* |
+| Auth | Spring Security + JWT (OAuth2 Resource Server / Nimbus, HS256) | Access token + refresh token; giải thích rõ luồng trong báo cáo. *(2026-10-01: đổi từ jjwt + filter tự viết sang module chính thức của Spring Security — filter Bearer token có sẵn, ít code bảo mật tự viết; vẫn tự phát hành token, không dùng máy chủ OAuth2 / Keycloak)* |
 | Phân quyền | RBAC tự thiết kế + `@PreAuthorize` | Bảng `roles`/`permissions` riêng (Spring không có sẵn như Spatie); Role: user, owner, moderator, admin |
-| ORM | Spring Data JPA + Hibernate | Entity, Repository interface, tránh N+1 bằng `@EntityGraph`/fetch join |
+| ORM | Spring Data JPA + Hibernate (+ hibernate-spatial) | Entity, Repository interface, tránh N+1 bằng `@EntityGraph`/fetch join; hibernate-spatial map cột `POINT SRID 4326` sang JTS `Point` *(thêm 2026-09-30)* |
 | Spatial | `hibernate-spatial` (JTS `Point`) | Map cột `POINT SRID 4326` sang entity, viết truy vấn không gian trong JPQL — thêm 2026-09-28 (C1) |
 | Migration | Flyway | Versioned SQL migration, chạy tự động khi start app |
 | Media | Service tự viết + AWS S3 SDK v2 | Client tương thích MinIO khi dev, R2/S3 khi deploy |
@@ -76,8 +76,9 @@
 ### Hạ tầng
 - **CSDL**: MySQL 8 (cột `POINT` + `SPATIAL INDEX` cho tìm theo bán kính).
 - **Lưu trữ ảnh**: MinIO khi dev, Cloudflare R2 / AWS S3 khi deploy.
-- **Container**: Docker Compose (app, nginx, mysql, redis, rabbitmq, meilisearch, minio).
-- **CI/CD**: GitHub Actions — chạy JUnit + Vitest + Checkstyle/SpotBugs, build jar và image.
+- **Container**: Docker Compose (app, nginx, mysql, redis, rabbitmq, meilisearch, minio, mailpit).
+- **Email**: Spring Mail (SMTP) gửi qua hàng đợi RabbitMQ (retry + dead-letter, NFR-13); dev dùng **Mailpit** bắt mọi thư (http://localhost:8025), deploy dùng SMTP thật qua biến môi trường. *(thêm 2026-10-01)*
+- **CI/CD**: GitHub Actions — chạy JUnit + Vitest + Spotless/SpotBugs + ESLint/Prettier, build jar và image.
 - **Deploy**: VPS Ubuntu + Nginx (reverse proxy) + systemd hoặc Docker chạy jar, hoặc Railway/Render nếu muốn nhanh.
 - **Giám sát**: Sentry (bản free) + Spring Boot Actuator.
 
@@ -244,7 +245,7 @@ backend/
 │   ├── event/{ReviewCreatedEvent,PlaceApprovedEvent}.java
 │   ├── listener/{RecalculateRatingListener,SendOwnerNotificationListener}.java
 │   ├── amqp/{ImageProcessingConsumer,SearchReindexConsumer}.java
-│   ├── security/{JwtFilter,SecurityConfig,PermissionEvaluator}.java
+│   ├── security/{SecurityConfig,UserJwtAuthenticationConverter,JwtService,PermissionEvaluator}.java  # filter Bearer có sẵn của Spring Security
 │   ├── config/{WebSocketConfig,OpenApiConfig,RedisConfig}.java
 │   └── exception/{GlobalExceptionHandler,ApiException}.java
 ├── src/main/resources/
@@ -370,22 +371,22 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Đặc tả API (OpenAPI) — [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
 ### C. Thiết lập môi trường
-- [ ] Docker Compose: app, nginx, mysql, redis, rabbitmq, meilisearch, minio
-- [ ] Khởi tạo Spring Boot (Spring Initializr), cấu hình `application.yml` theo profile (dev/prod)
-- [ ] Cài Vue 3 + Vite + TypeScript + Tailwind
-- [ ] Thiết lập ESLint, Prettier (frontend); Checkstyle/Spotless, SpotBugs (backend)
-- [ ] Thiết lập JUnit 5 + Testcontainers và Vitest
-- [ ] GitHub Actions chạy lint + test
+- [x] Docker Compose: app, nginx, mysql, redis, rabbitmq, meilisearch, minio — app + nginx dưới profile `app`; dev chỉ bật hạ tầng
+- [x] Khởi tạo Spring Boot (Spring Initializr), cấu hình `application.yml` theo profile (dev/prod)
+- [x] Cài Vue 3 + Vite + TypeScript + Tailwind — theme Tailwind = token design system
+- [x] Thiết lập ESLint, Prettier (frontend); Spotless, SpotBugs (backend) — bỏ Checkstyle (trùng formatter)
+- [x] Thiết lập JUnit 5 + Testcontainers và Vitest
+- [x] GitHub Actions chạy lint + test — [.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 ### D. Backend — nền tảng
-- [ ] Toàn bộ Flyway migration + khóa ngoại + index
-- [ ] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner`
-- [ ] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token
-- [ ] Xác thực email, quên mật khẩu, đổi mật khẩu
-- [ ] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize`
-- [ ] Method security / `PermissionEvaluator` cho Place, Review, Comment
-- [ ] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`)
-- [ ] Rate limiting cho API nhạy cảm (Bucket4j hoặc Redis)
+- [x] Toàn bộ Flyway migration + khóa ngoại + index — `V1__init.sql` (32 bảng), `V2__seed_rbac.sql`, `V3__seed_catalog.sql`; xem [database.md §3.5](docs/design/database.md)
+- [x] Entity (JPA), quan hệ, dữ liệu mẫu qua seed migration/`CommandLineRunner` — 29 entity + 3 bảng nối `@ManyToMany`; seed demo Flyway `db/seed/dev/R__demo_*.sql` chỉ ở profile dev (60 tài khoản, 300 địa điểm; review demo làm ở E sau khi có service tính rating/trust)
+- [x] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token — kèm `GET /me` và trust score (requirements §5.1)
+- [x] Xác thực email, quên mật khẩu, đổi mật khẩu — mail qua RabbitMQ (retry 4 lần → DLQ `mail.send.dlq`), Mailpit cho dev
+- [x] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize` — `@EnableMethodSecurity`, hằng số `Permissions` (test đối chiếu CSDL ↔ code ↔ openapi, quét endpoint `/admin|/moderation|/owner` thiếu `@PreAuthorize`); API UC31 `/admin/users` (tìm kiếm, khóa / mở khóa, gán role) làm sớm từ E
+- [x] Method security / `PermissionEvaluator` cho Place, Review, Comment — `OwnershipPermissionEvaluator`: `hasPermission(id, loại, permission)` cho 6 permission `*-own`, kiểm RBAC → tồn tại (404) → chủ sở hữu; không có đường vượt quyền cho nhân sự; endpoint gắn ở E
+- [x] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`) — mọi lỗi có `code`; 400 `MALFORMED_REQUEST` / 422 / 409 (optimistic lock, trùng UNIQUE) / 500 kèm `errorId`; lỗi CSDL phân loại theo mã MySQL (1062, 3819, 1452); `/error` cùng định dạng cho lỗi ngoài Spring MVC; response thành công không bọc envelope
+- [ ] Rate limiting cho API nhạy cảm (Redis)
 
 ### E. Backend — nghiệp vụ
 - [ ] CRUD địa điểm + luồng duyệt
@@ -406,6 +407,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [ ] Phản hồi của chủ quán
 - [ ] Thông báo (bảng `notifications` + Spring WebSocket/STOMP)
 - [ ] API quản trị và thống kê
+- [ ] Nhật ký thao tác quản trị (FR-42): `@Audited` + Spring AOP aspect ghi `activity_logs` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho 4 endpoint `/admin/users` của D5
 
 ### F. Frontend
 - [ ] Layout, router, navigation guard
