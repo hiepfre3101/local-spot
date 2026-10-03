@@ -381,3 +381,24 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 **Sự cố môi trường**: lần `verify` đầu, container MySQL của Testcontainers mất kết nối khi context MockMvc đầu tiên khởi động (`Communications link failure`) → các lớp dùng chung context bị bỏ qua (ngưỡng lỗi context = 1). Không liên quan code: chạy lại các lớp đó và hai lần `verify` toàn bộ sau đó đều xanh. Theo dõi — nếu lặp lại thường xuyên thì xem tài nguyên Docker trong WSL.
 
 **Kiểm chứng**: `./mvnw verify` xanh — **96 test** (+11: tác giả / người lạ, nhân sự không vượt quyền, tác giả thiếu authority bị chặn, review không tồn tại / xóa mềm → 404, kiểm quyền trước tồn tại, bình luận, chủ / không chủ / địa điểm chưa có chủ, `owner_id` lệch role bị chặn, phản hồi chỉ chủ địa điểm của review, cấu hình sai ném lỗi, mọi permission `*-own` có luật), Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.
+
+---
+
+## 2026-10-03 17:33 (+07) — Checklist D7: `@RestControllerAdvice` chuẩn hóa response và exception
+
+**Bối cảnh**: supervisor duyệt D6 (commit `146e44e`, chưa push). `GlobalExceptionHandler` đã có bản tối thiểu từ D3 (lỗi xác thực, 401/403, validate DTO, `ApiException`); D7 phủ phần còn lại.
+
+**Supervisor chốt (qua câu hỏi):**
+- **400 `MALFORMED_REQUEST`** cho request không đọc được (JSON hỏng, sai kiểu / thiếu tham số), **422** cho đọc được nhưng sai luật — đúng RFC 9110. Frontend gửi đúng kiểu thì không bao giờ gặp 400 → 400 là lỗi lập trình phía client. Phương án "gộp hết vào 422" bị loại vì lẫn lỗi cú pháp với lỗi nghiệp vụ. openapi thêm quy ước chung + response `BadRequest`, không liệt kê 400 ở từng operation.
+- **500 kèm `errorId`** (UUID): body chỉ có câu chung chung (không stack trace, không SQL), log ghi cùng `errorId` + stack trace → người dùng / tester báo mã là tra đúng dòng log. Thêm thuộc tính tùy chọn `errorId` vào schema `Problem`.
+
+**Quyết định kỹ thuật:**
+- **Không bọc envelope cho response thành công** — trả thẳng DTO như openapi; HTTP status đã mang thông tin thành công / thất bại. "Chuẩn hóa response" của checklist = chuẩn hóa định dạng lỗi.
+- **Mọi lỗi Spring MVC** (lớp cha `ResponseEntityExceptionHandler` xử lý: JSON hỏng, sai kiểu tham số, 404 không có route, 405, 406, 413, 415…) đi qua `handleExceptionInternal` → gắn `code` + câu tiếng Việt **theo HTTP status** (`Problems.forStatus`). Ánh xạ theo status thay vì theo từng lớp ngoại lệ: phủ toàn bộ, không lỗi nào lọt ra thiếu `code` khi Spring thêm loại ngoại lệ mới.
+- **Ràng buộc trên tham số controller** (`@Min` trên `@RequestParam`) → 422 `VALIDATION_FAILED` cùng dạng `errors[]` như lỗi DTO, thay vì 400 mặc định.
+- **Optimistic lock** (`OptimisticLockingFailureException` của Spring + `OptimisticLockException` JPA gốc) → 409 `CONCURRENT_MODIFICATION` ("tải lại rồi thử lại").
+- **Lỗi CSDL phân loại theo mã lỗi MySQL** trong chuỗi nguyên nhân, không theo lớp ngoại lệ Spring — vì Spring dịch không đồng nhất (CHECK 3819 có SQLSTATE HY000 nên thành `UncategorizedSQLException`, phát hiện ở D1): 1062 trùng UNIQUE → 409 `DUPLICATE_RESOURCE`; 3819 CHECK và 1452 khóa ngoại thiếu cha → 422 `VALIDATION_FAILED`; còn lại (mất kết nối, 1451 khi xóa cứng — lỗi lập trình, cú pháp SQL…) → 500. Tới được nhánh 409/422 này nghĩa là service chưa chặn trước (hoặc hai request chen nhau) → log WARN để sửa; service vẫn nên ném `ApiException` mã cụ thể (vd. `EMAIL_ALREADY_EXISTS`).
+- **Log không ghi query string** (chỉ method + path) — query có thể chứa dữ liệu cá nhân (NFR-11, vd. `?q=email`).
+- **`FallbackErrorController` thay `BasicErrorController` ở `/error`**: lỗi phát sinh ngoài Spring MVC (vd. CSDL sập đúng lúc filter JWT nạp quyền) không tới được `@RestControllerAdvice`; container chuyển tới `/error` và mặc định Spring Boot trả JSON dạng khác (`timestamp, status, error, path`) không có `code` / `errorId`. Không khai báo `produces` để trang lỗi trả được cho mọi `Accept`. Hàm dựng body dùng chung (`Problems`) để hai nơi trả cùng định dạng.
+
+**Kiểm chứng**: `./mvnw verify` xanh — **109 test** (+13 `ErrorHandlingTests`: JSON hỏng 400, sai kiểu / thiếu tham số 400, ràng buộc tham số 422 kèm trường, route không tồn tại 404, sai method 405, sai content type 415, optimistic lock 409, trùng khóa thật trên MySQL 409, CHECK 3819 thật → 422 (không phải 500), FK 1452 → 422, lỗi bất ngờ 500 không lộ chi tiết + `errorId` trùng log, lỗi SQL chưa phân loại 500, `/error` cùng định dạng). Lỗi CSDL thử bằng bảng tạm `TEMPORARY TABLE` hoặc lệnh bị chặn hoàn toàn — không ghi dữ liệu thật. Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.

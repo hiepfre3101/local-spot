@@ -7,6 +7,24 @@ public final class ErrorCode {
     public static final String UNAUTHORIZED = "UNAUTHORIZED";
     public static final String FORBIDDEN = "FORBIDDEN";
 
+    // Chung (GlobalExceptionHandler, chốt D7 2026-10-03)
+    /** 400: request không đọc được — JSON hỏng, sai kiểu / thiếu tham số. */
+    public static final String MALFORMED_REQUEST = "MALFORMED_REQUEST";
+    /** 404 không có route; 404 của một bản ghi dùng mã riêng ({@code PLACE_NOT_FOUND}…). */
+    public static final String NOT_FOUND = "NOT_FOUND";
+
+    public static final String METHOD_NOT_ALLOWED = "METHOD_NOT_ALLOWED";
+    public static final String NOT_ACCEPTABLE = "NOT_ACCEPTABLE";
+    public static final String UNSUPPORTED_MEDIA_TYPE = "UNSUPPORTED_MEDIA_TYPE";
+    public static final String PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE";
+    /** 409: optimistic lock — bản ghi đã bị người khác sửa. */
+    public static final String CONCURRENT_MODIFICATION = "CONCURRENT_MODIFICATION";
+    /** 409: trùng khóa UNIQUE tới được CSDL (service không kịp chặn, vd. hai request chen nhau). */
+    public static final String DUPLICATE_RESOURCE = "DUPLICATE_RESOURCE";
+
+    public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
+    public static final String SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
+
     public static final String EMAIL_ALREADY_EXISTS = "EMAIL_ALREADY_EXISTS";
     public static final String INVALID_CREDENTIALS = "INVALID_CREDENTIALS";
     public static final String ACCOUNT_LOCKED = "ACCOUNT_LOCKED";

@@ -9,6 +9,10 @@ info:
     **Quy ước**
     - Prefix `/api/v1`, JSON UTF-8, thời gian ISO-8601 UTC.
     - Lỗi theo RFC 7807 (`application/problem+json`, schema `Problem`); lỗi validate có `errors[]` theo từng trường.
+      Phân loại *(chốt 2026-10-03)*: **400** `MALFORMED_REQUEST` = request không đọc được (JSON hỏng, sai kiểu / thiếu
+      tham số — client gửi đúng kiểu thì không gặp, nên không liệt kê ở từng operation); **422** = đọc được nhưng sai luật;
+      **409** `CONCURRENT_MODIFICATION` (optimistic lock) / `DUPLICATE_RESOURCE` (trùng UNIQUE); **500** `INTERNAL_ERROR`
+      không lộ chi tiết, kèm `errorId` trùng với dòng log máy chủ. Mã lỗi đầy đủ: `ErrorCode.java`.
     - Danh sách dài phân trang **cursor**: `?cursor=&limit=` → `{ items, nextCursor }`; `nextCursor = null` là hết.
     - Xác thực: `Authorization: Bearer <accessToken>` (15 phút). Refresh token nằm trong cookie HttpOnly
       `refresh_token` (Path=/api/v1/auth, SameSite=Strict) — S1.
@@ -1108,6 +1112,9 @@ components:
     Lng: { name: lng, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
 
   responses:
+    BadRequest:
+      description: Request không đọc được — JSON hỏng, sai kiểu / thiếu tham số (`MALFORMED_REQUEST`)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     ValidationError:
       description: Dữ liệu không hợp lệ
       content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
@@ -1148,6 +1155,10 @@ components:
             properties:
               field: { type: string }
               message: { type: string }
+        errorId:
+          type: string
+          format: uuid
+          description: Chỉ có ở lỗi 5xx — mã tra cứu trùng với dòng log máy chủ (người dùng gửi mã này khi báo lỗi)
     Password: { type: string, minLength: 8, maxLength: 72, pattern: '^(?=.*[A-Za-z])(?=.*\d).+$', description: '≥ 8 ký tự, có chữ và số (U1); tối đa 72 byte do giới hạn BCrypt' }
     TokenRequest:
       type: object
