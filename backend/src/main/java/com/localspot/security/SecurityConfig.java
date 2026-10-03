@@ -7,7 +7,11 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.access.PermissionEvaluator;
+import org.springframework.security.access.expression.method.DefaultMethodSecurityExpressionHandler;
+import org.springframework.security.access.expression.method.MethodSecurityExpressionHandler;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -37,7 +41,8 @@ import org.springframework.security.web.SecurityFilterChain;
  *   <li><b>Phân quyền ở tầng phương thức</b>: luật URL ở đây chỉ phân biệt công khai / cần đăng nhập; quyền cụ thể khai
  *       báo bằng {@code @PreAuthorize} theo permission ({@link Permissions}) ngay trên endpoint, cạnh nơi đọc được
  *       {@code x-permission} của openapi. {@code AccessDeniedException} được {@code GlobalExceptionHandler} chuyển thành
- *       403 (hoặc 401 nếu chưa đăng nhập).
+ *       403 (hoặc 401 nếu chưa đăng nhập). Quyền trên bản ghi cụ thể ({@code *-own}) kiểm tra bằng
+ *       {@code hasPermission(id, loại, permission)} qua {@link OwnershipPermissionEvaluator}.
  * </ul>
  */
 @Configuration(proxyBeanMethods = false)
@@ -73,6 +78,19 @@ public class SecurityConfig {
                         .accessDeniedHandler(problems))
                 .exceptionHandling(e -> e.authenticationEntryPoint(problems).accessDeniedHandler(problems));
         return http.build();
+    }
+
+    /**
+     * Gắn {@link OwnershipPermissionEvaluator} cho {@code hasPermission(...)} trong {@code @PreAuthorize}. Bean
+     * {@code static} + {@code @Lazy}: hạ tầng method security được tạo rất sớm; tiêm thẳng evaluator (phụ thuộc
+     * repository) sẽ kéo JPA khởi tạo sớm theo — proxy lazy chỉ tìm evaluator ở lần kiểm tra quyền đầu tiên.
+     */
+    @Bean
+    static MethodSecurityExpressionHandler methodSecurityExpressionHandler(
+            @Lazy PermissionEvaluator permissionEvaluator) {
+        DefaultMethodSecurityExpressionHandler handler = new DefaultMethodSecurityExpressionHandler();
+        handler.setPermissionEvaluator(permissionEvaluator);
+        return handler;
     }
 
     @Bean

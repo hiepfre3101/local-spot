@@ -384,9 +384,9 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Cấu hình Spring Security + JWT, API đăng ký / đăng nhập / đăng xuất / refresh token — kèm `GET /me` và trust score (requirements §5.1)
 - [x] Xác thực email, quên mật khẩu, đổi mật khẩu — mail qua RabbitMQ (retry 4 lần → DLQ `mail.send.dlq`), Mailpit cho dev
 - [x] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize` — `@EnableMethodSecurity`, hằng số `Permissions` (test đối chiếu CSDL ↔ code ↔ openapi, quét endpoint `/admin|/moderation|/owner` thiếu `@PreAuthorize`); API UC31 `/admin/users` (tìm kiếm, khóa / mở khóa, gán role) làm sớm từ E
-- [ ] Method security / `PermissionEvaluator` cho Place, Review, Comment
+- [x] Method security / `PermissionEvaluator` cho Place, Review, Comment — `OwnershipPermissionEvaluator`: `hasPermission(id, loại, permission)` cho 6 permission `*-own`, kiểm RBAC → tồn tại (404) → chủ sở hữu; không có đường vượt quyền cho nhân sự; endpoint gắn ở E
 - [ ] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`)
-- [ ] Rate limiting cho API nhạy cảm (Bucket4j hoặc Redis)
+- [ ] Rate limiting cho API nhạy cảm (Redis)
 
 ### E. Backend — nghiệp vụ
 - [ ] CRUD địa điểm + luồng duyệt
