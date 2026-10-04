@@ -386,7 +386,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] RBAC: bảng role/permission tự thiết kế + `@PreAuthorize` — `@EnableMethodSecurity`, hằng số `Permissions` (test đối chiếu CSDL ↔ code ↔ openapi, quét endpoint `/admin|/moderation|/owner` thiếu `@PreAuthorize`); API UC31 `/admin/users` (tìm kiếm, khóa / mở khóa, gán role) làm sớm từ E
 - [x] Method security / `PermissionEvaluator` cho Place, Review, Comment — `OwnershipPermissionEvaluator`: `hasPermission(id, loại, permission)` cho 6 permission `*-own`, kiểm RBAC → tồn tại (404) → chủ sở hữu; không có đường vượt quyền cho nhân sự; endpoint gắn ở E
 - [x] `@RestControllerAdvice` chuẩn hóa response và exception (RFC 7807 `ProblemDetail`) — mọi lỗi có `code`; 400 `MALFORMED_REQUEST` / 422 / 409 (optimistic lock, trùng UNIQUE) / 500 kèm `errorId`; lỗi CSDL phân loại theo mã MySQL (1062, 3819, 1452); `/error` cùng định dạng cho lỗi ngoài Spring MVC; response thành công không bọc envelope
-- [ ] Rate limiting cho API nhạy cảm (Redis)
+- [x] Rate limiting cho API nhạy cảm (Redis) — cửa sổ trượt bằng Lua (không thêm thư viện); đăng nhập / đăng ký / quên mật khẩu / gửi lại mail xác thực; 429 + `Retry-After`; Redis sập → cho qua; giới hạn 5 review / 24 giờ đếm trong CSDL ở E
 
 ### E. Backend — nghiệp vụ
 - [ ] CRUD địa điểm + luồng duyệt

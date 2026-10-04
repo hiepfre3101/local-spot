@@ -70,6 +70,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(ex.getStatus()).body(body);
     }
 
+    /** 429 kèm {@code Retry-After} (giây) — openapi {@code TooManyRequests}. */
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleRateLimit(RateLimitExceededException ex) {
+        return ResponseEntity.status(ex.getStatus())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.getRetryAfterSeconds()))
+                .body(Problems.of(ex.getStatus(), ex.getCode(), ex.getMessage()));
+    }
+
     @ExceptionHandler(AuthenticationException.class)
     ResponseEntity<ProblemDetail> handleAuthentication(AuthenticationException ex) {
         ResponseEntity<ProblemDetail> response = ex instanceof LockedException

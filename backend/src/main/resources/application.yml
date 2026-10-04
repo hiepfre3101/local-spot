@@ -25,6 +25,12 @@ spring:
     time-zone: UTC
   mail:
     default-encoding: UTF-8
+  data:
+    redis:
+      # Redis chỉ phụ trợ (rate limit cho qua khi Redis sập — D8): lệnh treo không được kéo request theo
+      # (mặc định Lettuce chờ 60 s)
+      timeout: 500ms
+      connect-timeout: 500ms
   rabbitmq:
     listener:
       simple:
@@ -76,3 +82,11 @@ localspot:
     helpful-cap: 36
     penalty-weight: 3
     publish-threshold: 30
+  # NFR-10 — cửa sổ trượt; ngưỡng chốt 2026-10-04 (login theo U2). Giới hạn 5 review / 24 giờ (FR-23) đếm trong CSDL.
+  rate-limit:
+    policies:
+      login: { limit: 5, window: 15m } # theo (email, IP); đăng nhập đúng xóa bộ đếm
+      register: { limit: 10, window: 1h } # theo IP — nới vì nhiều máy chung một IP
+      forgot-password-email: { limit: 3, window: 1h }
+      forgot-password-ip: { limit: 20, window: 1h }
+      resend-verification: { limit: 3, window: 1h } # theo tài khoản

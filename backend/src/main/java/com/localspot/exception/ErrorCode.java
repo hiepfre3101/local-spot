@@ -22,6 +22,9 @@ public final class ErrorCode {
     /** 409: trùng khóa UNIQUE tới được CSDL (service không kịp chặn, vd. hai request chen nhau). */
     public static final String DUPLICATE_RESOURCE = "DUPLICATE_RESOURCE";
 
+    /** 429: vượt giới hạn tần suất (NFR-10) — kèm header {@code Retry-After}. */
+    public static final String TOO_MANY_REQUESTS = "TOO_MANY_REQUESTS";
+
     public static final String INTERNAL_ERROR = "INTERNAL_ERROR";
     public static final String SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE";
 

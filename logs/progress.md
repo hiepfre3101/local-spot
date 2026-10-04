@@ -402,3 +402,29 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 - **`FallbackErrorController` thay `BasicErrorController` ở `/error`**: lỗi phát sinh ngoài Spring MVC (vd. CSDL sập đúng lúc filter JWT nạp quyền) không tới được `@RestControllerAdvice`; container chuyển tới `/error` và mặc định Spring Boot trả JSON dạng khác (`timestamp, status, error, path`) không có `code` / `errorId`. Không khai báo `produces` để trang lỗi trả được cho mọi `Accept`. Hàm dựng body dùng chung (`Problems`) để hai nơi trả cùng định dạng.
 
 **Kiểm chứng**: `./mvnw verify` xanh — **109 test** (+13 `ErrorHandlingTests`: JSON hỏng 400, sai kiểu / thiếu tham số 400, ràng buộc tham số 422 kèm trường, route không tồn tại 404, sai method 405, sai content type 415, optimistic lock 409, trùng khóa thật trên MySQL 409, CHECK 3819 thật → 422 (không phải 500), FK 1452 → 422, lỗi bất ngờ 500 không lộ chi tiết + `errorId` trùng log, lỗi SQL chưa phân loại 500, `/error` cùng định dạng). Lỗi CSDL thử bằng bảng tạm `TEMPORARY TABLE` hoặc lệnh bị chặn hoàn toàn — không ghi dữ liệu thật. Spotless, SpotBugs 0 lỗi. Chưa commit — chờ supervisor duyệt.
+
+---
+
+## 2026-10-04 14:58 (+07) — Checklist D8: Rate limiting
+
+**Bối cảnh**: D7 đã commit + push (`e3074e4`). Mục cuối của checklist D.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Redis, không thêm Bucket4j** — không thêm thư viện ngoài stack (CLAUDE.md §4); Redis đã có trong stack và Compose.
+- **Ngưỡng** (ngoài U2 đã chốt — đăng nhập 5 lần sai / 15 phút theo (email, IP)): đăng ký **10 / giờ / IP** (nới vì nhiều máy chung một IP — wifi trường, phòng bảo vệ); quên mật khẩu **3 / giờ / email** (chặn spam hộp thư một người) và **20 / giờ / IP** (chặn dò hàng loạt email); gửi lại mail xác thực **3 / giờ / tài khoản**. Đã ghi vào requirements §5 và openapi `TooManyRequests`.
+- **Redis sập → cho qua + log ERROR** (fail-open): Redis là phụ trợ; chặn hết sẽ biến Redis thành điểm hỏng duy nhất (không ai đăng nhập được). Brute force vẫn bị BCrypt làm chậm; health check báo Redis DOWN.
+- **Giới hạn 5 review / 24 giờ (FR-23) đếm trong CSDL** (làm ở E), không qua Redis: là một phần cơ chế chống review ảo (lõi — CLAUDE.md §3), phải chính xác, kiểm chứng được bằng dữ liệu và **không tắt theo Redis** (vì đã chọn fail-open). Vẫn trả 429.
+
+**Quyết định kỹ thuật:**
+- **Cửa sổ trượt (sliding window log) bằng Lua** (`redis/sliding-window-rate-limit.lua`): sorted set, score = thời điểm ms; một script = một thao tác nguyên tử. Cửa sổ cố định (`INCR` + `EXPIRE`) đơn giản hơn nhưng cho dồn gần 2N lần quanh ranh giới hai cửa sổ (5 lần cuối cửa sổ trước + 5 lần đầu cửa sổ sau trong vài giây) — sai với "5 lần / 15 phút". Đánh đổi: bộ nhớ O(N) mỗi khóa thay vì O(1). Mỗi khóa chứa tối đa `limit` phần tử của luật đó (lần bị từ chối không được ghi, mốc quá cửa sổ bị xóa) — ngưỡng lớn nhất trong cấu hình hiện tại là 20 (`forgot-password-ip`) nên không đáng kể; nếu sau này có luật ngưỡng lớn (hàng nghìn / phút) thì cân nhắc Sliding Window Counter (O(1), xấp xỉ).
+- **Lần bị từ chối không được ghi** → thử dồn khi đang bị chặn không kéo dài thời gian chặn; tối đa đúng N lần trong mọi cửa sổ. `Retry-After` = lúc lần cũ nhất rời cửa sổ (làm tròn lên giây).
+- **Đăng nhập**: mỗi lần thử chiếm một lượt **trước** khi kiểm mật khẩu (nguyên tử → 100 request song song cũng chỉ 5 lần được thử; kiểm-trước-ghi-sau sẽ cho cả loạt lọt), mật khẩu đúng thì xóa bộ đếm → thực chất chỉ lần sai bị tính (U2). Vượt ngưỡng → 429 **kể cả khi mật khẩu đúng** — không cho kẻ dò biết đã trúng. Giới hạn theo (email, IP) đúng U2: người dùng thật ở mạng khác không bị khóa theo kẻ tấn công. Hạn chế đã biết: kẻ tấn công đổi email liên tục từ một IP (credential stuffing) không bị luật này chặn — U2 không yêu cầu; có thể thêm luật theo IP nếu cần.
+- **Đăng ký** tính cả lần thất bại do email trùng (chặn dò email đã đăng ký bằng đăng ký hàng loạt); request sai validate (422) không tới service nên không tính.
+- **Quên mật khẩu** đếm theo email cả khi email không tồn tại → 429 không tiết lộ email nào đã đăng ký (giữ nguyên tắc chống dò của D4).
+- **Khóa băm SHA-256** (`rl:<luật>:<sha256>`): email / IP không nằm dạng rõ trong Redis (NFR-11); khóa có TTL = một cửa sổ, không tích rác.
+- **Timeout Redis 500 ms** (`spring.data.redis.timeout`, `connect-timeout`): mặc định Lettuce chờ 60 s — "cho qua khi Redis sập" sẽ thành "mỗi lần đăng nhập treo 60 s".
+- Gọi giới hạn ở **service** (`AuthService`, `AccountService`), không ở controller / interceptor: luật cần dữ liệu trong body (email) và kết quả nghiệp vụ (đăng nhập đúng → xóa bộ đếm); IP truyền qua `ClientInfo` có sẵn — service vẫn không phụ thuộc servlet API.
+- Ngưỡng cấu hình ở `localspot.rate-limit.policies.*` (map theo enum `RateLimitPolicy`); thiếu ngưỡng cho một luật → từ chối khởi động. 429 dùng `RateLimitExceededException` + header `Retry-After` (giây) đúng openapi; câu báo "thử lại sau N phút".
+- **Profile test** nới ngưỡng đăng ký (mọi request MockMvc từ 127.0.0.1, các lớp test đăng ký hàng chục tài khoản); `RateLimitFlowTests` đặt lại đúng giá trị production (10).
+
+**Kiểm chứng**: `./mvnw verify` xanh — **123 test** (+7 `RateLimiterTests` trên Redis thật với đồng hồ điều khiển được: chặn sau N lần + `Retry-After` đúng, cửa sổ trượt từng lượt (khác cửa sổ cố định), lần bị từ chối không tính, khóa độc lập theo chủ thể / luật, reset, khóa băm + có TTL, **Redis sập → cho qua + log**; +7 `RateLimitFlowTests` qua HTTP với ngưỡng production: lần đăng nhập thứ 6 → 429 kể cả mật khẩu đúng, giới hạn theo (email, IP), đăng nhập đúng xóa bộ đếm, đăng ký thứ 11 / IP → 429, quên mật khẩu thứ 4 / email → 429 cả với email không tồn tại, thứ 21 / IP → 429, gửi lại mail thứ 4 → 429). Spotless, SpotBugs 0 lỗi. **Checklist D hoàn tất.** Chưa commit — chờ supervisor duyệt.

@@ -41,8 +41,8 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public void register(@Valid @RequestBody RegisterRequest request) {
-        authService.register(request);
+    public void register(@Valid @RequestBody RegisterRequest request, HttpServletRequest http) {
+        authService.register(request, ClientInfos.from(http));
     }
 
     @PostMapping("/login")
@@ -78,8 +78,9 @@ public class AuthController {
 
     @PostMapping("/forgot-password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
-        accountService.requestPasswordReset(request.email());
+    public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request, HttpServletRequest http) {
+        accountService.requestPasswordReset(
+                request.email(), ClientInfos.from(http).ipAddress());
     }
 
     @PostMapping("/reset-password")

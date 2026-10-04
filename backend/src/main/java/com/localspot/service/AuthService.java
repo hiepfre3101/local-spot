@@ -10,6 +10,8 @@ import com.localspot.exception.ErrorCode;
 import com.localspot.repository.RoleRepository;
 import com.localspot.repository.UserRepository;
 import com.localspot.security.JwtService;
+import com.localspot.security.RateLimitPolicy;
+import com.localspot.security.RateLimiter;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -35,6 +37,7 @@ public class AuthService {
     private final RefreshTokenService refreshTokens;
     private final ProfileService profiles;
     private final AccountService accounts;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
 
     /**
@@ -51,6 +54,7 @@ public class AuthService {
             RefreshTokenService refreshTokens,
             ProfileService profiles,
             AccountService accounts,
+            RateLimiter rateLimiter,
             Clock clock) {
         this.users = users;
         this.roles = roles;
@@ -59,6 +63,7 @@ public class AuthService {
         this.refreshTokens = refreshTokens;
         this.profiles = profiles;
         this.accounts = accounts;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
         this.dummyHash = passwordEncoder.encode("timing-equalizer-not-a-password");
     }
@@ -68,7 +73,9 @@ public class AuthService {
      * xác thực. Mail chỉ lên queue sau commit; gửi lỗi được retry ở consumer, đăng ký vẫn thành công (UC01 5a).
      */
     @Transactional
-    public void register(RegisterRequest request) {
+    public void register(RegisterRequest request, ClientInfo client) {
+        // Tính cả lần đăng ký thất bại (email trùng…) — chặn dò email đã đăng ký bằng đăng ký hàng loạt
+        rateLimiter.acquire(RateLimitPolicy.REGISTER, client.ipAddress());
         String email = normalizeEmail(request.email());
         if (users.existsByEmail(email)) {
             throw emailTaken();
@@ -88,15 +95,23 @@ public class AuthService {
         accounts.sendEmailVerification(user);
     }
 
+    /**
+     * Giới hạn U2 — 5 lần sai / 15 phút theo (email, IP): mỗi lần thử chiếm một lượt <b>trước</b> khi kiểm mật khẩu
+     * (nguyên tử trong Redis, nên 100 request song song cũng chỉ 5 lần được thử), mật khẩu đúng thì xóa bộ đếm → thực
+     * chất chỉ lần sai bị tính. Vượt ngưỡng → 429 kể cả khi mật khẩu đúng (không cho đoán tiếp để biết đã trúng).
+     */
     @Transactional
     public AuthResult login(LoginRequest request, ClientInfo client) {
-        User user = users.findWithRolesByEmail(normalizeEmail(request.email())).orElse(null);
+        String email = normalizeEmail(request.email());
+        rateLimiter.acquire(RateLimitPolicy.LOGIN, email, client.ipAddress());
+        User user = users.findWithRolesByEmail(email).orElse(null);
         String hash = user == null ? dummyHash : user.getPasswordHash();
         boolean passwordMatches = passwordEncoder.matches(request.password(), hash);
         if (user == null || !passwordMatches) {
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED, ErrorCode.INVALID_CREDENTIALS, "Email hoặc mật khẩu không đúng.");
         }
+        rateLimiter.reset(RateLimitPolicy.LOGIN, email, client.ipAddress());
         ensureNotLocked(user, clock.instant());
         return authenticated(user, refreshTokens.issueNewFamily(user, client));
     }

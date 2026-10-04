@@ -5,6 +5,8 @@ import com.localspot.entity.UserTokenType;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.UserRepository;
+import com.localspot.security.RateLimitPolicy;
+import com.localspot.security.RateLimiter;
 import java.time.Clock;
 import java.util.Locale;
 import org.springframework.http.HttpStatus;
@@ -21,6 +23,7 @@ public class AccountService {
     private final AccountMailService mails;
     private final RefreshTokenService refreshTokens;
     private final PasswordEncoder passwordEncoder;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
 
     public AccountService(
@@ -29,12 +32,14 @@ public class AccountService {
             AccountMailService mails,
             RefreshTokenService refreshTokens,
             PasswordEncoder passwordEncoder,
+            RateLimiter rateLimiter,
             Clock clock) {
         this.users = users;
         this.userTokens = userTokens;
         this.mails = mails;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
     }
 
@@ -56,6 +61,7 @@ public class AccountService {
     /** Đã xác thực thì không gửi gì (204 như thường — openapi chỉ có 204 / 429). */
     @Transactional
     public void resendEmailVerification(Long userId) {
+        rateLimiter.acquire(RateLimitPolicy.RESEND_VERIFICATION, userId.toString());
         User user = users.findById(userId).orElseThrow(AccountService::accountGone);
         if (!user.isEmailVerified()) {
             sendEmailVerification(user);
@@ -67,8 +73,12 @@ public class AccountService {
      * đã xóa mềm bị bỏ qua tự động ({@code @SQLRestriction}).
      */
     @Transactional
-    public void requestPasswordReset(String email) {
-        users.findByEmail(email.trim().toLowerCase(Locale.ROOT))
+    public void requestPasswordReset(String email, String clientIp) {
+        String normalized = email.trim().toLowerCase(Locale.ROOT);
+        // Giới hạn theo email áp dụng cả với email không tồn tại → 429 không tiết lộ email nào đã đăng ký
+        rateLimiter.acquire(RateLimitPolicy.FORGOT_PASSWORD_IP, clientIp);
+        rateLimiter.acquire(RateLimitPolicy.FORGOT_PASSWORD_EMAIL, normalized);
+        users.findByEmail(normalized)
                 .ifPresent(user -> mails.sendPasswordReset(user, userTokens.issue(user, UserTokenType.PASSWORD_RESET)));
     }
 

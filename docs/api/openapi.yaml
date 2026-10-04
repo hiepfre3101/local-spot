@@ -1131,7 +1131,10 @@ components:
       description: Xung đột trạng thái (trùng, đã xử lý...)
       content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
     TooManyRequests:
-      description: Vượt giới hạn tần suất
+      description: |
+        Vượt giới hạn tần suất (`code = TOO_MANY_REQUESTS`, NFR-10) — cửa sổ trượt *(chốt 2026-10-04)*: đăng nhập 5 lần sai /
+        15 phút theo (email, IP); đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác
+        thực 3 / giờ / tài khoản; viết review 5 / 24 giờ / tài khoản.
       headers:
         Retry-After: { schema: { type: integer }, description: Giây }
       content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }

@@ -39,6 +39,7 @@ final class Problems {
             case CONTENT_TOO_LARGE -> ErrorCode.PAYLOAD_TOO_LARGE;
             case UNSUPPORTED_MEDIA_TYPE -> ErrorCode.UNSUPPORTED_MEDIA_TYPE;
             case UNPROCESSABLE_CONTENT -> ErrorCode.VALIDATION_FAILED;
+            case TOO_MANY_REQUESTS -> ErrorCode.TOO_MANY_REQUESTS;
             case SERVICE_UNAVAILABLE -> ErrorCode.SERVICE_UNAVAILABLE;
             default -> status.is5xxServerError() ? ErrorCode.INTERNAL_ERROR : "HTTP_" + status.value();
         };
@@ -55,6 +56,7 @@ final class Problems {
             case CONTENT_TOO_LARGE -> "Dữ liệu gửi lên quá lớn.";
             case UNSUPPORTED_MEDIA_TYPE -> "Định dạng dữ liệu gửi lên không được hỗ trợ.";
             case UNPROCESSABLE_CONTENT -> "Dữ liệu gửi lên không hợp lệ.";
+            case TOO_MANY_REQUESTS -> "Bạn thao tác quá nhiều lần. Hãy thử lại sau.";
             case SERVICE_UNAVAILABLE -> "Dịch vụ tạm thời không khả dụng. Hãy thử lại sau.";
             default -> status.is5xxServerError() ? "Đã có lỗi xảy ra. Hãy thử lại sau." : status.getReasonPhrase();
         };

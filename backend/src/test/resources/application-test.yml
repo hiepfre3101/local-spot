@@ -21,3 +21,8 @@ localspot:
   security:
     jwt:
       secret: OLLUfFKO+AakIdej2snU9x/jBFZ0H+YxmNMVrQWKKjM=
+  rate-limit:
+    policies:
+      # Mọi request MockMvc đến từ 127.0.0.1 và các lớp test đăng ký hàng chục tài khoản → nới ngưỡng đăng ký theo IP.
+      # RateLimitFlowTests đặt lại đúng giá trị production (10) cho riêng nó.
+      register: { limit: 10000, window: 1h }
