@@ -1,10 +1,13 @@
 package com.localspot.controller;
 
 import com.localspot.dto.request.ChangePasswordRequest;
+import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.MeResponse;
+import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.RefreshTokenCookies;
 import com.localspot.service.AccountService;
+import com.localspot.service.PlaceService;
 import com.localspot.service.ProfileService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -15,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** {@code /api/v1/me} — openapi tag Me. Sửa hồ sơ, avatar, xóa tài khoản làm ở các mục sau. */
@@ -24,17 +28,32 @@ public class MeController {
 
     private final ProfileService profileService;
     private final AccountService accountService;
+    private final PlaceService placeService;
     private final RefreshTokenCookies cookies;
 
-    public MeController(ProfileService profileService, AccountService accountService, RefreshTokenCookies cookies) {
+    public MeController(
+            ProfileService profileService,
+            AccountService accountService,
+            PlaceService placeService,
+            RefreshTokenCookies cookies) {
         this.profileService = profileService;
         this.accountService = accountService;
+        this.placeService = placeService;
         this.cookies = cookies;
     }
 
     @GetMapping
     public MeResponse me(@AuthenticationPrincipal AuthenticatedUser user) {
         return profileService.me(user.id());
+    }
+
+    /** Địa điểm tôi đã đề xuất, mọi trạng thái — kèm trạng thái duyệt (UC11). */
+    @GetMapping("/places")
+    public CursorPage<PlaceSummaryResponse> myPlaces(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit) {
+        return placeService.proposedBy(user.id(), cursor, limit);
     }
 
     /**

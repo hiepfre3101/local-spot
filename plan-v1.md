@@ -389,7 +389,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Rate limiting cho API nhạy cảm (Redis) — cửa sổ trượt bằng Lua (không thêm thư viện); đăng nhập / đăng ký / quên mật khẩu / gửi lại mail xác thực; 429 + `Retry-After`; Redis sập → cho qua; giới hạn 5 review / 24 giờ đếm trong CSDL ở E
 
 ### E. Backend — nghiệp vụ
-- [ ] CRUD địa điểm + luồng duyệt
+- [x] CRUD địa điểm + luồng duyệt — đề xuất (multipart; phần `photos` ở E2), chi tiết theo người xem (lượt xem theo ngày, phân bố sao, `claimable`, `myReviewId`), danh sách lọc + keyset tổ hợp, `/me/places`, chủ sửa `/owner/places`, hàng chờ + duyệt / từ chối (chỉ PENDING, cấm tự duyệt). Không có xóa — ẩn qua xử lý báo cáo (UC29); `/places/duplicates` làm ở E4
 - [ ] Upload ảnh, resize, nén, lưu S3 qua queue
 - [ ] Danh mục phân cấp, tiện ích, giờ mở cửa
 - [ ] Truy vấn địa điểm theo bán kính (spatial index)
@@ -407,7 +407,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [ ] Phản hồi của chủ quán
 - [ ] Thông báo (bảng `notifications` + Spring WebSocket/STOMP)
 - [ ] API quản trị và thống kê
-- [ ] Nhật ký thao tác quản trị (FR-42): `@Audited` + Spring AOP aspect ghi `activity_logs` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho 4 endpoint `/admin/users` của D5
+- [x] Nhật ký thao tác quản trị (FR-42): `@AuditedAction` + Spring AOP aspect ghi `activity_log` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho các endpoint ghi `/admin/users` của D5. Ghi trong cùng transaction với thao tác (`TransactionConfig` đặt thứ tự advice); đã gắn `PLACE_APPROVE` / `PLACE_REJECT`, `USER_LOCK` / `USER_UNLOCK` / `USER_ASSIGN_ROLES` (`GET` không ghi). API đọc `/admin/activity-log` làm cùng "API quản trị"
 
 ### F. Frontend
 - [ ] Layout, router, navigation guard
