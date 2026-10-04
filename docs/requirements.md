@@ -158,7 +158,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 |---|---|---|
 | `m` — ngưỡng review trong Bayesian | 10 | Đã chốt |
 | `C` — trung bình sao toàn hệ thống | Tính lại mỗi lần tính lại rating (cập nhật điểm địa điểm liên quan) + job đêm 03:00 tính lại `bayesian_score` của mọi địa điểm với `C` mới | Đã chốt (D4) |
-| N — số review tối đa / ngày / tài khoản | 5 | Đã chốt |
+| N — số review tối đa / ngày / tài khoản | 5 — đếm trong bảng `reviews` (24 giờ trượt), không qua Redis: vẫn có hiệu lực khi Redis sập | Đã chốt (cách đếm 2026-10-04) |
 | Công thức trust score | Xem mục 5.1 | Đã chốt |
 | Ngưỡng trust score để bỏ qua hàng chờ duyệt | 30 — review từ trust ≥ 30 đăng ngay; **không** đưa mọi review vào hàng chờ (xác nhận lại 2026-09-29, khi đối chiếu design system) | Đã chốt |
 | Cảnh báo IP | ≥ 3 review cùng địa điểm từ cùng /24 trong 24 h | Đã chốt |
@@ -167,6 +167,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Mật khẩu | ≥ 8 ký tự, có chữ và số | Đã chốt (U1) |
 | Hạn link xác thực email / đặt lại mật khẩu | 24 h / 30 phút | Đã chốt (U1) |
 | Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |
+| Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản. Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04) |
 | Review từ dải IP bị cảnh báo | Bắt buộc vào hàng chờ + gắn cờ "nghi ngờ IP" | Đã chốt (U3) |
 | Độ dài tối thiểu review | 20 ký tự | Đã chốt (U4) |
 | Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |

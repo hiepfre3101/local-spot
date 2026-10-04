@@ -1,0 +1,91 @@
+@import 'tailwindcss';
+@import './tokens.css';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/*
+ * Theme Tailwind = design system. Xoá bảng mặc định (`initial`) để chỉ còn token của LocalSpot:
+ * viết `bg-blue-500`, `shadow-md` hay `text-sm` sẽ không sinh CSS → lệch design system lộ ngay khi review.
+ * Khoảng cách giữ mặc định của Tailwind: lưới 4px trùng space-1…space-16 (p-1 = 4px, p-4 = 16px, p-16 = 64px).
+ */
+@theme inline {
+  --color-*: initial;
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-olive: var(--olive);
+  --color-on-olive: var(--on-olive);
+  --color-sun: var(--sun);
+  --color-coral: var(--coral);
+  --color-on-accent: var(--on-accent);
+  --color-sea: var(--sea);
+  --color-sand: var(--sand);
+  --color-focus: var(--focus);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
+@theme {
+  --font-*: initial;
+  --font-sans: 'Be Vietnam Pro', system-ui, sans-serif;
+
+  /* Bo góc: công khai md/lg/pill; quản trị xs cho control, `rounded-none` cho panel/bảng */
+  --radius-*: initial;
+  --radius-xs: 2px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  /* Không đổ bóng ở cả hai bề mặt */
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+
+  /* Kiểu chữ: text-wordmark … text-metric (cỡ + dòng + đậm + giãn chữ trong một lớp) */
+  --text-*: initial;
+  --text-wordmark: 120px;
+  --text-wordmark--line-height: 0.9;
+  --text-wordmark--font-weight: 800;
+  --text-wordmark--letter-spacing: -0.02em;
+  --text-display: 48px;
+  --text-display--line-height: 0.98;
+  --text-display--font-weight: 800;
+  --text-display--letter-spacing: -0.01em;
+  --text-heading: 28px;
+  --text-heading--line-height: 1.1;
+  --text-heading--font-weight: 700;
+  --text-title: 18px;
+  --text-title--line-height: 24px;
+  --text-title--font-weight: 600;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-body--font-weight: 400;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+  --text-caption--font-weight: 400;
+  --text-label: 12px;
+  --text-label--line-height: 16px;
+  --text-label--font-weight: 600;
+  --text-label--letter-spacing: 0.04em;
+  --text-metric: 30px;
+  --text-metric--line-height: 36px;
+  --text-metric--font-weight: 700;
+  --text-metric--letter-spacing: -0.01em;
+}
+
+@layer base {
+  body {
+    @apply bg-surface font-sans text-body text-ink antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+}

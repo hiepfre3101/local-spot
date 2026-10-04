@@ -105,14 +105,14 @@ Supervisor duyệt toàn bộ P01–P12 → chấp nhận **phương án đề x
 | P11 | Danh mục con | Có | FR-39, `categories.parent_id` |
 | P12 | Bán kính, GPS kém, tần suất | 200 m; từ chối khi accuracy > 100 m; 1 lần / địa điểm / ngày | U5 |
 
-### Còn mở — không ảnh hưởng sitemap, cần chốt trước khi làm module tương ứng
+### Câu hỏi mở — không ảnh hưởng sitemap, cần chốt trước khi làm module tương ứng (✅ = đã chốt)
 
 | # | Màn | Câu hỏi | Ảnh hưởng |
 |---|---|---|---|
 | O1 | P03 | Bình luận mở tại chỗ hay trang riêng của đánh giá | Nếu trang riêng → thêm route `/reviews/:id` |
-| O2 | P04 | Sửa đánh giá đã đăng khi tác giả trust < 30: bản cũ vẫn hiện trong lúc bản sửa chờ duyệt? | **Schema**: `reviews` hiện chỉ có một bản / một trạng thái — giữ bản cũ cần bảng lưu bản sửa chờ duyệt |
+| O2 ✅ | P04 | Sửa đánh giá đã đăng khi tác giả trust < 30: bản cũ vẫn hiện trong lúc bản sửa chờ duyệt? | **Chốt 2026-09-30**: không giữ bản cũ — đánh giá về `PENDING` cả bài tới khi duyệt lại; `reviews` giữ một trạng thái, không thêm bảng |
 | O3 | P06, P08 | Bộ huy hiệu và công thức điểm đóng góp chính thức | Seed `badges`, listener `contribution_points` |
 | O4 | P07 | Gửi email kèm thông báo? Gom thông báo cùng loại? Cần trang "Tất cả thông báo"? | FR-27 chỉ yêu cầu trong ứng dụng; trang riêng → thêm route `/notifications` |
 | O5 | P09 | Chủ cập nhật thông tin (UC24) có phải duyệt lại? | Luồng UC24, hàng chờ |
-| O6 | P10 | Gán trực tiếp vai trò "Chủ địa điểm"? Khoá có lý do / thời hạn? | FR-38, FR-40, schema khoá tài khoản |
+| O6 ✅ | P10 | Gán trực tiếp vai trò "Chủ địa điểm"? Khoá có lý do / thời hạn? | **Chốt 2026-10-03**: không gán / gỡ OWNER tại P10 (chỉ qua duyệt yêu cầu sở hữu UC30); mọi tài khoản giữ USER; admin không tự khóa / tự gỡ ADMIN. Khoá bắt buộc thời hạn + lý do (openapi `POST /admin/users/{id}/lock`) |
 | O7 | P11 | Tiện ích gắn theo danh mục hay dùng chung | Schema (hiện dùng chung: `amenities` không có `category_id`) |

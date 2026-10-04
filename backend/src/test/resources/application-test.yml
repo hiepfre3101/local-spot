@@ -1,0 +1,28 @@
+# Profile test (Testcontainers cung cấp datasource / RabbitMQ / Redis qua @ServiceConnection)
+spring:
+  mail:
+    host: localhost # JavaMailSender được tạo; test mail thay bằng mock (@MockitoBean)
+    port: 3025
+  rabbitmq:
+    listener:
+      simple:
+        # Consumer chỉ chạy ở test bật riêng (MailFlowTests) — test khác không gửi mail thật
+        auto-startup: false
+        retry:
+          initial-interval: 100ms
+          max-interval: 200ms
+
+management:
+  health:
+    mail:
+      enabled: false # test không có SMTP thật; MailFlowTests thay JavaMailSender bằng mock
+
+localspot:
+  security:
+    jwt:
+      secret: OLLUfFKO+AakIdej2snU9x/jBFZ0H+YxmNMVrQWKKjM=
+  rate-limit:
+    policies:
+      # Mọi request MockMvc đến từ 127.0.0.1 và các lớp test đăng ký hàng chục tài khoản → nới ngưỡng đăng ký theo IP.
+      # RateLimitFlowTests đặt lại đúng giá trị production (10) cho riêng nó.
+      register: { limit: 10000, window: 1h }
