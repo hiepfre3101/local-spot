@@ -69,6 +69,14 @@ public class SecurityConfig {
                         // Đăng ký, đăng nhập, refresh, đăng xuất, xác thực email, quên / đặt lại mật khẩu
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**")
                         .permitAll()
+                        // Kiểm tra nghi trùng khi đề xuất (U7) cần đăng nhập — khai báo trước luật công khai
+                        // /places/{slug} bên dưới, vì "duplicates" cũng khớp mẫu một đoạn {slug}
+                        .requestMatchers(HttpMethod.GET, "/api/v1/places/duplicates")
+                        .authenticated()
+                        // Danh sách + chi tiết địa điểm (FR-10, FR-13) công khai; chi tiết địa điểm chưa duyệt do
+                        // service tự giới hạn người xem
+                        .requestMatchers(HttpMethod.GET, "/api/v1/places", "/api/v1/places/*")
+                        .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error")
                         .permitAll()
                         .anyRequest()

@@ -1,5 +1,6 @@
 package com.localspot.service;
 
+import com.localspot.audit.AuditedAction;
 import com.localspot.dto.response.AdminUserResponse;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.entity.Role;
@@ -35,7 +36,8 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * Gỡ role / khóa có hiệu lực ngay ở request kế tiếp vì quyền được nạp từ CSDL mỗi request
- * ({@code UserJwtAuthenticationConverter}) — không cần chờ access token hết hạn.
+ * ({@code UserJwtAuthenticationConverter}) — không cần chờ access token hết hạn. Mọi thao tác ghi được ghi nhật ký
+ * quản trị qua {@link AuditedAction} (FR-42).
  */
 @Service
 public class AdminUserService {
@@ -91,6 +93,11 @@ public class AdminUserService {
 
     /** Khóa tới {@code until} + thu hồi mọi refresh token; access token đang giữ bị chặn ngay ở request kế tiếp. */
     @Transactional
+    @AuditedAction(
+            action = "USER_LOCK",
+            targetType = "USER",
+            targetId = "#userId",
+            metadata = "{until: #until.toString(), reason: #reason.strip()}")
     public void lock(Long actorId, Long userId, Instant until, String reason) {
         if (actorId.equals(userId)) {
             throw new ApiException(
@@ -105,6 +112,7 @@ public class AdminUserService {
 
     /** Idempotent: mở khóa tài khoản không bị khóa vẫn 204. */
     @Transactional
+    @AuditedAction(action = "USER_UNLOCK", targetType = "USER", targetId = "#userId")
     public void unlock(Long userId) {
         User user = users.findById(userId).orElseThrow(AdminUserService::userNotFound);
         user.setLockedUntil(null);
@@ -113,7 +121,12 @@ public class AdminUserService {
 
     /** Thay toàn bộ danh sách role (PUT). Xem luật ở javadoc lớp. */
     @Transactional
-    public void replaceRoles(Long actorId, Long userId, List<String> requested) {
+    @AuditedAction(
+            action = "USER_ASSIGN_ROLES",
+            targetType = "USER",
+            targetId = "#userId",
+            metadata = "{before: #result.before(), after: #result.after()}")
+    public RoleChange replaceRoles(Long actorId, Long userId, List<String> requested) {
         Set<String> names = validateRoleNames(requested);
         User user = users.findWithRolesById(userId).orElseThrow(AdminUserService::userNotFound);
         Set<String> current = new HashSet<>();
@@ -134,6 +147,16 @@ public class AdminUserService {
 
         user.getRoles().clear();
         user.getRoles().addAll(roles.findByNameIn(names));
+        return new RoleChange(List.copyOf(new TreeSet<>(current)), List.copyOf(names));
+    }
+
+    /** Danh sách role trước / sau khi thay (sắp xếp tên) — nhật ký quản trị lưu cả hai (database.md §3, FR-42). */
+    public record RoleChange(List<String> before, List<String> after) {
+
+        public RoleChange {
+            before = List.copyOf(before);
+            after = List.copyOf(after);
+        }
     }
 
     private static Set<String> validateRoleNames(List<String> requested) {
