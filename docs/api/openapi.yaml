@@ -1251,6 +1251,7 @@ components:
             bio: { type: [string, 'null'] }
             emailVerified: { type: boolean }
             roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            permissions: { type: array, items: { type: string }, description: 'Gộp từ các role, sắp theo tên — frontend ẩn / chặn route theo permission (2026-10-05)' }
             trustScore: { type: integer, minimum: 0, maximum: 100, description: 'Chỉ trả cho chính chủ — giải thích vì sao review vào hàng chờ' }
             ownedPlaceIds: { type: array, items: { type: integer, format: int64 } }
     UpdateProfileRequest:
@@ -1664,6 +1665,7 @@ components:
         - type: object
           properties:
             email: { type: string }
+            emailVerified: { type: boolean, description: 'Badge "● Chưa xác thực" ở P10 (2026-10-05)' }
             roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
             trustScore: { type: integer }
             lockedUntil: { type: [string, 'null'], format: date-time }

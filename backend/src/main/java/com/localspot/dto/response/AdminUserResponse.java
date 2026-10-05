@@ -9,6 +9,7 @@ public record AdminUserResponse(
         String displayName,
         String avatarUrl,
         String email,
+        boolean emailVerified,
         List<String> roles,
         int trustScore,
         Instant lockedUntil,

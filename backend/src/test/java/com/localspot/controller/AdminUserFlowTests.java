@@ -129,6 +129,7 @@ class AdminUserFlowTests {
                 .andExpect(jsonPath("$.items[0].roles[0]").value("MODERATOR"))
                 .andExpect(jsonPath("$.items[0].roles[1]").value("USER"))
                 .andExpect(jsonPath("$.items[0].email").value(newest.email()))
+                .andExpect(jsonPath("$.items[0].emailVerified").value(false))
                 .andExpect(jsonPath("$.items[0].trustScore").isNumber())
                 .andExpect(jsonPath("$.items[0].lockedUntil").isEmpty())
                 .andExpect(jsonPath("$.items[1].id").value(middle.id()))

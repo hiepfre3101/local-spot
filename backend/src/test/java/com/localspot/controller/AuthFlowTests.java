@@ -68,6 +68,10 @@ class AuthFlowTests {
                 .andExpect(jsonPath("$.expiresIn").value(900))
                 .andExpect(jsonPath("$.user.email").value(email))
                 .andExpect(jsonPath("$.user.roles[0]").value("USER"))
+                // Quyền gộp từ role cho frontend — thành viên chỉ có 4 quyền của USER (V2)
+                .andExpect(jsonPath("$.user.permissions")
+                        .value(org.hamcrest.Matchers.contains(
+                                "comment:delete-own", "review:create", "review:delete-own", "review:update-own")))
                 .andExpect(jsonPath("$.user.emailVerified").value(false))
                 // Chưa xác thực email, tài khoản 0 ngày: không có base → trust 0
                 .andExpect(jsonPath("$.user.trustScore").value(0))
