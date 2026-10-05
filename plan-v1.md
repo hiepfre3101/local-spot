@@ -44,7 +44,7 @@
 | State | Pinia | Store: auth, places, filters, notifications |
 | Router | Vue Router 4 | Lazy load route, navigation guard |
 | UI | TailwindCSS, theme lấy từ token của `docs/design-system/` | Component Vue tự viết theo design system (phẳng, không bóng, bo góc theo bề mặt) — **không dùng shadcn-vue/PrimeVue** *(chốt 2026-09-29)* |
-| Form | VeeValidate + Zod | Validate đồng bộ với rule backend |
+| Form | VeeValidate + Zod | Validate đồng bộ với rule backend. *(2026-10-05: Zod 3 + adapter chính thức `@vee-validate/zod` — VeeValidate 4.15 chưa hỗ trợ Zod 4)* |
 | HTTP | Axios + interceptor | Tự gắn token, xử lý 401 |
 | Data fetching | TanStack Query (Vue Query) | Cache, infinite scroll cho danh sách review |
 | Bản đồ | Leaflet + OpenStreetMap | Miễn phí, không cần thẻ tín dụng như Google Maps |
@@ -410,9 +410,10 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Nhật ký thao tác quản trị (FR-42): `@AuditedAction` + Spring AOP aspect ghi `activity_log` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho các endpoint ghi `/admin/users` của D5. Ghi trong cùng transaction với thao tác (`TransactionConfig` đặt thứ tự advice); đã gắn `PLACE_APPROVE` / `PLACE_REJECT`, `USER_LOCK` / `USER_UNLOCK` / `USER_ASSIGN_ROLES` (`GET` không ghi). API đọc `/admin/activity-log` làm cùng "API quản trị"
 
 ### F. Frontend
-- [ ] Layout, router, navigation guard
-- [ ] Axios client, interceptor, xử lý refresh/401
-- [ ] Pinia store: auth, place, filter, notification
+- [x] Layout, router, navigation guard — 3 layout theo sitemap §1; guard theo permission (`MeResponse.permissions`), `?redirect=` chỉ nhận đường dẫn nội bộ; header / sidebar chỉ hiện mục đã có route
+- [x] Axios client, interceptor, xử lý refresh/401 — access token chỉ trong bộ nhớ; 401 → làm mới một lần cho mọi request đồng thời, khóa giữa các tab bằng Web Locks (refresh token xoay vòng — U2); lỗi chuẩn hoá từ RFC 7807
+- [ ] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); place / filter / notification làm cùng module tương ứng
+- [x] Màn tài khoản P01 (UC01–UC05) + Cài đặt — Mật khẩu (UC06) + quản trị Người dùng & vai trò P10 (UC31) — làm cùng nền tảng F, dùng API đã có của checklist D
 - [ ] Trang chủ: nổi bật, danh mục, mới nhất
 - [ ] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll
 - [ ] Bản đồ Leaflet, marker cluster, "gần tôi"

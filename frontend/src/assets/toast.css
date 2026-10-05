@@ -1,0 +1,39 @@
+/*
+ * vue-toastification theo design system: nền surface-raised, viền 1px, bo radius-md, không bóng, không màu nền
+ * trạng thái. Trạng thái nằm ở ký hiệu đầu câu (✓ / ✕ / ●, xem plugins/toast.ts) + vạch màu bên trái — không chỉ bằng
+ * màu. Bộ chọn hai lớp để thắng CSS gốc của thư viện bất kể thứ tự nạp.
+ */
+@import 'vue-toastification/dist/index.css';
+
+.Vue-Toastification__container .Vue-Toastification__toast {
+  min-height: 0;
+  max-width: 420px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-left-width: 4px;
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: none;
+  font: 500 14px/20px var(--font-sans);
+}
+.Vue-Toastification__container .Vue-Toastification__toast--success {
+  border-left-color: var(--success);
+}
+.Vue-Toastification__container .Vue-Toastification__toast--error {
+  border-left-color: var(--danger);
+}
+.Vue-Toastification__container .Vue-Toastification__toast--warning {
+  border-left-color: var(--warning);
+}
+.Vue-Toastification__container .Vue-Toastification__toast--info {
+  border-left-color: var(--sea);
+}
+.Vue-Toastification__container .Vue-Toastification__toast-body {
+  font: inherit;
+}
+.Vue-Toastification__container .Vue-Toastification__close-button {
+  color: var(--ink-muted);
+  opacity: 1;
+  font-size: 20px;
+}

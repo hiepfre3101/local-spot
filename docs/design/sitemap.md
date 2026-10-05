@@ -113,6 +113,6 @@ Supervisor duyệt toàn bộ P01–P12 → chấp nhận **phương án đề x
 | O2 ✅ | P04 | Sửa đánh giá đã đăng khi tác giả trust < 30: bản cũ vẫn hiện trong lúc bản sửa chờ duyệt? | **Chốt 2026-09-30**: không giữ bản cũ — đánh giá về `PENDING` cả bài tới khi duyệt lại; `reviews` giữ một trạng thái, không thêm bảng |
 | O3 | P06, P08 | Bộ huy hiệu và công thức điểm đóng góp chính thức | Seed `badges`, listener `contribution_points` |
 | O4 | P07 | Gửi email kèm thông báo? Gom thông báo cùng loại? Cần trang "Tất cả thông báo"? | FR-27 chỉ yêu cầu trong ứng dụng; trang riêng → thêm route `/notifications` |
-| O5 | P09 | Chủ cập nhật thông tin (UC24) có phải duyệt lại? | Luồng UC24, hàng chờ |
+| O5 ✅ | P09 | Chủ cập nhật thông tin (UC24) có phải duyệt lại? | **Chốt 2026-10-05**: không — áp dụng ngay (`PATCH /owner/places/{id}`, như E1). Chủ đã qua xác minh sở hữu (UC30); tên, vị trí, danh mục vốn không sửa được; thông tin sai → người dùng báo cáo WRONG_INFO |
 | O6 ✅ | P10 | Gán trực tiếp vai trò "Chủ địa điểm"? Khoá có lý do / thời hạn? | **Chốt 2026-10-03**: không gán / gỡ OWNER tại P10 (chỉ qua duyệt yêu cầu sở hữu UC30); mọi tài khoản giữ USER; admin không tự khóa / tự gỡ ADMIN. Khoá bắt buộc thời hạn + lý do (openapi `POST /admin/users/{id}/lock`) |
 | O7 | P11 | Tiện ích gắn theo danh mục hay dùng chung | Schema (hiện dùng chung: `amenities` không có `category_id`) |

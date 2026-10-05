@@ -1,6 +1,8 @@
-import { describe, it, expect } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
+import { flushPromises, mount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
+import { describe, expect, it } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
 import App from '../App.vue'
 import HomePage from '../pages/HomePage.vue'
@@ -14,7 +16,11 @@ describe('App', () => {
     router.push('/')
     await router.isReady()
 
-    const wrapper = mount(App, { global: { plugins: [router] } })
+    const wrapper = mount(App, {
+      global: {
+        plugins: [router, createPinia(), [VueQueryPlugin, { queryClient: new QueryClient() }]],
+      },
+    })
     await flushPromises()
 
     expect(wrapper.get('h1').text()).toBe('LocalSpot')

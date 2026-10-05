@@ -17,9 +17,16 @@
     "format:check": "prettier --check src/"
   },
   "dependencies": {
+    "@tanstack/vue-query": "^5.104.1",
+    "@vee-validate/zod": "^4.15.1",
+    "axios": "^1.20.0",
+    "dayjs": "^1.11.23",
     "pinia": "^4.0.3",
+    "vee-validate": "^4.15.1",
     "vue": "^3.5.42",
-    "vue-router": "^5.3.1"
+    "vue-router": "^5.3.1",
+    "vue-toastification": "^2.0.0-rc.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
