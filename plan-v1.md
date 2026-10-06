@@ -391,7 +391,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 ### E. Backend — nghiệp vụ
 - [x] CRUD địa điểm + luồng duyệt — đề xuất (multipart; phần `photos` ở E2), chi tiết theo người xem (lượt xem theo ngày, phân bố sao, `claimable`, `myReviewId`), danh sách lọc + keyset tổ hợp, `/me/places`, chủ sửa `/owner/places`, hàng chờ + duyệt / từ chối (chỉ PENDING, cấm tự duyệt). Không có xóa — ẩn qua xử lý báo cáo (UC29); `/places/duplicates` làm ở E4
 - [x] Upload ảnh, resize, nén, lưu S3 qua queue — ảnh địa điểm: kèm đề xuất + `/owner/places/{id}/photos` (thêm / xóa); kiểm tra chữ ký file + đuôi + 5 MB + 40 MP; ảnh gốc `incoming/` (riêng tư) → queue `photo.process` (retry → DLQ) → 3 bản JPEG thumb/medium/large, không EXIF; bucket public-read, giới hạn 30 ảnh/địa điểm (chốt 2026-10-06). Ảnh review dùng lại pipeline ở mục "Ảnh đính kèm review"
-- [ ] Danh mục phân cấp, tiện ích, giờ mở cửa
+- [x] Danh mục phân cấp, tiện ích, giờ mở cửa — `GET /categories` (cây ≤ 2 cấp), `GET /amenities` (dùng chung — O7) có Spring Cache + Redis, xóa sau commit; quản trị `/admin/categories`, `/admin/amenities` (tạo / sửa / xóa khi không còn dùng, ghi nhật ký FR-42). Giờ mở cửa đã làm ở E1 (đề xuất, chủ sửa, chi tiết). Chốt 2026-10-06
 - [ ] Truy vấn địa điểm theo bán kính (spatial index)
 - [ ] Tích hợp Meilisearch, cấu hình synonym tiếng Việt
 - [ ] CRUD đánh giá + ràng buộc mỗi người một review

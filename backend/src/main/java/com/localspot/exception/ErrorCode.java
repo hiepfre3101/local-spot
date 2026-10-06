@@ -46,6 +46,17 @@ public final class ErrorCode {
     public static final String INVALID_IMAGE = "INVALID_IMAGE";
     /** 422: quá số ảnh mỗi request (10) hoặc tổng ảnh của địa điểm (30 — chốt 2026-10-06). */
     public static final String PHOTO_LIMIT_EXCEEDED = "PHOTO_LIMIT_EXCEEDED";
+
+    public static final String CATEGORY_NOT_FOUND = "CATEGORY_NOT_FOUND";
+    public static final String AMENITY_NOT_FOUND = "AMENITY_NOT_FOUND";
+    /** 409 theo trường {@code slug}: slug danh mục / tiện ích đã có. */
+    public static final String SLUG_TAKEN = "SLUG_TAKEN";
+    /** 422 trường {@code parentId}: cây danh mục tối đa 2 cấp (chốt 2026-10-06). */
+    public static final String CATEGORY_DEPTH_EXCEEDED = "CATEGORY_DEPTH_EXCEEDED";
+    /** 409: danh mục còn danh mục con / địa điểm — không xóa kéo theo dữ liệu. */
+    public static final String CATEGORY_IN_USE = "CATEGORY_IN_USE";
+    /** 409: tiện ích đang gắn với địa điểm. */
+    public static final String AMENITY_IN_USE = "AMENITY_IN_USE";
     /** 409: quyết định trên địa điểm không còn PENDING — đã được duyệt / từ chối (chốt 2026-10-04). */
     public static final String PLACE_ALREADY_MODERATED = "PLACE_ALREADY_MODERATED";
     /** Admin tự khóa mình / tự gỡ ADMIN của mình (chốt 2026-10-03); kiểm duyệt viên tự duyệt đề xuất của mình (2026-10-04). */

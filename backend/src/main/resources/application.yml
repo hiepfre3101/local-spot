@@ -31,6 +31,8 @@ spring:
       max-request-size: 55MB
   mail:
     default-encoding: UTF-8
+  cache:
+    type: redis # Spring Cache (plan §2) — danh sách cache và kiểu dữ liệu khai báo ở CacheConfig
   data:
     redis:
       # Redis chỉ phụ trợ (rate limit cho qua khi Redis sập — D8): lệnh treo không được kéo request theo

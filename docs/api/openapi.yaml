@@ -347,6 +347,9 @@ paths:
     get:
       tags: [Catalog]
       summary: Cây danh mục (cache Redis)
+      description: |
+        Tối đa 2 cấp (chốt 2026-10-06): danh mục gốc kèm `children`, danh mục con có `children` rỗng. Sắp theo `sortOrder`
+        rồi `id`. Cache Redis (TTL 1 giờ), xóa ngay sau khi quản trị viên ghi *(E3)*.
       security: []
       responses:
         '200':
@@ -358,6 +361,7 @@ paths:
     get:
       tags: [Catalog]
       summary: Danh sách tiện ích (cache Redis)
+      description: Dùng chung cho mọi danh mục (O7, chốt 2026-10-06), sắp theo `id`. Cache như `/categories`.
       security: []
       responses:
         '200':
@@ -1053,6 +1057,8 @@ paths:
             schema: { $ref: '#/components/schemas/CategoryRequest' }
       responses:
         '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+        '409': { description: '`SLUG_TAKEN` (trường `slug`)' }
+        '422': { description: 'Validate / cha không tồn tại (`VALIDATION_FAILED`), cha không phải gốc (`CATEGORY_DEPTH_EXCEEDED`, trường `parentId`)' }
   /admin/categories/{categoryId}:
     put:
       tags: [Admin]
@@ -1066,6 +1072,9 @@ paths:
             schema: { $ref: '#/components/schemas/CategoryRequest' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+        '404': { description: '`CATEGORY_NOT_FOUND`' }
+        '409': { description: '`SLUG_TAKEN`' }
+        '422': { description: '`CATEGORY_DEPTH_EXCEEDED`: cha không phải gốc / danh mục đang có con được gắn làm con / tự làm cha của mình' }
     delete:
       tags: [Admin]
       summary: Xóa danh mục — chỉ khi không còn địa điểm / danh mục con (không xóa dữ liệu kéo theo)
@@ -1073,7 +1082,8 @@ paths:
       parameters: [ { name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } } ]
       responses:
         '204': { description: OK }
-        '409': { description: Danh mục đang được dùng }
+        '404': { description: '`CATEGORY_NOT_FOUND`' }
+        '409': { description: '`CATEGORY_IN_USE` — còn danh mục con hoặc địa điểm (kể cả địa điểm đã xóa mềm)' }
   /admin/amenities:
     post:
       tags: [Admin]
@@ -1086,6 +1096,7 @@ paths:
             schema: { $ref: '#/components/schemas/AmenityRequest' }
       responses:
         '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+        '409': { description: '`SLUG_TAKEN` (trường `slug`)' }
   /admin/amenities/{amenityId}:
     put:
       tags: [Admin]
@@ -1099,6 +1110,8 @@ paths:
             schema: { $ref: '#/components/schemas/AmenityRequest' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+        '404': { description: '`AMENITY_NOT_FOUND`' }
+        '409': { description: '`SLUG_TAKEN`' }
     delete:
       tags: [Admin]
       summary: Xóa tiện ích — chỉ khi không địa điểm nào dùng
@@ -1106,7 +1119,8 @@ paths:
       parameters: [ { name: amenityId, in: path, required: true, schema: { type: integer, format: int64 } } ]
       responses:
         '204': { description: OK }
-        '409': { description: Tiện ích đang được dùng }
+        '404': { description: '`AMENITY_NOT_FOUND`' }
+        '409': { description: '`AMENITY_IN_USE` — đang gắn với địa điểm (kể cả đã xóa mềm). Bắt buộc chặn ở API: khóa ngoại `place_amenity` là CASCADE' }
   /admin/dashboard:
     get:
       tags: [Admin]
@@ -1319,12 +1333,13 @@ components:
         children: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
     CategoryRequest:
       type: object
+      description: PUT thay toàn bộ — `parentId` rỗng = danh mục gốc, `icon` rỗng = bỏ icon, `sortOrder` rỗng = 0.
       required: [name, slug]
       properties:
         parentId: { type: [integer, 'null'], format: int64 }
         name: { type: string, maxLength: 100 }
         slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
-        icon: { type: string }
+        icon: { type: string, maxLength: 100 }
         sortOrder: { type: integer }
     Amenity:
       type: object
@@ -1339,7 +1354,7 @@ components:
       properties:
         name: { type: string, maxLength: 100 }
         slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
-        icon: { type: string }
+        icon: { type: string, maxLength: 100 }
     OpeningHour:
       type: object
       required: [dayOfWeek, openTime, closeTime]
