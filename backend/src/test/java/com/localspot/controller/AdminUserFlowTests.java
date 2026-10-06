@@ -14,6 +14,7 @@ import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -128,6 +129,7 @@ class AdminUserFlowTests {
                 .andExpect(jsonPath("$.items[0].roles[0]").value("MODERATOR"))
                 .andExpect(jsonPath("$.items[0].roles[1]").value("USER"))
                 .andExpect(jsonPath("$.items[0].email").value(newest.email()))
+                .andExpect(jsonPath("$.items[0].emailVerified").value(false))
                 .andExpect(jsonPath("$.items[0].trustScore").isNumber())
                 .andExpect(jsonPath("$.items[0].lockedUntil").isEmpty())
                 .andExpect(jsonPath("$.items[1].id").value(middle.id()))
@@ -221,6 +223,36 @@ class AdminUserFlowTests {
         perform(admin, delete(USERS + "/" + target.id() + "/lock")).andExpect(status().isNoContent());
         perform(admin, delete(USERS + "/" + target.id() + "/lock")).andExpect(status().isNoContent());
         login(target.email()).andExpect(status().isOk());
+    }
+
+    @Test
+    void adminActionsAreWrittenToActivityLog() throws Exception {
+        // FR-42: mọi thao tác ghi của admin vào activity_log; thao tác bị từ chối thì không
+        Account admin = account("USER", "ADMIN");
+        Account target = account("USER");
+
+        perform(admin, lockRequest(target.id(), Instant.now().plus(1, ChronoUnit.DAYS)))
+                .andExpect(status().isNoContent());
+        perform(admin, delete(USERS + "/" + target.id() + "/lock")).andExpect(status().isNoContent());
+        perform(admin, rolesRequest(target.id(), "USER", "MODERATOR")).andExpect(status().isNoContent());
+        perform(admin, rolesRequest(target.id(), "MODERATOR")).andExpect(status().isUnprocessableContent());
+
+        List<Map<String, Object>> logs = jdbc.queryForList(
+                "SELECT actor_id, action, metadata, ip_address FROM activity_log"
+                        + " WHERE target_type = 'USER' AND target_id = ? ORDER BY id",
+                target.id());
+        assertThat(logs)
+                .extracting(row -> row.get("action"))
+                .containsExactly("USER_LOCK", "USER_UNLOCK", "USER_ASSIGN_ROLES");
+        assertThat(logs).allSatisfy(row -> {
+            assertThat(((Number) row.get("actor_id")).longValue()).isEqualTo(admin.id());
+            assertThat(row.get("ip_address")).isEqualTo("127.0.0.1");
+        });
+        assertThat(JsonPath.<String>read((String) logs.get(0).get("metadata"), "$.reason"))
+                .isEqualTo("Spam đánh giá");
+        String roles = (String) logs.get(2).get("metadata");
+        assertThat(JsonPath.<List<String>>read(roles, "$.before")).containsExactly("USER");
+        assertThat(JsonPath.<List<String>>read(roles, "$.after")).containsExactly("MODERATOR", "USER");
     }
 
     @Test

@@ -41,7 +41,9 @@ public final class ErrorCode {
     public static final String PLACE_NOT_FOUND = "PLACE_NOT_FOUND";
     public static final String REVIEW_NOT_FOUND = "REVIEW_NOT_FOUND";
     public static final String COMMENT_NOT_FOUND = "COMMENT_NOT_FOUND";
-    /** Admin tự khóa mình / tự gỡ ADMIN của mình (chốt 2026-10-03). */
+    /** 409: quyết định trên địa điểm không còn PENDING — đã được duyệt / từ chối (chốt 2026-10-04). */
+    public static final String PLACE_ALREADY_MODERATED = "PLACE_ALREADY_MODERATED";
+    /** Admin tự khóa mình / tự gỡ ADMIN của mình (chốt 2026-10-03); kiểm duyệt viên tự duyệt đề xuất của mình (2026-10-04). */
     public static final String SELF_ACTION_FORBIDDEN = "SELF_ACTION_FORBIDDEN";
     /** Mọi tài khoản phải giữ role USER (chốt 2026-10-03). */
     public static final String ROLE_USER_REQUIRED = "ROLE_USER_REQUIRED";

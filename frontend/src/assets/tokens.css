@@ -45,3 +45,18 @@
   --warning: #e2b54a;
   --danger: #f28b82;
 }
+
+/*
+ * Khoảng cách — chép từ design system (lưới 4px). Lớp thành phần (components.css) dùng var(--space-*); trong template
+ * dùng tiện ích Tailwind tương đương (p-4 = 16px = space-4). Bo góc và font là biến theme Tailwind (main.css).
+ */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+}

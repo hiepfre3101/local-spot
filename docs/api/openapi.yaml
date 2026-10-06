@@ -378,21 +378,29 @@ paths:
     get:
       tags: [Places]
       summary: Danh sách địa điểm đã duyệt + lọc + sắp xếp (FR-10)
+      description: |
+        *(chốt 2026-10-04)* Keyset theo thứ tự đã chọn, phụ thêm `id DESC` để đồng điểm không trùng / sót giữa các trang.
+        Cursor gắn với `sort` — dùng cursor của thứ tự khác → 422 `INVALID_CURSOR`.
       security: []
       parameters:
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
-        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
-        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } } }
-        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: Giá tối đa (VND) }
-        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
-        - { name: city, in: query, schema: { type: string } }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 }, description: Gồm cả danh mục con }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } }, description: Phải có đủ tất cả (AND) }
+        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: 'Ngân sách (VND): `priceMin ≤ priceMax`; địa điểm chưa khai giá bị loại' }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 }, description: Theo điểm Bayesian hiển thị }
+        - { name: city, in: query, schema: { type: string }, description: 'Khớp đúng tên, không phân biệt hoa thường / dấu' }
         - { name: sort, in: query, schema: { type: string, enum: [SCORE, NEWEST, MOST_REVIEWED], default: SCORE } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Places]
       summary: Đề xuất địa điểm mới → PENDING (FR-15, UC11)
+      description: |
+        Slug sinh từ tên + thành phố, bỏ dấu (`pho-thin-ha-noi`), trùng thì thêm `-2`, `-3`… Thẻ trùng slug gộp làm một.
+        Danh mục / tiện ích không tồn tại, `priceMin > priceMax`, khung giờ mở = đóng → 422 theo trường. Phần `photos`
+        xử lý ở checklist E2 *(2026-10-04)*.
       requestBody:
         required: true
         content:
@@ -406,7 +414,12 @@ paths:
             encoding:
               place: { contentType: application/json }
       responses:
-        '201': { description: 'Đã tạo, chờ duyệt', content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '201':
+          description: 'Đã tạo, chờ duyệt'
+          headers:
+            Location: { schema: { type: string }, description: '/api/v1/places/{slug}' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
   /places/duplicates:
     get:
@@ -445,7 +458,10 @@ paths:
     get:
       tags: [Places]
       summary: Chi tiết địa điểm theo slug (FR-13) — ghi nhận lượt xem theo ngày
-      description: Địa điểm chưa duyệt chỉ người đề xuất, chủ và kiểm duyệt viên xem được.
+      description: |
+        Địa điểm chưa duyệt chỉ người đề xuất, chủ và kiểm duyệt viên xem được — người khác nhận 404 như không tồn tại.
+        Lượt xem (+1 / request, gộp theo ngày giờ Việt Nam) chỉ tính cho địa điểm APPROVED và không tính khi chủ tự xem.
+        Gửi kèm token (không bắt buộc) để nhận `myReviewId`, `claimable` theo người xem.
       security: []
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -741,7 +757,9 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: '`version` lệch (`CONCURRENT_MODIFICATION`)' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /owner/places/{placeId}/photos:
     post:
       tags: [Owner]
@@ -827,6 +845,7 @@ paths:
     get:
       tags: [Moderation]
       summary: Hàng chờ địa điểm
+      description: '*(2026-10-04)* Bỏ trống `status` = PENDING, xếp FIFO (cũ nhất trước); trạng thái đã xử lý xếp mới nhất trước.'
       x-permission: place:approve
       parameters:
         - { name: status, in: query, schema: { $ref: '#/components/schemas/PlaceStatus' } }
@@ -837,7 +856,10 @@ paths:
   /moderation/places/{placeId}/decision:
     post:
       tags: [Moderation]
-      summary: Duyệt / từ chối địa điểm (FR-35) — ghi activity_log
+      summary: Duyệt / từ chối địa điểm (FR-35) — ghi activity_log (PLACE_APPROVE / PLACE_REJECT)
+      description: |
+        *(chốt 2026-10-04)* Chỉ áp dụng cho địa điểm PENDING (không đảo quyết định); kiểm duyệt viên không duyệt đề xuất
+        của chính mình.
       x-permission: place:approve
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
@@ -847,7 +869,13 @@ paths:
             schema: { $ref: '#/components/schemas/ModerationDecision' }
       responses:
         '204': { description: OK }
-        '409': { description: Đã được người khác xử lý (optimistic lock) }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `PLACE_ALREADY_MODERATED` (không còn PENDING), `CONCURRENT_MODIFICATION` (`version` lệch / người khác vừa xử
+            lý), `SELF_ACTION_FORBIDDEN` (tự duyệt đề xuất của mình)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
   /moderation/reviews:
     get:
       tags: [Moderation]
@@ -1223,6 +1251,7 @@ components:
             bio: { type: [string, 'null'] }
             emailVerified: { type: boolean }
             roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            permissions: { type: array, items: { type: string }, description: 'Gộp từ các role, sắp theo tên — frontend ẩn / chặn route theo permission (2026-10-05)' }
             trustScore: { type: integer, minimum: 0, maximum: 100, description: 'Chỉ trả cho chính chủ — giải thích vì sao review vào hàng chờ' }
             ownedPlaceIds: { type: array, items: { type: integer, format: int64 } }
     UpdateProfileRequest:
@@ -1351,6 +1380,7 @@ components:
             claimable: { type: boolean, description: Chưa có chủ và người xem chưa có yêu cầu đang chờ }
             myReviewId: { type: [integer, 'null'], format: int64, description: 'Review của người xem (kể cả đã xóa → nút "Viết đánh giá" bị ẩn, D2)' }
             rejectReason: { type: [string, 'null'], description: Chỉ người đề xuất / kiểm duyệt viên thấy }
+            version: { type: integer, description: 'Optimistic lock — gửi lại khi sửa (owner PATCH) / ra quyết định (2026-10-04)' }
     PlaceCreateRequest:
       type: object
       required: [name, categoryId, address, city, location]
@@ -1369,7 +1399,10 @@ components:
         amenityIds: { type: array, items: { type: integer, format: int64 } }
         tags: { type: array, maxItems: 10, items: { type: string, maxLength: 50 } }
     PlaceUpdateRequest:
-      description: Chủ không đổi được vị trí và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý
+      description: |
+        Chủ không đổi được vị trí và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý.
+        Ngữ nghĩa PATCH *(2026-10-04)*: trường vắng / null = giữ nguyên; chuỗi rỗng xóa `description` / `phone` / `website`;
+        `openingHours`, `amenityIds` gửi lên là thay toàn bộ (mảng rỗng = xóa hết).
       type: object
       properties:
         description: { type: string, maxLength: 5000 }
@@ -1632,6 +1665,7 @@ components:
         - type: object
           properties:
             email: { type: string }
+            emailVerified: { type: boolean, description: 'Badge "● Chưa xác thực" ở P10 (2026-10-05)' }
             roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
             trustScore: { type: integer }
             lockedUntil: { type: [string, 'null'], format: date-time }

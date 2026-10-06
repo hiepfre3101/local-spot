@@ -14,5 +14,13 @@ public record MeResponse(
         String bio,
         boolean emailVerified,
         List<String> roles,
+        List<String> permissions,
         int trustScore,
-        List<Long> ownedPlaceIds) {}
+        List<Long> ownedPlaceIds) {
+
+    public MeResponse {
+        roles = List.copyOf(roles);
+        permissions = List.copyOf(permissions);
+        ownedPlaceIds = List.copyOf(ownedPlaceIds);
+    }
+}

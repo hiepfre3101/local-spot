@@ -18,11 +18,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
-    /** Đăng nhập: cần role để dựng MeResponse. */
-    @EntityGraph(attributePaths = "roles")
+    /** Đăng nhập: cần role + permission để dựng MeResponse (một truy vấn, không N+1 theo role). */
+    @EntityGraph(attributePaths = {"roles", "roles.permissions"})
     Optional<User> findWithRolesByEmail(String email);
 
-    @EntityGraph(attributePaths = "roles")
+    @EntityGraph(attributePaths = {"roles", "roles.permissions"})
     Optional<User> findWithRolesById(Long id);
 
     /**
