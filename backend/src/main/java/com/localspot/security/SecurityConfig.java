@@ -77,6 +77,9 @@ public class SecurityConfig {
                         // service tự giới hạn người xem
                         .requestMatchers(HttpMethod.GET, "/api/v1/places", "/api/v1/places/*")
                         .permitAll()
+                        // Danh mục, tiện ích (openapi Catalog, security: []) — form và bộ lọc của khách
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/amenities")
+                        .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error")
                         .permitAll()
                         .anyRequest()

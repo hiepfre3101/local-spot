@@ -115,7 +115,7 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
 |---|---|---|---|
 | id | BIGINT UNSIGNED | PK | |
-| parent_id | BIGINT UNSIGNED | FK categories | Danh mục phân cấp; NULL = gốc |
+| parent_id | BIGINT UNSIGNED | FK categories | Danh mục phân cấp; NULL = gốc. Tối đa 2 cấp — kiểm ở `CatalogService` (chốt 2026-10-06) |
 | name | VARCHAR(100) | NN | |
 | slug | VARCHAR(120) | NN, UQ | |
 | icon | VARCHAR(100) | | |

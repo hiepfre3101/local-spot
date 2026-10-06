@@ -110,7 +110,7 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | FR-36 | Kiểm duyệt viên | Duyệt review trong hàng chờ | Duyệt / từ chối review bị đưa vào hàng chờ bởi FR-23 | M | §5, §10.E |
 | FR-37 | Kiểm duyệt viên | Xử lý báo cáo | Hàng đợi báo cáo; ẩn nội dung; bỏ qua báo cáo | M | §4 |
 | FR-38 | Quản trị viên | Quản lý người dùng | Tìm kiếm, khóa/mở khóa tài khoản, gán role | M | §4 |
-| FR-39 | Quản trị viên | Quản lý danh mục & tiện ích | Danh mục phân cấp, tiện ích | M | §4, §10.E |
+| FR-39 | Quản trị viên | Quản lý danh mục & tiện ích | Danh mục phân cấp tối đa 2 cấp, tiện ích dùng chung (chốt 2026-10-06); chỉ xóa khi không còn dùng | M | §4, §10.E |
 | FR-40 | Kiểm duyệt viên | Duyệt yêu cầu sở hữu | Duyệt thì gán role `owner` cho người yêu cầu | S | §4 |
 | FR-41 | Quản trị viên | Dashboard thống kê | Người dùng mới, review theo ngày, địa điểm hot | S | §4 |
 | FR-42 | Hệ thống | Nhật ký thao tác quản trị | Ghi `activity_log` qua Spring AOP cho mọi thao tác admin/moderator | S | §5 `activity_log` |
