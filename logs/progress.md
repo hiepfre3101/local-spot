@@ -545,4 +545,28 @@ Chưa commit — chờ supervisor duyệt.
 - `./mvnw verify` xanh — **170 test** (+18): `PlacePhotoFlowTests` 9 ca qua HTTP + RabbitMQ thật (đề xuất kèm ảnh → READY qua queue, URL đúng, không EXIF, ảnh gốc bị xóa, kích thước sau khi xoay, công khai sau duyệt + bìa trên thẻ danh sách; một ảnh hỏng → 422 không tạo gì; 11 ảnh → 422; kho sập → 503 không tạo gì; chủ thêm / người khác 403 / khách 401; giới hạn 30 không tính ảnh lỗi; xóa bìa → chuyển bìa + xóa object, ảnh của địa điểm khác 404; khách chỉ thấy READY; ảnh không giải mã được → FAILED + mất bìa, message lặp không làm gì); `ImageResizerTest` 4 ca, `ImageInspectorTest` 5 ca (gồm "bom giải nén" 20000 × 20000 chỉ bằng header PNG). Spotless, SpotBugs 0 lỗi.
 - **Chạy thật với MinIO dev**: đề xuất kèm JPEG 3000 × 2000 (EXIF Orientation 6 + GPS) và PNG trong suốt → READY trong < 3 giây; 6 bản ảnh tải công khai được (200), bản large 1280 × 1920 đúng chiều, 0 thẻ EXIF; PNG ra nền trắng, không phóng to; ảnh gốc `incoming/` không đọc công khai được (403); địa điểm PENDING trả 404 cho khách.
 
+---
+
+## 2026-10-06 16:06 (+07) — Checklist E3: Danh mục phân cấp, tiện ích (giờ mở cửa đã có từ E1)
+
+**Bối cảnh**: mục kế tiếp sau E2 (lúc bắt đầu E2 còn chờ duyệt — nay đã merge, PR #7; nhánh này rebase lên `develop` mới). E3 không phụ thuộc E2 → nhánh `feature/be-catalog` tách từ `develop` để hai PR duyệt độc lập (hai nhánh cùng thêm vào cuối `ErrorCode`, `plan-v1.md`, file log này — xung đột nhỏ khi merge PR thứ hai). Giờ mở cửa đã làm ở E1 (đề xuất, chủ sửa, chi tiết) — phần còn lại của E3 là API danh mục / tiện ích (FR-39, UC32).
+
+**Supervisor chốt (qua câu hỏi):**
+- **Cây danh mục tối đa 2 cấp** (gốc → con, như seed và P11): danh mục con chỉ gắn vào gốc; danh mục đang có con không được làm con; không tự làm cha. Không cần kiểm tra vòng lặp; bộ lọc "danh mục gồm cả danh mục con" của E1 (`c.id = :id OR c.parent.id = :id`) đúng với giới hạn này.
+- **O7 — tiện ích dùng chung** cho mọi danh mục: giữ schema, không migration. Sitemap đánh dấu O7 ✅.
+
+**Quyết định kỹ thuật:**
+- **API**: `GET /categories` (cây), `GET /amenities` công khai (thêm luật `permitAll` đúng 2 đường dẫn trong `SecurityConfig` — openapi `security: []`); `/admin/categories`, `/admin/amenities` POST / PUT / DELETE với `category:manage` / `amenity:manage` (chỉ admin — Q2). PUT thay toàn bộ (`parentId` rỗng = gốc, `icon` rỗng = bỏ). Mỗi thao tác ghi nhật ký FR-42: `CATEGORY_CREATE/UPDATE/DELETE`, `AMENITY_CREATE/UPDATE/DELETE` (kèm slug).
+- **Xóa chỉ khi không còn dùng** (openapi): danh mục còn con / còn địa điểm, tiện ích còn gắn địa điểm → 409 `CATEGORY_IN_USE` / `AMENITY_IN_USE`, **tính cả địa điểm đã xóa mềm** (truy vấn native — `@SQLRestriction` ẩn chúng). Riêng tiện ích: khóa ngoại `place_amenity` là `ON DELETE CASCADE`, không chặn ở service thì xóa tiện ích sẽ **âm thầm gỡ nó khỏi mọi địa điểm** — có test riêng.
+- **Slug do quản trị viên nhập** (openapi `pattern ^[a-z0-9-]+$`), trùng → 409 `SLUG_TAKEN` theo trường `slug` (kiểm trước, UNIQUE ở CSDL vẫn là chốt cuối).
+- **Cache — Spring Cache + Redis** (plan §2; thêm `spring-boot-starter-cache`, thuộc Spring Boot): mỗi cache serializer JSON đúng kiểu (`List<CategoryNode>`, `List<AmenityResponse>`), prefix `localspot:`, TTL 1 giờ chỉ là lưới an toàn. **Redis lỗi không làm hỏng request** (`CacheErrorHandler` chỉ ghi log → đọc CSDL), như rate limit D8. Cache trang chủ để mục G.
+- **Lỗi tìm ra khi chạy cả bộ test — xóa cache bất đồng bộ**: bản đầu dùng `@CacheEvict(allEntries = true)` + `transactionAware()`; chạy riêng thì qua, chạy cả bộ thì test "sửa xong thấy ngay" thỉnh thoảng đọc cây cũ. Truy nguyên (trace `CacheInterceptor` + soi bytecode): ở Spring Data Redis 4, `RedisCache.clear()` **ghi bất đồng bộ** (trả về không chờ Redis), còn `invalidate()` đồng bộ; `@CacheEvict(allEntries)` gọi `clear()`. Dùng `beforeInvocation = true` (gọi `invalidate()`) cũng sai: Spring 7 `TransactionAwareCacheDecorator.invalidate()` xóa ngay, **trước commit** → request đọc chen giữa nạp lại dữ liệu cũ. Sửa: service phát `CatalogChangedEvent`, `CatalogCacheInvalidator` (`@TransactionalEventListener(AFTER_COMMIT)`) gọi `invalidate()` — cùng mẫu với `MailQueuePublisher`. Rollback → không xóa (cache vẫn đúng).
+
+**Tài liệu**: openapi (mô tả cây ≤ 2 cấp / cache, 404 / 409 / 422 của admin, `icon` ≤ 100, ngữ nghĩa PUT), requirements FR-39, sitemap O7 ✅, plan §10 E3, database.md `categories.parent_id`.
+
+**Kiểm chứng**:
+- `./mvnw verify` xanh — **159 test** (+7, tính trên `develop`): `CatalogFlowTests` qua HTTP trên MySQL + Redis thật — cây 2 cấp + tiện ích công khai; tạo / sửa (chuyển cha) / xóa danh mục **thấy ngay qua API công khai dù đã nạp cache** + nhật ký đúng người; luật 2 cấp (cháu, gốc có con, tự làm cha, cha không tồn tại; chuyển hết con rồi gốc làm con được); slug trùng 409 / sai định dạng 422 / 404; danh mục còn con / còn địa điểm (kể cả xóa mềm) 409; tiện ích tạo / sửa / trùng slug / đang dùng 409 (liên kết không bị CASCADE mất) / xóa / 404; member + kiểm duyệt viên 403, khách 401. Spotless, SpotBugs 0 lỗi.
+- **Kiểm tra test có bắt lỗi**: bỏ việc xóa cache khi tạo danh mục → test cache đỏ (cả cơ chế cũ lẫn mới). Tổ hợp `PlaceFlowTests` + `CatalogFlowTests` từng làm lộ lỗi chạy 3 lần liên tiếp đều xanh.
+- **Chạy thật (dev)**: `GET /categories` 3 gốc (6 / 3 / 4 con), `GET /amenities` 14 mục; Redis có `localspot:categories::SimpleKey []`, `localspot:amenities::…` dạng JSON, TTL 3600. Không thử ghi trên CSDL dev để không thêm dữ liệu — đã có test.
+
 Chưa commit — chờ supervisor duyệt.
