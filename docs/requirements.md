@@ -133,7 +133,7 @@ Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một da
 | NFR-06 | Bảo mật | Mật khẩu băm BCrypt; access token 15 phút, refresh token 7 ngày, lưu dạng băm, xoay vòng | Unit/integration test |
 | NFR-07 | Bảo mật | RBAC + `@PreAuthorize` / `PermissionEvaluator` trên mọi endpoint ghi | Test phân quyền cho từng role |
 | NFR-08 | Bảo mật | Chống XSS, SQL injection (JPA tham số hóa), mass assignment (chỉ bind qua DTO), CSRF không áp dụng do dùng JWT header | Checklist §10.G |
-| NFR-09 | Bảo mật | Upload: kiểm tra MIME thật + phần mở rộng, ≤ 5 MB/ảnh, ≤ 10 ảnh/review, gỡ EXIF | Test upload file sai định dạng / quá cỡ |
+| NFR-09 | Bảo mật | Upload: chỉ JPEG/PNG, kiểm tra MIME thật (chữ ký file) + phần mở rộng, ≤ 5 MB và ≤ 40 MP/ảnh, ≤ 10 ảnh/request, ≤ 30 ảnh/địa điểm, gỡ EXIF (chốt 2026-10-06) | Test upload file sai định dạng / quá cỡ |
 | NFR-10 | Bảo mật | Rate limit cho đăng nhập, đăng ký, quên mật khẩu, viết review | Test vượt ngưỡng trả 429 |
 | NFR-11 | Quyền riêng tư | Không công khai email; gỡ tọa độ GPS trong EXIF ảnh; xóa mềm dữ liệu người dùng | Review code + test |
 | NFR-12 | Toàn vẹn dữ liệu | Các ràng buộc ở plan-v1.md §5 "Ràng buộc quan trọng" được đảm bảo ở tầng CSDL, không chỉ ở tầng ứng dụng | Migration + test vi phạm ràng buộc |

@@ -18,6 +18,12 @@ management:
       enabled: false # test không có SMTP thật; MailFlowTests thay JavaMailSender bằng mock
 
 localspot:
+  # Test thay ObjectStorage bằng bản trong bộ nhớ (TestcontainersConfiguration) — các giá trị dưới chỉ để S3Client tạo được
+  storage:
+    endpoint: http://localhost:9
+    access-key: test
+    secret-key: test
+    public-url: http://cdn.test/localspot
   security:
     jwt:
       secret: OLLUfFKO+AakIdej2snU9x/jBFZ0H+YxmNMVrQWKKjM=

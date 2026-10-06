@@ -2,11 +2,13 @@ package com.localspot.repository;
 
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -41,6 +43,14 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
 
     @EntityGraph(attributePaths = {"category", "owner", "amenities"})
     Optional<Place> findDetailById(Long id);
+
+    /**
+     * Khóa dòng địa điểm ({@code SELECT … FOR UPDATE}) khi thêm ảnh: hai lần upload đồng thời phải lần lượt đếm ảnh,
+     * không cùng thấy "còn chỗ" rồi cùng vượt giới hạn mỗi địa điểm.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Place p WHERE p.id = :id")
+    Optional<Place> findByIdForUpdate(@Param("id") Long id);
 
     /** {@code GET /me/places}: địa điểm tôi đề xuất, mọi trạng thái, mới nhất trước — keyset theo id. */
     @Query("""

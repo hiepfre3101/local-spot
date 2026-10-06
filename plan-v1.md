@@ -61,7 +61,7 @@
 | Spatial | `hibernate-spatial` (JTS `Point`) | Map cột `POINT SRID 4326` sang entity, viết truy vấn không gian trong JPQL — thêm 2026-09-28 (C1) |
 | Migration | Flyway | Versioned SQL migration, chạy tự động khi start app |
 | Media | Service tự viết + AWS S3 SDK v2 | Client tương thích MinIO khi dev, R2/S3 khi deploy |
-| Ảnh | Thumbnailator + metadata-extractor | Resize, nén, gỡ EXIF |
+| Ảnh | Thumbnailator | Resize, nén, xoay theo EXIF Orientation; ghi JPEG mới nên EXIF (GPS) bị gỡ — bỏ metadata-extractor vì không còn việc (2026-10-06) |
 | Mapping DTO | MapStruct | Entity ↔ DTO, thay cho API Resource của Laravel |
 | Boilerplate | Lombok | Giảm code getter/setter/constructor |
 | Tìm kiếm | Meilisearch (Java client chính thức) | Typo-tolerance, synonym tiếng Việt; tự viết service đồng bộ index thay cho Scout |
@@ -390,7 +390,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 
 ### E. Backend — nghiệp vụ
 - [x] CRUD địa điểm + luồng duyệt — đề xuất (multipart; phần `photos` ở E2), chi tiết theo người xem (lượt xem theo ngày, phân bố sao, `claimable`, `myReviewId`), danh sách lọc + keyset tổ hợp, `/me/places`, chủ sửa `/owner/places`, hàng chờ + duyệt / từ chối (chỉ PENDING, cấm tự duyệt). Không có xóa — ẩn qua xử lý báo cáo (UC29); `/places/duplicates` làm ở E4
-- [ ] Upload ảnh, resize, nén, lưu S3 qua queue
+- [x] Upload ảnh, resize, nén, lưu S3 qua queue — ảnh địa điểm: kèm đề xuất + `/owner/places/{id}/photos` (thêm / xóa); kiểm tra chữ ký file + đuôi + 5 MB + 40 MP; ảnh gốc `incoming/` (riêng tư) → queue `photo.process` (retry → DLQ) → 3 bản JPEG thumb/medium/large, không EXIF; bucket public-read, giới hạn 30 ảnh/địa điểm (chốt 2026-10-06). Ảnh review dùng lại pipeline ở mục "Ảnh đính kèm review"
 - [ ] Danh mục phân cấp, tiện ích, giờ mở cửa
 - [ ] Truy vấn địa điểm theo bán kính (spatial index)
 - [ ] Tích hợp Meilisearch, cấu hình synonym tiếng Việt

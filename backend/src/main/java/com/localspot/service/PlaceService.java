@@ -4,6 +4,7 @@ import com.localspot.dto.request.OpeningHourRequest;
 import com.localspot.dto.request.PlaceCreateRequest;
 import com.localspot.dto.request.PlaceUpdateRequest;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.PlaceDetailResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.entity.Amenity;
@@ -33,6 +34,7 @@ import com.localspot.repository.ReviewRepository;
 import com.localspot.repository.TagRepository;
 import com.localspot.repository.TaggableRepository;
 import com.localspot.repository.UserRepository;
+import com.localspot.service.ImageInspector.Inspected;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -51,6 +53,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Địa điểm: đề xuất (UC11, FR-15), xem chi tiết (FR-13), danh sách + lọc (FR-10), chủ cập nhật (UC24, FR-32). Duyệt /
@@ -79,6 +82,8 @@ public class PlaceService {
     private final PlaceClaimRepository claims;
     private final PlaceViewRepository views;
     private final PlaceMapper mapper;
+    private final PlacePhotoService photos;
+    private final PlaceSummaries summaries;
     private final Clock clock;
 
     public PlaceService(
@@ -92,6 +97,8 @@ public class PlaceService {
             PlaceClaimRepository claims,
             PlaceViewRepository views,
             PlaceMapper mapper,
+            PlacePhotoService photos,
+            PlaceSummaries summaries,
             Clock clock) {
         this.places = places;
         this.categories = categories;
@@ -103,15 +110,18 @@ public class PlaceService {
         this.claims = claims;
         this.views = views;
         this.mapper = mapper;
+        this.photos = photos;
+        this.summaries = summaries;
         this.clock = clock;
     }
 
     /**
-     * Đề xuất địa điểm mới → PENDING, chờ kiểm duyệt (UC27). Ảnh đi kèm xử lý ở checklist E2; kiểm tra nghi trùng (U7)
-     * là endpoint riêng {@code /places/duplicates} gọi trước khi gửi — chỉ cảnh báo, không chặn ở đây.
+     * Đề xuất địa điểm mới → PENDING, chờ kiểm duyệt (UC27), kèm tối đa 10 ảnh (xử lý nền — E2). Kiểm tra nghi trùng
+     * (U7) là endpoint riêng {@code /places/duplicates} gọi trước khi gửi — chỉ cảnh báo, không chặn ở đây.
      */
     @Transactional
-    public PlaceDetailResponse propose(Long userId, PlaceCreateRequest request) {
+    public PlaceDetailResponse propose(Long userId, PlaceCreateRequest request, List<MultipartFile> photoFiles) {
+        List<Inspected> images = photos.inspect(photoFiles); // ảnh hỏng → 422 trước khi ghi gì
         Category category = categories
                 .findById(request.categoryId())
                 .orElseThrow(() ->
@@ -143,6 +153,7 @@ public class PlaceService {
         places.save(place); // IDENTITY → INSERT ngay, có id để gắn thẻ
 
         attachTags(place.getId(), proposer, tagsBySlug);
+        List<PhotoResponse> stored = photos.store(place.getId(), userId, images);
         return mapper.toDetail(
                 place,
                 new DetailExtras(
@@ -150,7 +161,9 @@ public class PlaceService {
                         emptyDistribution(),
                         false,
                         null,
-                        true));
+                        true,
+                        null, // ảnh bìa chỉ có khi đã xử lý xong
+                        stored));
     }
 
     /**
@@ -221,7 +234,7 @@ public class PlaceService {
         boolean hasMore = rows.size() > pageSize;
         List<Place> page = hasMore ? rows.subList(0, pageSize) : rows;
         String next = hasMore ? PlaceListCursor.encode(keysetOf(page.getLast(), sort)) : null;
-        return new CursorPage<>(mapper.toSummaries(page), next);
+        return new CursorPage<>(summaries.of(page), next);
     }
 
     /** {@code GET /me/places}: địa điểm tôi đã đề xuất, mọi trạng thái (UC11 — "người đề xuất xem được trong trang cá nhân"). */
@@ -229,18 +242,20 @@ public class PlaceService {
     public CursorPage<PlaceSummaryResponse> proposedBy(Long userId, String cursor, Integer limit) {
         int pageSize = KeysetCursor.limit(limit);
         List<Place> rows = places.findCreatedBy(userId, KeysetCursor.decode(cursor), Limit.of(pageSize + 1));
-        return KeysetPages.byId(rows, pageSize, Place::getId, mapper::toSummaries);
+        return KeysetPages.byId(rows, pageSize, Place::getId, summaries::of);
     }
 
     @Transactional(readOnly = true)
     public List<PlaceSummaryResponse> ownedBy(Long ownerId) {
-        return mapper.toSummaries(places.findOwnedBy(ownerId));
+        return summaries.of(places.findOwnedBy(ownerId));
     }
 
     // ─── Chi tiết ────────────────────────────────────────────────────────────
 
     private PlaceDetailResponse toDetail(Place place, Viewer viewer) {
         Long proposerId = place.getCreatedBy().getId();
+        Long ownerId = place.getOwner() == null ? null : place.getOwner().getId();
+        boolean seesUnreadyPhotos = viewer.moderator() || viewer.is(proposerId) || viewer.is(ownerId);
         boolean claimable = place.getStatus() == PlaceStatus.APPROVED
                 && place.getOwner() == null
                 && (viewer.userId() == null
@@ -256,7 +271,9 @@ public class PlaceService {
                         ratingDistribution(place.getId()),
                         claimable,
                         myReviewId,
-                        viewer.moderator() || viewer.is(proposerId)));
+                        viewer.moderator() || viewer.is(proposerId),
+                        photos.cover(place.getId()),
+                        photos.gallery(place.getId(), seesUnreadyPhotos)));
     }
 
     /** Đủ 5 mức sao (mức không có review = 0) để frontend vẽ biểu đồ không phải tự điền chỗ trống. */

@@ -19,7 +19,21 @@
     <palantir-java-format.version>2.100.0</palantir-java-format.version>
     <spotbugs-maven-plugin.version>4.10.4.1</spotbugs-maven-plugin.version>
     <mapstruct.version>1.6.3</mapstruct.version>
+    <awssdk.version>2.55.11</awssdk.version>
+    <thumbnailator.version>0.4.21</thumbnailator.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>bom</artifactId>
+        <version>${awssdk.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <dependencies>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -80,6 +94,33 @@
       <groupId>org.mapstruct</groupId>
       <artifactId>mapstruct</artifactId>
       <version>${mapstruct.version}</version>
+    </dependency>
+
+    <!-- Ảnh (plan §2 "Media", "Ảnh"): S3 SDK v2 nói chuyện với MinIO khi dev, R2/S3 khi deploy; client HTTP đồng bộ
+         (url-connection) — bỏ Netty/Apache client mặc định không dùng tới -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>netty-nio-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>software.amazon.awssdk</groupId>
+          <artifactId>apache-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>url-connection-client</artifactId>
+    </dependency>
+    <!-- Resize / nén JPEG; tự xoay theo EXIF Orientation khi đọc, ghi ra ảnh mới → không mang theo EXIF gốc (GPS) -->
+    <dependency>
+      <groupId>net.coobird</groupId>
+      <artifactId>thumbnailator</artifactId>
+      <version>${thumbnailator.version}</version>
     </dependency>
 
     <dependency>

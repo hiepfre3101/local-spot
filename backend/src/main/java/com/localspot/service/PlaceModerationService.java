@@ -7,7 +7,6 @@ import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
-import com.localspot.mapper.PlaceMapper;
 import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.UserRepository;
 import java.time.Clock;
@@ -37,13 +36,13 @@ public class PlaceModerationService {
 
     private final PlaceRepository places;
     private final UserRepository users;
-    private final PlaceMapper mapper;
+    private final PlaceSummaries summaries;
     private final Clock clock;
 
-    public PlaceModerationService(PlaceRepository places, UserRepository users, PlaceMapper mapper, Clock clock) {
+    public PlaceModerationService(PlaceRepository places, UserRepository users, PlaceSummaries summaries, Clock clock) {
         this.places = places;
         this.users = users;
-        this.mapper = mapper;
+        this.summaries = summaries;
         this.clock = clock;
     }
 
@@ -59,7 +58,7 @@ public class PlaceModerationService {
         List<Place> rows = effective == PlaceStatus.PENDING
                 ? places.findByStatusOldestFirst(effective, afterId, Limit.of(pageSize + 1))
                 : places.findByStatusNewestFirst(effective, afterId, Limit.of(pageSize + 1));
-        return KeysetPages.byId(rows, pageSize, Place::getId, mapper::toSummaries);
+        return KeysetPages.byId(rows, pageSize, Place::getId, summaries::of);
     }
 
     @Transactional

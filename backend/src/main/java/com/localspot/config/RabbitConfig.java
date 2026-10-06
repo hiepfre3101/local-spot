@@ -14,7 +14,8 @@ import org.springframework.context.annotation.Configuration;
  * Topology RabbitMQ (khai báo tự động khi ứng dụng khởi động).
  *
  * <pre>
- * localspot.tasks (direct) ──mail.send──▶ mail.send ──(hết retry, reject)──▶ localspot.dlx ──▶ mail.send.dlq
+ * localspot.tasks (direct) ──mail.send─────▶ mail.send ─────(hết retry, reject)──▶ localspot.dlx ──▶ mail.send.dlq
+ *                          ──photo.process─▶ photo.process ─(hết retry, reject)──▶ localspot.dlx ──▶ photo.process.dlq
  * </pre>
  *
  * Retry nằm ở listener ({@code spring.rabbitmq.listener.simple.retry}); message lỗi sau lượt cuối được giữ lại ở DLQ để
@@ -28,6 +29,9 @@ public class RabbitConfig {
     public static final String MAIL_QUEUE = "mail.send";
     public static final String MAIL_ROUTING_KEY = "mail.send";
     public static final String MAIL_DLQ = "mail.send.dlq";
+    public static final String PHOTO_QUEUE = "photo.process";
+    public static final String PHOTO_ROUTING_KEY = "photo.process";
+    public static final String PHOTO_DLQ = "photo.process.dlq";
 
     @Bean
     DirectExchange tasksExchange() {
@@ -60,6 +64,29 @@ public class RabbitConfig {
     @Bean
     Binding mailDeadLetterBinding(Queue mailDeadLetterQueue, DirectExchange deadLetterExchange) {
         return BindingBuilder.bind(mailDeadLetterQueue).to(deadLetterExchange).with(MAIL_DLQ);
+    }
+
+    @Bean
+    Queue photoQueue() {
+        return QueueBuilder.durable(PHOTO_QUEUE)
+                .deadLetterExchange(DEAD_LETTER_EXCHANGE)
+                .deadLetterRoutingKey(PHOTO_DLQ)
+                .build();
+    }
+
+    @Bean
+    Queue photoDeadLetterQueue() {
+        return QueueBuilder.durable(PHOTO_DLQ).build();
+    }
+
+    @Bean
+    Binding photoBinding(Queue photoQueue, DirectExchange tasksExchange) {
+        return BindingBuilder.bind(photoQueue).to(tasksExchange).with(PHOTO_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding photoDeadLetterBinding(Queue photoDeadLetterQueue, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(photoDeadLetterQueue).to(deadLetterExchange).with(PHOTO_DLQ);
     }
 
     /** Message dạng JSON (đọc được trong Management UI) thay vì Java serialization mặc định. */
