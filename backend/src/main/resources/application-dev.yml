@@ -46,3 +46,11 @@ localspot:
     jwt:
       # Mặc định chỉ dùng cho dev cục bộ; đặt JWT_SECRET trong ../.env để thay. Prod không có mặc định.
       secret: ${JWT_SECRET:PQW9uJd59Fqhe9r7bUVf/AmdF89MMTW8YhaDJO34Hwo=}
+  # MinIO trong docker compose — khóa root dev đọc từ ../.env. Bucket + policy đọc công khai tự tạo khi khởi động.
+  # Console: http://localhost:9001
+  storage:
+    endpoint: http://localhost:9000
+    access-key: ${MINIO_ROOT_USER}
+    secret-key: ${MINIO_ROOT_PASSWORD}
+    public-url: http://localhost:9000/localspot
+    create-bucket: true

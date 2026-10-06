@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * {@code /api/v1/places} — openapi tag Places (UC08–UC11). {@code GET} công khai (khai báo trong {@code SecurityConfig});
@@ -56,13 +57,15 @@ public class PlaceController {
     }
 
     /**
-     * Đề xuất địa điểm (FR-15). multipart theo openapi: phần {@code place} là JSON; phần {@code photos} nhận ở checklist
-     * E2 (upload ảnh qua hàng đợi) — giữ đúng định dạng request ngay từ giờ để frontend không phải đổi.
+     * Đề xuất địa điểm (FR-15). multipart theo openapi: phần {@code place} là JSON; phần {@code photos} (không bắt buộc,
+     * ≤ 10 ảnh JPEG / PNG) được xử lý nền — response trả ảnh ở trạng thái PROCESSING.
      */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PlaceDetailResponse> propose(
-            @AuthenticationPrincipal AuthenticatedUser user, @Valid @RequestPart("place") PlaceCreateRequest place) {
-        PlaceDetailResponse created = placeService.propose(user.id(), place);
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @Valid @RequestPart("place") PlaceCreateRequest place,
+            @RequestPart(value = "photos", required = false) List<MultipartFile> photos) {
+        PlaceDetailResponse created = placeService.propose(user.id(), place, photos);
         return ResponseEntity.created(URI.create("/api/v1/places/" + created.slug()))
                 .body(created);
     }

@@ -4,6 +4,7 @@ import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryRef;
 import com.localspot.dto.response.GeoPoint;
 import com.localspot.dto.response.OpeningHourResponse;
+import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.PlaceDetailResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.dto.response.UserSummary;
@@ -22,9 +23,8 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 /**
- * Place ↔ DTO. Ảnh ({@code coverPhoto}, {@code photos}) để trống tới khi có module ảnh (checklist E2) — URL ảnh cần
- * cấu hình kho lưu trữ. Phần phụ thuộc người xem / bảng khác do service tính rồi truyền vào ({@link DetailExtras}) —
- * mapper không truy vấn.
+ * Place ↔ DTO. Phần phụ thuộc người xem / bảng khác (thẻ, phân bố sao, ảnh — URL ảnh cần cấu hình kho lưu trữ) do service
+ * tính rồi truyền vào ({@link DetailExtras}); ảnh bìa của thẻ gắn ở {@code PlaceSummaries} — mapper không truy vấn.
  */
 @Mapper
 public interface PlaceMapper {
@@ -62,7 +62,7 @@ public interface PlaceMapper {
                 toCategoryRef(place.getCategory()),
                 place.getAddress(),
                 toGeoPoint(place.getLocation()),
-                null,
+                extras.coverPhoto(),
                 place.getPriceMin(),
                 place.getPriceMax(),
                 place.getBayesianScore(),
@@ -74,7 +74,7 @@ public interface PlaceMapper {
                 place.getCity(),
                 place.getPhone(),
                 place.getWebsite(),
-                List.of(),
+                extras.photos(),
                 place.getOpeningHours().stream().map(this::toOpeningHour).toList(),
                 place.getAmenities().stream()
                         .sorted(Comparator.comparing(Amenity::getId))
@@ -94,17 +94,22 @@ public interface PlaceMapper {
      * Phần chi tiết không đọc được từ entity {@link Place}.
      *
      * @param showRejectReason lý do từ chối chỉ hiện cho người đề xuất / kiểm duyệt viên
+     * @param coverPhoto ảnh bìa đã xử lý xong, {@code null} nếu chưa có
+     * @param photos gallery đã lọc theo người xem
      */
     record DetailExtras(
             List<String> tags,
             Map<Integer, Long> ratingDistribution,
             boolean claimable,
             Long myReviewId,
-            boolean showRejectReason) {
+            boolean showRejectReason,
+            PhotoResponse coverPhoto,
+            List<PhotoResponse> photos) {
 
         public DetailExtras {
             tags = List.copyOf(tags);
             ratingDistribution = Map.copyOf(ratingDistribution);
+            photos = List.copyOf(photos);
         }
     }
 }

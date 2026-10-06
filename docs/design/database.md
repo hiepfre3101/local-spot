@@ -157,11 +157,11 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | id | BIGINT UNSIGNED | PK | |
 | place_id | BIGINT UNSIGNED | FK places, NN | |
 | uploaded_by | BIGINT UNSIGNED | FK users, NN | |
-| storage_key | VARCHAR(300) | NN | Khóa gốc trên S3/MinIO; URL các kích thước suy ra từ khóa |
+| storage_key | VARCHAR(300) | NN | Khóa gốc trên S3/MinIO, dạng `places/{place_id}/{uuid}`; các bản = khóa + `-thumb.jpg` / `-medium.jpg` / `-large.jpg` (đọc công khai), ảnh gốc chờ xử lý ở `incoming/` + khóa (riêng tư, xóa sau khi xử lý) |
 | status | VARCHAR(20) | NN, CHECK IN (`PROCESSING`, `READY`, `FAILED`) | |
-| is_cover | BOOLEAN | NN, default false | Ảnh đại diện |
+| is_cover | BOOLEAN | NN, default false | Ảnh đại diện — ảnh đầu tiên; bị xóa / lỗi thì chuyển cho ảnh chưa lỗi kế tiếp |
 | sort_order | INT | NN, default 0 | |
-| width, height | INT UNSIGNED | | Điền sau khi xử lý |
+| width, height | INT UNSIGNED | | Kích thước bản `large` (đã xoay theo EXIF), điền khi READY |
 | created_at | DATETIME(6) | NN | |
 
 #### `opening_hours`

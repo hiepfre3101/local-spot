@@ -1,8 +1,10 @@
 package com.localspot;
 
+import com.localspot.storage.InMemoryObjectStorage;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.mysql.MySQLContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
@@ -32,5 +34,15 @@ public class TestcontainersConfiguration {
     @ServiceConnection(name = "redis")
     GenericContainer<?> redisContainer() {
         return new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+    }
+
+    /**
+     * Kho ảnh trong bộ nhớ thay MinIO: image MinIO chính thức không còn tải được (2026-10-06), và test chỉ cần hành vi
+     * của {@code ObjectStorage}, không cần S3 thật.
+     */
+    @Bean
+    @Primary
+    InMemoryObjectStorage inMemoryObjectStorage() {
+        return new InMemoryObjectStorage();
     }
 }

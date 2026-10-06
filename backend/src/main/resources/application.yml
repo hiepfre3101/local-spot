@@ -23,6 +23,12 @@ spring:
     locations: classpath:db/migration
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      # NFR-09: ≤ 5 MB / ảnh, ≤ 10 ảnh / request (+ phần JSON) — khớp client_max_body_size 55m của nginx.
+      # Vượt → 413 PAYLOAD_TOO_LARGE trước khi vào controller
+      max-file-size: 5MB
+      max-request-size: 55MB
   mail:
     default-encoding: UTF-8
   data:
@@ -82,6 +88,22 @@ localspot:
     helpful-cap: 36
     penalty-weight: 3
     publish-threshold: 30
+  # Ảnh địa điểm / review (FR-16, NFR-09). maxPerPlace chốt 2026-10-06
+  photo:
+    max-per-request: 10
+    max-per-place: 30
+    max-file-size: 5MB
+    max-pixels: 40000000 # ~ 7300 × 5500 — đủ cho ảnh điện thoại, chặn ảnh "bom giải nén"
+    jpeg-quality: 0.8
+    thumb-size: 320
+    medium-size: 960
+    large-size: 1920
+  # Kho ảnh tương thích S3; endpoint / khóa / URL công khai theo profile
+  storage:
+    region: us-east-1 # MinIO bỏ qua; R2 dùng "auto"
+    bucket: localspot
+    path-style-access: true
+    create-bucket: false
   # NFR-10 — cửa sổ trượt; ngưỡng chốt 2026-10-04 (login theo U2). Giới hạn 5 review / 24 giờ (FR-23) đếm trong CSDL.
   rate-limit:
     policies:

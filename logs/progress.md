@@ -498,3 +498,51 @@ Ghi lại quyết định kỹ thuật: ngày giờ, task, bối cảnh, lý do,
 - **Chạy thật** (backend profile dev + Vite proxy, Chrome headless qua DevTools Protocol): đăng nhập qua proxy Vite nhận cookie `refresh_token` HttpOnly + Secure + `Path=/api/v1/auth`; đăng nhập sai hiện lỗi đúng ô; đăng nhập admin → `/admin` tự chuyển `/admin/users`; **tải lại trang vẫn giữ phiên** (khôi phục bằng cookie); chụp màn P01, P10 (Sáng + Tối), Cài đặt mật khẩu — khớp thiết kế. Chưa thử thao tác ghi (gán vai trò, khóa) trên CSDL dev để không đổi dữ liệu seed — đã có test backend `AdminUserFlowTests`.
 
 Chưa commit — chờ supervisor duyệt.
+
+---
+
+## 2026-10-06 10:40 (+07) — Dựng môi trường trên máy Ubuntu mới
+
+**Bối cảnh**: supervisor chuyển sang máy Ubuntu 22.04 mới (không phải WSL). Đã có Docker 29 + Compose v5; thiếu JDK 21 (có JDK 17), Node 24; MySQL 8.0 của hệ điều hành đang giữ cổng 3306.
+
+**Đã làm**: cài JDK 21 (apt, gỡ JDK 17), Node 24 qua nvm; `.env` từ `.env.example` với bí mật ngẫu nhiên; hạ tầng `docker compose up -d`; backend dev + `./mvnw verify` (152 test) và kiểm tra frontend (lint, format, type-check, 31 test, build) đều xanh.
+
+**Supervisor chốt:**
+- **Cổng 3306 bị chiếm** → chỉ đổi trên máy này, không commit: `docker-compose.override.yml` (loại khỏi git bằng `.git/info/exclude`) đổi MySQL sang **3307**; backend dev chạy với `SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3307/localspot`.
+- **MinIO tạm thời trên máy này**: `quay.io/minio/minio` và `minio/minio` **không còn tải được** (MinIO ngừng phát hành image cộng đồng; lỗi `unauthorized` kể cả không đăng nhập) → `docker compose up -d` đầy đủ lỗi ở bước pull. Override cục bộ dùng `cgr.dev/chainguard/minio:latest` (`user: root` để ghi được volume). **Còn mở**: sửa `docker-compose.yml` cho cả nhóm / CI — phương án: build từ mã nguồn, image thay thế, hoặc đổi sang kho tương thích S3 khác (ảnh hưởng mục công nghệ trong báo cáo → cần supervisor quyết).
+
+**Ghi chú**: lần `npm ci` đầu bỏ sót `axios`, `vue-toastification` trong `node_modules` (type-check vẫn qua, test / build lỗi) — chạy lại `npm ci` là đủ.
+
+---
+
+## 2026-10-06 11:31 (+07) — Checklist E2: Upload ảnh địa điểm, resize, nén, lưu S3 qua queue
+
+**Bối cảnh**: mục kế tiếp của checklist E sau E1 (PR #5) và F nền tảng (PR #6) đã merge vào `develop`. Nhánh `feature/be-place-photos`. Thư viện theo plan §2: AWS S3 SDK v2, Thumbnailator.
+
+**Supervisor chốt (qua câu hỏi):**
+- **URL ảnh = bucket đọc công khai, URL ổn định** (không presigned, không proxy qua backend): trình duyệt / CDN cache được, response địa điểm không phải ký URL mỗi lần. Đánh đổi: ai có URL đều mở được, kể cả ảnh của địa điểm chưa duyệt — key chứa UUID ngẫu nhiên nên không đoán được.
+- **Tối đa 30 ảnh / địa điểm** (ngoài 10 ảnh / request của openapi), cấu hình trong `application.yml`.
+- **Chỉ nhận JPEG / PNG** (openapi cũ ghi cả WebP): ImageIO / Thumbnailator không đọc được WebP / HEIC; frontend crop bằng canvas rồi xuất JPEG nên ảnh WebP / HEIC từ điện thoại vẫn qua được giao diện. Không thêm TwelveMonkeys. Đã sửa openapi + NFR-09.
+
+**Quyết định kỹ thuật:**
+- **Luồng**: request kiểm tra cả lô (một ảnh hỏng → 422 `INVALID_IMAGE` đúng trường `photos[i]`, không tạo gì) → ảnh gốc lên `incoming/places/{placeId}/{uuid}` (riêng tư — còn EXIF / GPS) + bản ghi `PROCESSING` → **sau commit** đẩy id vào queue `photo.process` → consumer sinh 3 bản JPEG `-thumb` (320) / `-medium` (960) / `-large` (1920 px cạnh dài, không phóng to), q = 0.8 → `READY`, lưu `width/height` của bản large → xóa ảnh gốc. Message chỉ mang id, không đưa vài MB nhị phân qua RabbitMQ.
+- **Kiểm tra upload (NFR-09)** theo chữ ký file (không tin `Content-Type`), đuôi tệp phải khớp định dạng thật, ≤ 5 MB, **≤ 40 MP đọc từ header** (chặn ảnh "bom giải nén" mà không giải mã trong request). Giới hạn request 55 MB khớp nginx → vượt là 413.
+- **Gỡ EXIF không cần metadata-extractor**: Thumbnailator tự xoay theo EXIF Orientation khi đọc, ảnh đầu ra là JPEG ghi mới nên không mang EXIF nào (GPS — NFR-11). Bỏ metadata-extractor khỏi plan §2 vì không còn việc. PNG trong suốt vẽ lên nền trắng.
+- **Lỗi & thử lại (NFR-13)**: ảnh không giải mã được → `FAILED` ngay, không retry; kho object lỗi → ném ra, listener retry 4 lần rồi sang `photo.process.dlq` (ảnh giữ PROCESSING tới khi chạy lại message bằng tay — giống mail). Xử lý lặp lại an toàn (bỏ qua ảnh không còn PROCESSING). Consumer **không giữ transaction** trong lúc đọc kho / resize — chỉ mở transaction ngắn để đọc / cập nhật trạng thái.
+- **Nhất quán CSDL ↔ kho**: ảnh gốc lên kho ngay trong transaction của request (giữ kết nối CSDL lúc upload — chấp nhận ở quy mô đồ án, đổi lại không cần kho tạm thứ hai). `PlacePhotosStoredEvent`: commit → đẩy queue; **rollback → xóa ảnh gốc** vừa upload. Xóa ảnh: xóa bản ghi, object xóa **sau commit**. Kho sập lúc upload → 503, không tạo địa điểm. Không có outbox: RabbitMQ sập đúng lúc sau commit → ảnh kẹt PROCESSING (ghi log).
+- **Giới hạn 30 ảnh khi upload đồng thời**: khóa dòng địa điểm (`SELECT … FOR UPDATE`) trước khi đếm — hai request không cùng thấy "còn chỗ". Ảnh `FAILED` không tính.
+- **Ảnh bìa**: ảnh đầu tiên của địa điểm chưa có bìa; bìa bị xóa / xử lý lỗi → ảnh chưa lỗi kế tiếp theo `sort_order`. Chủ tự chọn bìa không có trong openapi — để sau nếu cần.
+- **Ai thấy ảnh nào**: người ngoài chỉ thấy READY; người đề xuất / chủ / kiểm duyệt viên thấy cả PROCESSING / FAILED (kèm `status`, URL rỗng). Ảnh bìa trên thẻ danh sách nạp một truy vấn cho cả trang (`PlaceSummaries`) — không N+1.
+- **Tách `ObjectStorage`** khỏi S3 SDK: service không phụ thuộc nhà cung cấp; test dùng bản trong bộ nhớ — CI không cần container MinIO (image chính thức không tải được). `S3ObjectStorage` là lớp chuyển tiếp mỏng, kiểm tra tay với MinIO dev. Client HTTP `url-connection` (bỏ Netty / Apache client không dùng); checksum CRC chỉ gửi khi API bắt buộc (R2 / MinIO cũ từ chối checksum mới của SDK ≥ 2.30).
+- **Bucket**: dev tự tạo bucket + policy đọc công khai chỉ cho `places/*`, `reviews/*` (`localspot.storage.create-bucket`); kho chưa chạy chỉ cảnh báo, không chặn khởi động. Deploy: bucket tạo bằng hạ tầng; R2 không có bucket policy — public qua custom domain (khi đó `incoming/` cũng công khai nếu biết key; ngắn hạn, key ngẫu nhiên — cân nhắc bucket riêng cho ảnh gốc khi deploy).
+- **`docker-compose.yml` (phần lõi — chỉ thêm)**: backend profile `app` nhận `STORAGE_*`, mặc định trỏ MinIO trong compose — thiếu thì backend prod không khởi động. `.env.example` thêm mẫu cấu hình R2.
+
+**Còn để lại**: ảnh review dùng lại pipeline ở mục "Ảnh đính kèm review"; dọn ảnh kẹt PROCESSING / object rác định kỳ (chưa có job); giới hạn tần suất upload (đặc tả chưa có).
+
+**Tài liệu**: openapi (định dạng / giới hạn ảnh, response 201 của chủ thêm ảnh, 404 / 413 / 422 / 503, mô tả `Photo`), requirements NFR-09, plan §2 + §10, database.md (`storage_key`, `is_cover`, `width/height`).
+
+**Kiểm chứng**:
+- `./mvnw verify` xanh — **170 test** (+18): `PlacePhotoFlowTests` 9 ca qua HTTP + RabbitMQ thật (đề xuất kèm ảnh → READY qua queue, URL đúng, không EXIF, ảnh gốc bị xóa, kích thước sau khi xoay, công khai sau duyệt + bìa trên thẻ danh sách; một ảnh hỏng → 422 không tạo gì; 11 ảnh → 422; kho sập → 503 không tạo gì; chủ thêm / người khác 403 / khách 401; giới hạn 30 không tính ảnh lỗi; xóa bìa → chuyển bìa + xóa object, ảnh của địa điểm khác 404; khách chỉ thấy READY; ảnh không giải mã được → FAILED + mất bìa, message lặp không làm gì); `ImageResizerTest` 4 ca, `ImageInspectorTest` 5 ca (gồm "bom giải nén" 20000 × 20000 chỉ bằng header PNG). Spotless, SpotBugs 0 lỗi.
+- **Chạy thật với MinIO dev**: đề xuất kèm JPEG 3000 × 2000 (EXIF Orientation 6 + GPS) và PNG trong suốt → READY trong < 3 giây; 6 bản ảnh tải công khai được (200), bản large 1280 × 1920 đúng chiều, 0 thẻ EXIF; PNG ra nền trắng, không phóng to; ảnh gốc `incoming/` không đọc công khai được (403); địa điểm PENDING trả 404 cho khách.
+
+Chưa commit — chờ supervisor duyệt.

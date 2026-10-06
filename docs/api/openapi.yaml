@@ -399,8 +399,10 @@ paths:
       summary: Đề xuất địa điểm mới → PENDING (FR-15, UC11)
       description: |
         Slug sinh từ tên + thành phố, bỏ dấu (`pho-thin-ha-noi`), trùng thì thêm `-2`, `-3`… Thẻ trùng slug gộp làm một.
-        Danh mục / tiện ích không tồn tại, `priceMin > priceMax`, khung giờ mở = đóng → 422 theo trường. Phần `photos`
-        xử lý ở checklist E2 *(2026-10-04)*.
+        Danh mục / tiện ích không tồn tại, `priceMin > priceMax`, khung giờ mở = đóng → 422 theo trường.
+        `photos` (không bắt buộc): JPEG/PNG, ≤ 10 ảnh/request, ≤ 5 MB và ≤ 40 MP mỗi ảnh, tổng ≤ 30 ảnh/địa điểm. Ảnh hỏng →
+        422 `INVALID_IMAGE` trường `photos[i]` (không tạo gì); quá số ảnh → 422 `PHOTO_LIMIT_EXCEEDED`; request > 55 MB → 413;
+        kho ảnh lỗi → 503. Ảnh trả về ở trạng thái `PROCESSING`, xử lý nền qua RabbitMQ *(E2, 2026-10-06)*.
       requestBody:
         required: true
         content:
@@ -410,7 +412,7 @@ paths:
               required: [place]
               properties:
                 place: { $ref: '#/components/schemas/PlaceCreateRequest' }
-                photos: { type: array, maxItems: 10, items: { type: string, format: binary } }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: JPEG/PNG, ≤ 5 MB mỗi ảnh }
             encoding:
               place: { contentType: application/json }
       responses:
@@ -526,7 +528,7 @@ paths:
               required: [review]
               properties:
                 review: { $ref: '#/components/schemas/ReviewCreateRequest' }
-                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: 'JPEG/PNG/WebP, ≤ 5 MB mỗi ảnh' }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: 'JPEG/PNG (chữ ký file + đuôi tệp khớp), ≤ 5 MB, ≤ 40 MP mỗi ảnh — WebP/HEIC: frontend xuất JPEG từ canvas (chốt 2026-10-06)' }
             encoding:
               review: { contentType: application/json }
       responses:
@@ -764,6 +766,9 @@ paths:
     post:
       tags: [Owner]
       summary: Chủ thêm ảnh địa điểm
+      description: |
+        Cùng quy tắc ảnh như `POST /places` (JPEG/PNG, ≤ 10 ảnh/request, tổng ≤ 30 ảnh/địa điểm — ảnh `FAILED` không tính).
+        Ảnh đầu tiên của địa điểm chưa có bìa thành ảnh bìa.
       x-permission: place:update-own
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
@@ -776,17 +781,25 @@ paths:
               properties:
                 photos: { type: array, maxItems: 10, items: { type: string, format: binary } }
       responses:
-        '201': { description: 'Đã nhận, đang xử lý nền' }
+        '201':
+          description: 'Đã nhận, đang xử lý nền — các ảnh vừa thêm, `status: PROCESSING`'
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Photo' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Request vượt 55 MB / ảnh vượt 5 MB (`PAYLOAD_TOO_LARGE`) }
+        '422': { description: '`INVALID_IMAGE` (theo trường `photos[i]`) / `PHOTO_LIMIT_EXCEEDED`', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '503': { description: Kho ảnh không khả dụng (`SERVICE_UNAVAILABLE`) }
   /owner/places/{placeId}/photos/{photoId}:
     delete:
       tags: [Owner]
       summary: Chủ xóa ảnh
+      description: Xóa bản ghi và các object trên kho (sau commit). Xóa ảnh bìa → ảnh chưa lỗi kế tiếp thành bìa. Ảnh không thuộc địa điểm → 404 `PHOTO_NOT_FOUND`.
       x-permission: place:update-own
       parameters: [ { $ref: '#/components/parameters/PlaceId' }, { name: photoId, in: path, required: true, schema: { type: integer, format: int64 } } ]
       responses:
         '204': { description: OK }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /owner/places/{placeId}/stats:
     get:
       tags: [Owner]
@@ -1203,6 +1216,10 @@ components:
     ReportTargetType: { type: string, enum: [PLACE, REVIEW, COMMENT, USER] }
     Photo:
       type: object
+      description: |
+        URL chỉ có khi `READY` (bucket đọc công khai, URL ổn định — chốt 2026-10-06): thumb ≤ 320 px, medium ≤ 960 px,
+        large ≤ 1920 px theo cạnh dài, JPEG, không EXIF. Người ngoài chỉ thấy ảnh `READY`; người đề xuất / chủ / kiểm duyệt
+        viên thấy cả `PROCESSING` / `FAILED`.
       properties:
         id: { type: integer, format: int64 }
         status: { $ref: '#/components/schemas/PhotoStatus' }

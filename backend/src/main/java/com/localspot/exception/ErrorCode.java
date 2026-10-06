@@ -41,6 +41,11 @@ public final class ErrorCode {
     public static final String PLACE_NOT_FOUND = "PLACE_NOT_FOUND";
     public static final String REVIEW_NOT_FOUND = "REVIEW_NOT_FOUND";
     public static final String COMMENT_NOT_FOUND = "COMMENT_NOT_FOUND";
+    public static final String PHOTO_NOT_FOUND = "PHOTO_NOT_FOUND";
+    /** 422 theo trường {@code photos[i]}: không phải JPEG / PNG, đuôi tệp không khớp, quá cỡ, ảnh hỏng (NFR-09). */
+    public static final String INVALID_IMAGE = "INVALID_IMAGE";
+    /** 422: quá số ảnh mỗi request (10) hoặc tổng ảnh của địa điểm (30 — chốt 2026-10-06). */
+    public static final String PHOTO_LIMIT_EXCEEDED = "PHOTO_LIMIT_EXCEEDED";
     /** 409: quyết định trên địa điểm không còn PENDING — đã được duyệt / từ chối (chốt 2026-10-04). */
     public static final String PLACE_ALREADY_MODERATED = "PLACE_ALREADY_MODERATED";
     /** Admin tự khóa mình / tự gỡ ADMIN của mình (chốt 2026-10-03); kiểm duyệt viên tự duyệt đề xuất của mình (2026-10-04). */

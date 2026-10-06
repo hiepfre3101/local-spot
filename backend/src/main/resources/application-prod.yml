@@ -36,3 +36,12 @@ localspot:
   security:
     jwt:
       secret: ${JWT_SECRET}
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:} # bỏ trống = AWS S3
+    region: ${STORAGE_REGION:us-east-1}
+    bucket: ${STORAGE_BUCKET:localspot}
+    access-key: ${STORAGE_ACCESS_KEY}
+    secret-key: ${STORAGE_SECRET_KEY}
+    path-style-access: ${STORAGE_PATH_STYLE:false}
+    public-url: ${STORAGE_PUBLIC_URL}
+    create-bucket: ${STORAGE_CREATE_BUCKET:false}
