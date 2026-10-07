@@ -431,8 +431,13 @@ paths:
     get:
       tags: [Places]
       summary: Kiểm tra nghi trùng trước khi đề xuất — tên gần giống trong 50 m (U7)
+      description: |
+        Ứng viên: địa điểm `APPROVED` + đề xuất `PENDING` **của chính người hỏi** trong 50 m (đề xuất chờ của người khác vẫn
+        riêng tư). "Gần giống" (chốt 2026-10-06): chuẩn hóa tên (chữ thường, bỏ dấu, bỏ từ chung chung như "quán",
+        "nhà hàng", "cà phê", "coffee"), rồi một tên chứa nguyên từ tên kia (≥ 4 ký tự) hoặc độ giống Levenshtein ≥ 0.8.
+        Gần nhất trước, kèm `distanceM` *(E4)*.
       parameters:
-        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
         - { $ref: '#/components/parameters/Lat' }
         - { $ref: '#/components/parameters/Lng' }
       responses:
@@ -441,11 +446,16 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /places/nearby:
     get:
       tags: [Places]
       summary: Địa điểm trong bán kính, sắp theo khoảng cách (FR-11, UC09)
-      description: Lọc thô `MBRContains` trên spatial index rồi lọc chính xác `ST_Distance_Sphere`.
+      description: |
+        Chỉ địa điểm `APPROVED`; `categoryId` gồm cả danh mục con. Lọc thô `MBRContains` trên spatial index
+        (`FORCE INDEX` — NFR-03) rồi lọc chính xác `ST_Distance_Sphere`; gần nhất trước, kèm `distanceM` (mét). Ngoài khoảng
+        `radius` / `limit` / tọa độ → 422 theo trường; thiếu `lat` / `lng` → 400 *(E4)*.
       security: []
       parameters:
         - { $ref: '#/components/parameters/Lat' }
@@ -862,14 +872,18 @@ paths:
     get:
       tags: [Moderation]
       summary: Hàng chờ địa điểm
-      description: '*(2026-10-04)* Bỏ trống `status` = PENDING, xếp FIFO (cũ nhất trước); trạng thái đã xử lý xếp mới nhất trước.'
+      description: |
+        *(2026-10-04)* Bỏ trống `status` = PENDING, xếp FIFO (cũ nhất trước); trạng thái đã xử lý xếp mới nhất trước.
+        *(2026-10-07)* Mỗi mục PENDING kèm `possibleDuplicates`: tên gần giống trong 50 m (cùng luật U7 của
+        `/places/duplicates`) nhưng xét cả đề xuất chờ **của mọi người** — người đề xuất không thấy đề xuất chờ của nhau,
+        nên đây là nơi bắt trùng giữa hai người dùng. Trạng thái khác: `possibleDuplicates` rỗng.
       x-permission: place:approve
       parameters:
         - { name: status, in: query, schema: { $ref: '#/components/schemas/PlaceStatus' } }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationPlacePage' } } } }
   /moderation/places/{placeId}/decision:
     post:
       tags: [Moderation]
@@ -1378,7 +1392,7 @@ components:
         avgRating: { type: number, description: Trung bình thô }
         reviewCount: { type: integer }
         status: { $ref: '#/components/schemas/PlaceStatus' }
-        distanceM: { type: [integer, 'null'], description: Chỉ có ở /places/nearby }
+        distanceM: { type: [integer, 'null'], description: 'Mét tới tâm tìm kiếm — chỉ có ở /places/nearby, /places/duplicates và possibleDuplicates của hàng chờ duyệt' }
     CategoryRef:
       type: object
       properties:
@@ -1450,6 +1464,19 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    ModerationPlace:
+      type: object
+      properties:
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        possibleDuplicates:
+          type: array
+          description: Gần nhất trước, kèm `distanceM` tới `place`
+          items: { $ref: '#/components/schemas/PlaceSummary' }
+    ModerationPlacePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationPlace' } }
         nextCursor: { type: [string, 'null'] }
     HomeResponse:
       type: object

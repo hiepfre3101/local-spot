@@ -570,3 +570,36 @@ Chưa commit — chờ supervisor duyệt.
 - **Chạy thật (dev)**: `GET /categories` 3 gốc (6 / 3 / 4 con), `GET /amenities` 14 mục; Redis có `localspot:categories::SimpleKey []`, `localspot:amenities::…` dạng JSON, TTL 3600. Không thử ghi trên CSDL dev để không thêm dữ liệu — đã có test.
 
 Chưa commit — chờ supervisor duyệt.
+
+---
+
+## 2026-10-07 10:18 (+07) — Checklist E4: Truy vấn địa điểm theo bán kính + cảnh báo nghi trùng
+
+**Bối cảnh**: E3 đã merge (PR #8). Nhánh `feature/be-places-nearby` từ `develop`. Theo ghi chú E1, mục này gồm cả `GET /places/duplicates` (U7) vì dùng chung truy vấn không gian.
+
+**Supervisor chốt (qua câu hỏi):**
+- **"Tên gần giống" (U7)** = chuẩn hóa (chữ thường, bỏ dấu, bỏ ký tự đặc biệt — như slug), bỏ từ chung chung ("quán", "quán ăn", "nhà hàng", "cà phê", "cafe", "coffee", "tiệm", "cửa hàng", "shop" — theo ranh giới từ: "cá kho" giữ nguyên), rồi giống nếu một tên chứa nguyên từ tên kia (tên ngắn ≥ 4 ký tự) hoặc độ giống Levenshtein ≥ 0.8. Tự viết (vài chục dòng) — không thêm thư viện.
+- **Phạm vi nghi trùng** = địa điểm APPROVED + đề xuất PENDING **của chính người hỏi** (chặn tự đề xuất hai lần). Đề xuất chờ của người khác vẫn riêng tư như E1; kiểm duyệt viên bắt trùng giữa người dùng ở hàng chờ.
+
+**Quyết định kỹ thuật:**
+- **Hai bước như openapi**: `MBRContains(hộp, location)` lọc thô trên spatial index `sx_places_location`, rồi `ST_Distance_Sphere ≤ radius` lọc chính xác + sắp gần nhất. Hộp tính trong Java: nửa cạnh vĩ độ = r / 111 320, kinh độ chia thêm cos(vĩ độ); **nới 1 % + 10 m** để sai số xấp xỉ độ ↔ mét không làm rơi điểm sát mép (hộp chỉ lọc thô, rộng hơn không sai kết quả). Tọa độ SRID 4326 trong MySQL theo trục **(lat, lng)** — khớp seed `POINT(lat lng)`.
+- **`FORCE INDEX (sx_places_location)`** — đo được, không phải đoán: `EXPLAIN` trên 300 địa điểm seed cho `type = ALL` (optimizer chọn quét toàn bảng dù index lọc được: hộp 2 km chỉ còn 33 / 300 dòng); có `FORCE INDEX` → `range` trên spatial index, cùng kết quả. NFR-03 yêu cầu truy vấn bán kính luôn qua spatial index, và khi bảng lớn dần index luôn đúng. Đánh đổi: gợi ý index gắn câu SQL với tên index (đổi tên index phải sửa query — test `EXPLAIN` sẽ báo).
+- **SQL native** (ngoài JPQL): nên tự lọc `deleted_at IS NULL` (`@SQLRestriction` không áp cho native). Chuỗi SQL ghép từ mảnh cố định, mọi giá trị bind. Truy vấn trả (id, khoảng cách), rồi nạp địa điểm + danh mục một lần và giữ thứ tự; thẻ dùng `PlaceSummaries` (ảnh bìa một truy vấn) + `distanceM`.
+- **`distanceM` trả cả ở `/duplicates`** (openapi cũ ghi "chỉ có ở /nearby") — "cách 12 m" giúp người dùng quyết định; đã sửa mô tả.
+- Thông báo validate tham số của `PlaceController` đổi sang tiếng Việt (trước đó lỗi `@DecimalMin` / `@Max` trên `@RequestParam` dùng câu tiếng Anh mặc định của Hibernate Validator — gồm cả bộ lọc E1).
+
+**Tài liệu**: openapi (`/nearby`: chỉ APPROVED, danh mục gồm con, FORCE INDEX, 400 / 422; `/duplicates`: luật giống, phạm vi, 401 / 422; `distanceM`), requirements U7, plan §10 E4.
+
+**Kiểm chứng**:
+- `./mvnw verify` xanh — **190 test** (+13): `NearbyFlowTests` 7 ca (gồm ca trùng giữa hai người dùng — xem bổ sung bên dưới) (đúng địa điểm APPROVED trong bán kính theo thứ tự, loại PENDING / REJECTED / đã xóa mềm, `distanceM` sai lệch < 1 %, `radius` / `limit`; **mép bán kính chính xác cả 4 hướng** — 985 m lọt, 1015 m không; lọc danh mục gồm con; 422 / 400 theo tham số; nghi trùng trong 50 m + đề xuất chờ của mình, loại tên khác / ngoài 50 m / đề xuất chờ của người khác; 401 / 422); `PlaceSpatialIndexTests` 2 ca (`EXPLAIN` đúng câu SQL ứng dụng chạy trên 300 dòng sau `ANALYZE TABLE` → `range` / `sx_places_location`; hộp đúng trục và rộng hơn theo kinh độ); `PlaceNamesTest` 4 ca. SpotBugs 0 lỗi.
+- **Test có bắt lỗi** (mutation): bỏ `FORCE INDEX` → test `EXPLAIN` đỏ (`type = ALL` cả khi có 300 dòng) — xác nhận gợi ý là cần thiết; bỏ hệ số cos(vĩ độ) của hộp → test mép bán kính đỏ.
+- **Chạy thật (dev, 300 địa điểm seed)**: `/nearby` quanh Hồ Gươm 2 km → 25 địa điểm, đúng bằng số đếm bằng SQL toàn bảng, sắp tăng dần (349 m … 1991 m); `radius = 50000` → 422; `/duplicates` tại "Trà sữa Bếp Nhà": "tra sua bep nha 2", "Quán trà sữa Bếp Nhà", "Bếp Nhà" đều cảnh báo, "Phở Thìn" không; khách → 401.
+
+
+**Bổ sung 2026-10-07 — trùng giữa hai người dùng** (supervisor hỏi: người khác đề xuất địa điểm giống của tôi thì sao?):
+- **Lỗ hổng**: phạm vi U7 đã chốt (APPROVED + đề xuất chờ của chính mình) nghĩa là hai người dùng đề xuất cùng một quán sẽ **không ai được cảnh báo**; hàng chờ kiểm duyệt cũng chưa có gì nối hai đề xuất — ghi chú E4 trước đó "kiểm duyệt viên bắt trùng ở hàng chờ" là nói quá, kiểm duyệt viên chỉ có thể tự để ý.
+- **Cách xử lý (supervisor đồng ý)**: mỗi mục PENDING của `GET /moderation/places` kèm `possibleDuplicates` — cùng luật tên gần giống trong 50 m nhưng xét **đề xuất chờ của mọi người** (kiểm duyệt viên vốn xem được mọi đề xuất chờ, không lộ gì thêm). Kiểm duyệt viên duyệt một, từ chối cái kia với lý do "Trùng với …" — dùng luồng từ chối có sẵn. Không chặn tự động (U7 chỉ cảnh báo; hai quầy trong cùng chợ có thể khác nhau thật), không gộp đề xuất (không có UC).
+- **Đổi response hàng chờ**: `{ place, possibleDuplicates }` (`ModerationPlace`) thay vì thẻ địa điểm trần — trường nghi trùng không lọt vào danh sách công khai. Màn hàng chờ quản trị chưa làm nên không vỡ frontend. Mỗi mục một truy vấn không gian trên spatial index (trang ≤ 50 mục) — chấp nhận ở quy mô hàng chờ, không gộp thành một SQL phức tạp. Lịch sử (trạng thái đã xử lý): danh sách rỗng.
+- Test `moderatorSeesDuplicateProposalsFromDifferentUsers`: Alice và Bob đề xuất "Cà phê Giảng" / "Giảng Coffee" cách 20 m — Bob không thấy đề xuất của Alice ở `/duplicates`, kiểm duyệt viên thấy mỗi đề xuất liệt kê đề xuất kia + địa điểm đã duyệt gần đó (loại tên khác, loại ngoài 50 m); lịch sử không có nghi trùng. Mutation: giới hạn truy vấn kiểm duyệt về APPROVED → test đỏ.
+
+Chưa commit — chờ supervisor duyệt.

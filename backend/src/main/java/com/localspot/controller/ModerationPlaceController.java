@@ -2,7 +2,7 @@ package com.localspot.controller;
 
 import com.localspot.dto.request.ModerationDecisionRequest;
 import com.localspot.dto.response.CursorPage;
-import com.localspot.dto.response.PlaceSummaryResponse;
+import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.entity.PlaceStatus;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.Permissions;
@@ -32,7 +32,7 @@ public class ModerationPlaceController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('" + Permissions.PLACE_APPROVE + "')")
-    public CursorPage<PlaceSummaryResponse> queue(
+    public CursorPage<ModerationPlaceResponse> queue(
             @RequestParam(required = false) PlaceStatus status,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
