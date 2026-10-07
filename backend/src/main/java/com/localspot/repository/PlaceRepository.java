@@ -3,6 +3,7 @@ package com.localspot.repository;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
@@ -61,6 +62,10 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
     List<Place> findCreatedBy(@Param("userId") Long userId, @Param("afterId") Long afterId, Limit limit);
 
     /** {@code GET /owner/places}: số địa điểm một chủ sở hữu nhỏ → trả hết, không phân trang. */
+    /** Nạp địa điểm theo danh sách id từ truy vấn không gian (thứ tự do service sắp lại theo khoảng cách). */
+    @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.id IN :ids")
+    List<Place> findWithCategoryByIdIn(@Param("ids") Collection<Long> ids);
+
     @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.owner.id = :ownerId ORDER BY p.id DESC")
     List<Place> findOwnedBy(@Param("ownerId") Long ownerId);
 

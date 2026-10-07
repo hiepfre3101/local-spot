@@ -24,15 +24,20 @@ public class PlaceSummaries {
     }
 
     public List<PlaceSummaryResponse> of(List<Place> places) {
+        return of(places, Map.of());
+    }
+
+    /** Kèm {@code distanceM} theo id địa điểm (chỉ truy vấn không gian có — {@code /nearby}, {@code /duplicates}). */
+    public List<PlaceSummaryResponse> of(List<Place> places, Map<Long, Integer> distances) {
         Map<Long, PhotoResponse> covers =
                 photos.covers(places.stream().map(Place::getId).toList());
         return mapper.toSummaries(places).stream()
-                .map(summary -> withCover(summary, covers.get(summary.id())))
+                .map(summary -> withExtras(summary, covers.get(summary.id()), distances.get(summary.id())))
                 .toList();
     }
 
-    /** Record bất biến → dựng lại với ảnh bìa (mapper để trống trường này). */
-    private static PlaceSummaryResponse withCover(PlaceSummaryResponse s, PhotoResponse cover) {
+    /** Record bất biến → dựng lại với ảnh bìa và khoảng cách (mapper để trống hai trường này). */
+    private static PlaceSummaryResponse withExtras(PlaceSummaryResponse s, PhotoResponse cover, Integer distanceM) {
         return new PlaceSummaryResponse(
                 s.id(),
                 s.slug(),
@@ -47,6 +52,6 @@ public class PlaceSummaries {
                 s.avgRating(),
                 s.reviewCount(),
                 s.status(),
-                s.distanceM());
+                distanceM);
     }
 }

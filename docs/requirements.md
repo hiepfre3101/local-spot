@@ -172,7 +172,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Độ dài tối thiểu review | 20 ký tự | Đã chốt (U4) |
 | Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |
 | Số chủ mỗi địa điểm | 1 | Đã chốt (U6) |
-| Cảnh báo trùng khi đề xuất địa điểm | Tên gần giống trong bán kính 50 m → cảnh báo, không chặn | Đã chốt (U7) |
+| Cảnh báo trùng khi đề xuất địa điểm | Tên gần giống trong bán kính 50 m → cảnh báo, không chặn. Gần giống = chuẩn hóa (bỏ dấu, bỏ từ chung chung) rồi chứa nguyên từ hoặc Levenshtein ≥ 0.8; xét địa điểm đã duyệt + đề xuất chờ của chính người hỏi (chốt 2026-10-06). Trùng giữa hai người dùng: hàng chờ kiểm duyệt kèm `possibleDuplicates` gồm đề xuất chờ của mọi người (2026-10-07) | Đã chốt (U7) |
 | Tìm quanh vị trí | Mặc định 2 km, tối đa 20 km; tâm Hà Nội khi không có quyền vị trí | Đã chốt (U8) |
 | Meilisearch lỗi | Fallback MySQL `LIKE` | Đã chốt (U9) |
 | Báo cáo trùng | Mỗi người 1 báo cáo / đối tượng | Đã chốt (U10) |

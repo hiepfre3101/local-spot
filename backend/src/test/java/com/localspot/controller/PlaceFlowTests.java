@@ -676,9 +676,13 @@ class PlaceFlowTests {
         return ids;
     }
 
+    /** Id của mỗi mục — thẻ địa điểm, hoặc {@code place} của mục hàng chờ kiểm duyệt ({@code ModerationPlace}). */
     private static List<Long> idsOf(MvcResult page) throws Exception {
-        List<Number> ids = JsonPath.read(page.getResponse().getContentAsString(), "$.items[*].id");
-        return ids.stream().map(Number::longValue).toList();
+        List<Map<String, Object>> items = JsonPath.read(page.getResponse().getContentAsString(), "$.items");
+        return items.stream()
+                .map(item -> item.containsKey("place") ? (Map<?, ?>) item.get("place") : item)
+                .map(item -> ((Number) item.get("id")).longValue())
+                .toList();
     }
 
     private static <T> T read(MvcResult result, String path) throws Exception {

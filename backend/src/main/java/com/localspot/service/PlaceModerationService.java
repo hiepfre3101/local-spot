@@ -2,6 +2,7 @@ package com.localspot.service;
 
 import com.localspot.audit.AuditedAction;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
@@ -10,6 +11,7 @@ import com.localspot.exception.ErrorCode;
 import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.UserRepository;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
@@ -37,28 +39,50 @@ public class PlaceModerationService {
     private final PlaceRepository places;
     private final UserRepository users;
     private final PlaceSummaries summaries;
+    private final NearbyPlaceService nearby;
     private final Clock clock;
 
-    public PlaceModerationService(PlaceRepository places, UserRepository users, PlaceSummaries summaries, Clock clock) {
+    public PlaceModerationService(
+            PlaceRepository places,
+            UserRepository users,
+            PlaceSummaries summaries,
+            NearbyPlaceService nearby,
+            Clock clock) {
         this.places = places;
         this.users = users;
         this.summaries = summaries;
+        this.nearby = nearby;
         this.clock = clock;
     }
 
     /**
      * Hàng chờ theo trạng thái ({@code null} = PENDING). PENDING xếp FIFO — cũ nhất trước, như hàng chờ gộp; trạng thái
      * đã xử lý là lịch sử nên mới nhất trước.
+     *
+     * <p>Mục PENDING kèm {@code possibleDuplicates} (U7 phía kiểm duyệt — 2026-10-07): hai người dùng có thể đề xuất cùng
+     * một quán mà không thấy đề xuất chờ của nhau, nên kiểm duyệt viên là nơi bắt trùng giữa người dùng. Mỗi mục một truy
+     * vấn không gian trên spatial index (trang ≤ 50 mục) — chấp nhận ở quy mô hàng chờ, đổi lại không gộp SQL phức tạp.
      */
     @Transactional(readOnly = true)
-    public CursorPage<PlaceSummaryResponse> queue(PlaceStatus status, String cursor, Integer limit) {
+    public CursorPage<ModerationPlaceResponse> queue(PlaceStatus status, String cursor, Integer limit) {
         PlaceStatus effective = status == null ? PlaceStatus.PENDING : status;
         int pageSize = KeysetCursor.limit(limit);
         Long afterId = KeysetCursor.decode(cursor);
         List<Place> rows = effective == PlaceStatus.PENDING
                 ? places.findByStatusOldestFirst(effective, afterId, Limit.of(pageSize + 1))
                 : places.findByStatusNewestFirst(effective, afterId, Limit.of(pageSize + 1));
-        return KeysetPages.byId(rows, pageSize, Place::getId, summaries::of);
+        boolean pending = effective == PlaceStatus.PENDING;
+        return KeysetPages.byId(rows, pageSize, Place::getId, page -> toQueueItems(page, pending));
+    }
+
+    private List<ModerationPlaceResponse> toQueueItems(List<Place> page, boolean withDuplicates) {
+        List<PlaceSummaryResponse> cards = summaries.of(page);
+        List<ModerationPlaceResponse> items = new ArrayList<>(page.size());
+        for (int i = 0; i < page.size(); i++) {
+            items.add(new ModerationPlaceResponse(
+                    cards.get(i), withDuplicates ? nearby.possibleDuplicatesOf(page.get(i)) : List.of()));
+        }
+        return items;
     }
 
     @Transactional
