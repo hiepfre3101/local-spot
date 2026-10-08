@@ -169,6 +169,9 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |
 | Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản. Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04) |
 | Review từ dải IP bị cảnh báo | Bắt buộc vào hàng chờ + gắn cờ "nghi ngờ IP" | Đã chốt (U3) |
+| Dải IP của luật cảnh báo | IPv4 /24; IPv6 /64 (một thuê bao / hộ thường nhận nguyên /64); IPv4 dạng IPv6 coi là IPv4. Đếm cả review đã xóa | Đã chốt (2026-10-08) |
+| Sửa review theo trạng thái | `HIDDEN` không sửa được (409); `REJECTED` sửa = gửi lại → luôn `PENDING`; `PUBLISHED` / `PENDING`: trust < 30 → `PENDING`, ngược lại giữ nguyên | Đã chốt (2026-10-08) |
+| Chủ địa điểm đánh giá địa điểm của mình | Không — 409 `SELF_ACTION_FORBIDDEN` (review viết trước khi thành chủ giữ nguyên) | Đã chốt (2026-10-08) |
 | Độ dài tối thiểu review | 20 ký tự | Đã chốt (U4) |
 | Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |
 | Số chủ mỗi địa điểm | 1 | Đã chốt (U6) |

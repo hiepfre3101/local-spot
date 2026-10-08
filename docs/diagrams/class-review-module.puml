@@ -54,10 +54,10 @@ package service {
     + computeTrust(userId : Long) : int
   }
   class ReviewRateLimiter <<@Component>> {
-    + check(userId : Long) : void
+    + check(userId : Long, now : Instant) : void
   }
   class IpAnomalyDetector <<@Component>> {
-    + isSuspicious(placeId : Long, ipPrefix : String) : boolean
+    + isSuspicious(placeId : Long, ipPrefix : String, now : Instant) : boolean
   }
   class RatingCalculator <<@Component>> {
     + bayesian(v : int, r : double, m : int, c : double) : double
@@ -97,27 +97,24 @@ package repository {
 }
 
 package event {
-  class ReviewCreatedEvent <<record>> {
-    reviewId : Long
-    placeId : Long
-    status : ReviewStatus
-    hasPhotos : boolean
+  class ReviewChangedEvent <<record>> {
+    reviewId : long
+    placeId : long
+    before : ReviewStatus
+    after : ReviewStatus
   }
-  class ReviewStatusChangedEvent <<record>> {
-    reviewId : Long
-    placeId : Long
-    from : ReviewStatus
-    to : ReviewStatus
-  }
+  note bottom of ReviewChangedEvent
+    Gộp ReviewCreated / ReviewStatusChanged (2026-10-08):
+    phát khi tập review PUBLISHED của địa điểm đổi
+  end note
 }
 
 package listener {
   class RecalculateRatingListener <<@TransactionalEventListener AFTER_COMMIT, @Async>> {
-    + on(e : ReviewCreatedEvent) : void
-    + on(e : ReviewStatusChangedEvent) : void
-  }
+    + on(e : ReviewChangedEvent) : void
+      }
   class PhotoUploadedListener <<@TransactionalEventListener AFTER_COMMIT>> {
-    + on(e : ReviewCreatedEvent) : void
+    + on(e : ReviewChangedEvent) : void
   }
   class RatingRecalculationJob <<@Scheduled cron 0 0 3 * * *>> {
     + run() : void
@@ -142,11 +139,11 @@ ReviewService --> ReviewRateLimiter
 ReviewService --> IpAnomalyDetector
 ReviewService --> MediaService
 ReviewService --> ReviewMapper
-ReviewService ..> ReviewCreatedEvent : publish
+ReviewService ..> ReviewChangedEvent : publish
 
 ReviewModerationService --> ReviewRepository
 ReviewModerationService --> ViolationService
-ReviewModerationService ..> ReviewStatusChangedEvent : publish
+ReviewModerationService ..> ReviewChangedEvent : publish
 
 TrustScoreService --> UserViolationRepository
 TrustScoreService --> AntiFakeProperties

@@ -1,6 +1,7 @@
 package com.localspot.repository;
 
 import com.localspot.entity.User;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -59,4 +61,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @EntityGraph(attributePaths = "roles")
     List<User> findWithRolesByIdIn(Collection<Long> ids);
+
+    /**
+     * Khóa dòng người dùng ({@code SELECT … FOR UPDATE}) khi viết review: hai request đồng thời của cùng một người phải
+     * lần lượt đếm giới hạn 5 review / 24 giờ, không cùng thấy "còn lượt" rồi cùng vượt.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :id")
+    Optional<User> findByIdForUpdate(@Param("id") Long id);
 }

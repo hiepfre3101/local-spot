@@ -4,11 +4,13 @@ import com.localspot.dto.request.ChangePasswordRequest;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.MeResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
+import com.localspot.dto.response.ReviewResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.RefreshTokenCookies;
 import com.localspot.service.AccountService;
 import com.localspot.service.PlaceService;
 import com.localspot.service.ProfileService;
+import com.localspot.service.ReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -29,16 +31,19 @@ public class MeController {
     private final ProfileService profileService;
     private final AccountService accountService;
     private final PlaceService placeService;
+    private final ReviewService reviewService;
     private final RefreshTokenCookies cookies;
 
     public MeController(
             ProfileService profileService,
             AccountService accountService,
             PlaceService placeService,
+            ReviewService reviewService,
             RefreshTokenCookies cookies) {
         this.profileService = profileService;
         this.accountService = accountService;
         this.placeService = placeService;
+        this.reviewService = reviewService;
         this.cookies = cookies;
     }
 
@@ -54,6 +59,15 @@ public class MeController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
         return placeService.proposedBy(user.id(), cursor, limit);
+    }
+
+    /** Review của tôi, mọi trạng thái — kèm lý do bị từ chối (UC12: tác giả thấy review chờ duyệt của mình). */
+    @GetMapping("/reviews")
+    public CursorPage<ReviewResponse> myReviews(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit) {
+        return reviewService.writtenBy(user.id(), cursor, limit);
     }
 
     /**
