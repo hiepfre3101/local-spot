@@ -48,7 +48,7 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
 
   meilisearch:
-    image: getmeili/meilisearch:v1.10
+    image: getmeili/meilisearch:v1.54
     container_name: localspot-meilisearch
     restart: unless-stopped
     environment:
@@ -118,12 +118,17 @@ services:
       STORAGE_PATH_STYLE: ${STORAGE_PATH_STYLE:-true}
       STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:-http://localhost:9000/localspot}
       STORAGE_CREATE_BUCKET: ${STORAGE_CREATE_BUCKET:-true}
+      # Tìm kiếm: mặc định Meilisearch trong compose với master key; deploy thật nên tạo khóa API riêng (MEILI_API_KEY)
+      MEILI_HOST: ${MEILI_HOST:-http://meilisearch:7700}
+      MEILI_API_KEY: ${MEILI_API_KEY:-${MEILI_MASTER_KEY}}
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_started
       rabbitmq:
+        condition: service_started
+      meilisearch:
         condition: service_started
 
   nginx:

@@ -54,3 +54,7 @@ localspot:
     secret-key: ${MINIO_ROOT_PASSWORD}
     public-url: http://localhost:9000/localspot
     create-bucket: true
+  # Meilisearch trong docker compose — dev dùng master key trong ../.env
+  search:
+    host: http://localhost:7700
+    api-key: ${MEILI_MASTER_KEY}

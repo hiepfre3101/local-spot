@@ -106,6 +106,17 @@ localspot:
     bucket: localspot
     path-style-access: true
     create-bucket: false
+  # Meilisearch (FR-09); host / api-key theo profile. Tham số so khớp chốt 2026-10-08 (đo trên dữ liệu tiếng Việt)
+  search:
+    index: places
+    # Mặc định của Meilisearch: không khớp đủ thì bỏ từ cuối trước. "frequency" bị loại vì trả rỗng cho truy vấn thường
+    # ("pho bat dan ngon"). Từ chung chung đầu truy vấn ("quán", "tiệm") do SearchQueries bỏ trước khi gửi
+    matching-strategy: last
+    # 1 lỗi chính tả từ 4 ký tự (mặc định 5): âm tiết tiếng Việt ngắn — "bunn cha", "phoo thin" thì 5 trả rỗng
+    one-typo-min-word-size: 4
+    two-typo-min-word-size: 8
+    retry-after-failure: 30s # Meilisearch lỗi → fallback MySQL LIKE (U9) trong khoảng này rồi mới thử lại
+    reindex-on-startup: true
   # NFR-10 — cửa sổ trượt; ngưỡng chốt 2026-10-04 (login theo U2). Giới hạn 5 review / 24 giờ (FR-23) đếm trong CSDL.
   rate-limit:
     policies:

@@ -18,6 +18,7 @@ import com.localspot.entity.Tag;
 import com.localspot.entity.Taggable;
 import com.localspot.entity.TaggableType;
 import com.localspot.entity.User;
+import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.mapper.PlaceMapper;
@@ -49,6 +50,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -84,6 +86,7 @@ public class PlaceService {
     private final PlaceMapper mapper;
     private final PlacePhotoService photos;
     private final PlaceSummaries summaries;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public PlaceService(
@@ -99,6 +102,7 @@ public class PlaceService {
             PlaceMapper mapper,
             PlacePhotoService photos,
             PlaceSummaries summaries,
+            ApplicationEventPublisher events,
             Clock clock) {
         this.places = places;
         this.categories = categories;
@@ -112,6 +116,7 @@ public class PlaceService {
         this.mapper = mapper;
         this.photos = photos;
         this.summaries = summaries;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -185,7 +190,10 @@ public class PlaceService {
         return toDetail(place, viewer);
     }
 
-    /** Chủ địa điểm sửa thông tin (quyền sở hữu đã kiểm ở {@code @PreAuthorize} của controller). */
+    /**
+     * Chủ địa điểm sửa thông tin (quyền sở hữu đã kiểm ở {@code @PreAuthorize} của controller). Mô tả, địa chỉ, giá, tiện
+     * ích nằm trong index tìm kiếm → đồng bộ lại sau commit.
+     */
     @Transactional
     public PlaceDetailResponse updateByOwner(Long ownerId, Long placeId, PlaceUpdateRequest request) {
         Place place = places.findDetailById(placeId).orElseThrow(PlaceService::placeNotFound);
@@ -222,6 +230,7 @@ public class PlaceService {
             hours.forEach(place::addOpeningHour);
         }
         places.flush(); // UPDATE ngay → version mới nằm trong response cho lần sửa kế tiếp
+        events.publishEvent(PlaceIndexChangedEvent.of(placeId));
         return toDetail(place, new Viewer(ownerId, false));
     }
 

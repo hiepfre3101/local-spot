@@ -5,6 +5,7 @@ import com.localspot.entity.PlaceStatus;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -29,7 +30,56 @@ class PlaceSearchRepositoryImpl implements PlaceSearchRepository {
                 new StringBuilder("SELECT p FROM Place p JOIN FETCH p.category c WHERE p.status = :status");
         Map<String, Object> params = new HashMap<>();
         params.put("status", PlaceStatus.APPROVED);
+        appendFilter(jpql, params, filter);
 
+        String sortColumn = sortColumn(sort);
+        if (after != null) {
+            if (sortColumn == null) {
+                jpql.append(" AND p.id < :afterId");
+            } else {
+                jpql.append(" AND (" + sortColumn + " < :afterValue OR (" + sortColumn
+                        + " = :afterValue AND p.id < :afterId))");
+                params.put(
+                        "afterValue",
+                        sort == PlaceSort.MOST_REVIEWED ? after.value().intValueExact() : after.value());
+            }
+            params.put("afterId", after.id());
+        }
+        appendOrderBy(jpql, sort);
+
+        TypedQuery<Place> query = entityManager.createQuery(jpql.toString(), Place.class);
+        params.forEach(query::setParameter);
+        return query.setMaxResults(limit).getResultList();
+    }
+
+    /** Ký tự thoát của LIKE — không dùng {@code \} vì trong chuỗi SQL của MySQL nó là ký tự thoát của chính chuỗi. */
+    private static final char LIKE_ESCAPE = '!';
+
+    /** Số từ khóa tối đa đưa vào fallback ({@code q} ≤ 100 ký tự) — mỗi từ thêm một điều kiện LIKE. */
+    private static final int MAX_FALLBACK_WORDS = 10;
+
+    @Override
+    public List<Long> findApprovedIdsByNameWords(String q, PlaceFilter filter, PlaceSort sort, int offset, int limit) {
+        StringBuilder jpql = new StringBuilder("SELECT p.id FROM Place p JOIN p.category c WHERE p.status = :status");
+        Map<String, Object> params = new HashMap<>();
+        params.put("status", PlaceStatus.APPROVED);
+        List<String> words = Arrays.stream(q.strip().split("\\s+"))
+                .filter(word -> !word.isEmpty())
+                .limit(MAX_FALLBACK_WORDS)
+                .toList();
+        for (int i = 0; i < words.size(); i++) {
+            jpql.append(" AND p.name LIKE :word" + i + " ESCAPE '" + LIKE_ESCAPE + "'");
+            params.put("word" + i, "%" + escapeLike(words.get(i)) + "%");
+        }
+        appendFilter(jpql, params, filter);
+        appendOrderBy(jpql, sort);
+
+        TypedQuery<Long> query = entityManager.createQuery(jpql.toString(), Long.class);
+        params.forEach(query::setParameter);
+        return query.setFirstResult(offset).setMaxResults(limit).getResultList();
+    }
+
+    private static void appendFilter(StringBuilder jpql, Map<String, Object> params, PlaceFilter filter) {
         if (filter.categoryId() != null) {
             jpql.append(" AND (c.id = :categoryId OR c.parent.id = :categoryId)");
             params.put("categoryId", filter.categoryId());
@@ -53,29 +103,26 @@ class PlaceSearchRepositoryImpl implements PlaceSearchRepository {
             jpql.append(" AND p.city = :city");
             params.put("city", filter.city().strip());
         }
+    }
 
-        String sortColumn = switch (sort) {
+    private static String sortColumn(PlaceSort sort) {
+        return switch (sort) {
             case SCORE -> "p.bayesianScore";
             case MOST_REVIEWED -> "p.reviewCount";
             case NEWEST -> null;
         };
-        if (after != null) {
-            if (sortColumn == null) {
-                jpql.append(" AND p.id < :afterId");
-            } else {
-                jpql.append(" AND (" + sortColumn + " < :afterValue OR (" + sortColumn
-                        + " = :afterValue AND p.id < :afterId))");
-                params.put(
-                        "afterValue",
-                        sort == PlaceSort.MOST_REVIEWED ? after.value().intValueExact() : after.value());
-            }
-            params.put("afterId", after.id());
-        }
-        jpql.append(sortColumn == null ? " ORDER BY p.id DESC" : " ORDER BY " + sortColumn + " DESC, p.id DESC");
+    }
 
-        TypedQuery<Place> query = entityManager.createQuery(jpql.toString(), Place.class);
-        params.forEach(query::setParameter);
-        return query.setMaxResults(limit).getResultList();
+    private static void appendOrderBy(StringBuilder jpql, PlaceSort sort) {
+        String sortColumn = sortColumn(sort);
+        jpql.append(sortColumn == null ? " ORDER BY p.id DESC" : " ORDER BY " + sortColumn + " DESC, p.id DESC");
+    }
+
+    /** Ký tự đại diện của LIKE trong từ khóa người dùng được hiểu theo nghĩa đen ("100%" không khớp mọi thứ). */
+    static String escapeLike(String value) {
+        return value.replace(String.valueOf(LIKE_ESCAPE), "" + LIKE_ESCAPE + LIKE_ESCAPE)
+                .replace("%", LIKE_ESCAPE + "%")
+                .replace("_", LIKE_ESCAPE + "_");
     }
 
     // ─── Truy vấn không gian (FR-11, U7) ────────────────────────────────────

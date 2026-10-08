@@ -9,14 +9,17 @@ import com.localspot.dto.response.CategoryNode;
 import com.localspot.entity.Amenity;
 import com.localspot.entity.Category;
 import com.localspot.event.CatalogChangedEvent;
+import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.AmenityRepository;
 import com.localspot.repository.CategoryRepository;
+import com.localspot.repository.PlaceRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
@@ -37,12 +40,17 @@ public class CatalogService {
 
     private final CategoryRepository categories;
     private final AmenityRepository amenities;
+    private final PlaceRepository places;
     private final ApplicationEventPublisher events;
 
     public CatalogService(
-            CategoryRepository categories, AmenityRepository amenities, ApplicationEventPublisher events) {
+            CategoryRepository categories,
+            AmenityRepository amenities,
+            PlaceRepository places,
+            ApplicationEventPublisher events) {
         this.categories = categories;
         this.amenities = amenities;
+        this.places = places;
         this.events = events;
     }
 
@@ -106,12 +114,18 @@ public class CatalogService {
             throw slugTaken();
         }
         Category parent = resolveParent(request.parentId(), category);
+        boolean searchFieldsChanged = !category.getName().equals(request.name().strip())
+                || !Objects.equals(idOf(category.getParent()), idOf(parent));
         category.setParent(parent);
         category.setName(request.name().strip());
         category.setSlug(request.slug());
         category.setIcon(blankToNull(request.icon()));
         category.setSortOrder(sortOrderOf(request));
         categoriesChanged();
+        if (searchFieldsChanged) {
+            // Tên danh mục (và danh mục cha) nằm trong tài liệu tìm kiếm của địa điểm thuộc nó và thuộc danh mục con
+            events.publishEvent(new PlaceIndexChangedEvent(places.findApprovedIdsInCategoryTree(categoryId)));
+        }
         List<CategoryNode> children = categories.findByParentIdOrderBySortOrderAscIdAsc(categoryId).stream()
                 .map(child -> node(child, List.of()))
                 .toList();
@@ -211,6 +225,10 @@ public class CatalogService {
     // ─── Tiện ích nội bộ ─────────────────────────────────────────────────────
 
     /** Cache xóa sau commit ({@code CatalogCacheInvalidator}) — rollback thì cache giữ nguyên, vẫn đúng. */
+    private static Long idOf(Category category) {
+        return category == null ? null : category.getId();
+    }
+
     private void categoriesChanged() {
         events.publishEvent(new CatalogChangedEvent(CacheConfig.CATEGORIES));
     }

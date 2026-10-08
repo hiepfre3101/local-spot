@@ -45,3 +45,6 @@ localspot:
     path-style-access: ${STORAGE_PATH_STYLE:false}
     public-url: ${STORAGE_PUBLIC_URL}
     create-bucket: ${STORAGE_CREATE_BUCKET:false}
+  search:
+    host: ${MEILI_HOST}
+    api-key: ${MEILI_API_KEY}

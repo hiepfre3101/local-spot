@@ -6,7 +6,7 @@ Nền tảng tìm & đánh giá địa điểm địa phương do cộng đồng
 |---|---|
 | `backend/` | Spring Boot 4.1 + Java 21, Maven Wrapper |
 | `frontend/` | Vue 3 + Vite + TypeScript + Tailwind 4 |
-| `docker-compose.yml` | MySQL 8.4, Redis, RabbitMQ, Meilisearch, MinIO; backend + nginx dưới profile `app` |
+| `docker-compose.yml` | MySQL 8.4, Redis, RabbitMQ, Meilisearch 1.54, MinIO; backend + nginx dưới profile `app` |
 
 ## Yêu cầu
 
@@ -38,6 +38,10 @@ Chạy cả hệ thống trong Docker (giống môi trường deploy): `docker c
 | `member01@localspot.test` … `member51@localspot.test` | Thành viên (member09, 18, 27, 36, 45 chưa xác thực email) |
 
 Profile prod (Docker `--profile app`) không nạp dữ liệu demo.
+
+**Tìm kiếm** (`GET /api/v1/search`): backend khởi động là tự áp cấu hình index Meilisearch (synonym ở `backend/src/main/resources/search/synonyms.json` — sửa xong khởi động lại) và đồng bộ toàn bộ địa điểm đã duyệt qua RabbitMQ. Xem index tại http://localhost:7700 (khóa `MEILI_MASTER_KEY`).
+
+> **Đổi Meilisearch v1.10 → v1.54 (2026-10-08)**: v1.54 không mở được dữ liệu của v1.10. Máy đã chạy compose trước ngày này làm một lần: `docker compose rm -sf meilisearch && docker volume rm local-spot_meilisearch_data && docker compose up -d` — không mất gì, index được dựng lại từ MySQL khi backend khởi động.
 
 ## Kiểm tra trước khi push
 

@@ -490,13 +490,25 @@ paths:
     get:
       tags: [Search]
       summary: Tìm kiếm tiếng Việt qua Meilisearch, fallback MySQL LIKE (FR-09, U9)
+      description: |
+        *(chốt 2026-10-08)* Meilisearch v1.54 tự bỏ dấu và đổi `đ → d` ("pho" ra "Phở", "dong do" ra "Đông Đô"); thêm
+        synonym (`backend/src/main/resources/search/synonyms.json` — "cafe" ↔ "cà phê"), typo từ 4 ký tự,
+        `matchingStrategy = last`. Trước khi gửi, bỏ từ chỉ loại hình quán ("quán", "quán ăn", "tiệm", "nhà hàng",
+        "cửa hàng", "shop" — giữ "cà phê", giữ "quan" trước số = quận); bỏ hết thì giữ nguyên.
+        Tìm trên tên, thẻ, danh mục (+ danh mục cha), địa chỉ, thành phố, mô tả — ưu tiên theo thứ tự đó. Meilisearch chỉ
+        trả id; thẻ địa điểm nạp lại từ MySQL và chỉ giữ địa điểm **đang** APPROVED.
+        Phân trang theo vị trí (cursor mờ, gắn với `sort`, tối đa 1000 kết quả); cursor của thứ tự khác → 422 `INVALID_CURSOR`.
+        Meilisearch lỗi → `degraded = true`: tên chứa mọi từ khóa (`LIKE`, không phân biệt dấu), `RELEVANCE` xếp như `SCORE`;
+        không gọi lại Meilisearch trong 30 giây sau lỗi.
+        Lọc theo khoảng cách không có ở đây — UC08 2a chuyển sang `/places/nearby` (UC09).
       security: []
       parameters:
         - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
-        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
-        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } } }
-        - { name: priceMax, in: query, schema: { type: integer } }
-        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 } }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 }, description: Gồm cả danh mục con }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } }, description: Phải có đủ tất cả (AND) }
+        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: 'Như `/places`: địa điểm chưa khai giá bị loại' }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 }, description: Theo điểm Bayesian }
+        - { name: sort, in: query, schema: { type: string, enum: [RELEVANCE, SCORE, NEWEST, MOST_REVIEWED], default: RELEVANCE }, description: 'RELEVANCE: độ liên quan, cùng mức thì điểm Bayesian cao hơn trước' }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
@@ -510,6 +522,8 @@ paths:
                   - type: object
                     properties:
                       degraded: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   # ───────────────────────────── Reviews (UC12–UC14) ─────────────────────────────
   /places/{placeId}/reviews:
