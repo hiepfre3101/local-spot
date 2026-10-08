@@ -64,7 +64,7 @@
 | Ảnh | Thumbnailator | Resize, nén, xoay theo EXIF Orientation; ghi JPEG mới nên EXIF (GPS) bị gỡ — bỏ metadata-extractor vì không còn việc (2026-10-06) |
 | Mapping DTO | MapStruct | Entity ↔ DTO, thay cho API Resource của Laravel |
 | Boilerplate | Lombok | Giảm code getter/setter/constructor |
-| Tìm kiếm | Meilisearch (Java client chính thức) | Typo-tolerance, synonym tiếng Việt; tự viết service đồng bộ index thay cho Scout |
+| Tìm kiếm | Meilisearch 1.54 (Java client chính thức 0.22) | Typo-tolerance, synonym tiếng Việt; tự viết service đồng bộ index thay cho Scout (queue `search.reindex`). Đổi từ v1.10 ngày 2026-10-08 — client hiện tại không tương thích v1.10 |
 | Cache | Spring Cache + Redis (Lettuce) | Cache trang chủ, danh mục |
 | Queue | RabbitMQ + Spring AMQP (hoặc Spring `@Async`) | Hàng đợi xử lý ảnh, mail, tính lại rating |
 | Queue UI | RabbitMQ Management Plugin | Có ảnh chụp màn hình đưa vào báo cáo (thay cho Horizon) |
@@ -219,7 +219,7 @@ Quán 5 sao / 1 review sẽ không vượt mặt quán 4.6 sao / 300 review. Đ�
 | POST | `/places/{id}/check-in` | Check-in |
 | CRUD | `/collections`, `PUT/DELETE /collections/{id}/places/{placeId}` | Bộ sưu tập |
 | POST | `/reports` | Báo cáo vi phạm |
-| GET | `/search?q=` | Tìm kiếm qua Meilisearch |
+| GET | `/search?q=` | Tìm kiếm qua Meilisearch (fallback MySQL `LIKE` — U9) |
 | * | `/owner/*` | Chủ địa điểm: sửa thông tin, ảnh, thống kê *(tách riêng: tránh trùng đường dẫn với `/places/{slug}`)* |
 | * | `/moderation/*` | Kiểm duyệt viên: hàng chờ địa điểm / review / báo cáo / yêu cầu sở hữu *(tách khỏi `/admin` theo phân quyền Q2)*; `GET /moderation/queue` gộp 4 loại, xếp FIFO *(2026-09-29)* |
 | CRUD | `/admin/*` | Quản trị viên: người dùng, role, danh mục, tiện ích, dashboard |
@@ -393,7 +393,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Upload ảnh, resize, nén, lưu S3 qua queue — ảnh địa điểm: kèm đề xuất + `/owner/places/{id}/photos` (thêm / xóa); kiểm tra chữ ký file + đuôi + 5 MB + 40 MP; ảnh gốc `incoming/` (riêng tư) → queue `photo.process` (retry → DLQ) → 3 bản JPEG thumb/medium/large, không EXIF; bucket public-read, giới hạn 30 ảnh/địa điểm (chốt 2026-10-06). Ảnh review dùng lại pipeline ở mục "Ảnh đính kèm review"
 - [x] Danh mục phân cấp, tiện ích, giờ mở cửa — `GET /categories` (cây ≤ 2 cấp), `GET /amenities` (dùng chung — O7) có Spring Cache + Redis, xóa sau commit; quản trị `/admin/categories`, `/admin/amenities` (tạo / sửa / xóa khi không còn dùng, ghi nhật ký FR-42). Giờ mở cửa đã làm ở E1 (đề xuất, chủ sửa, chi tiết). Chốt 2026-10-06
 - [x] Truy vấn địa điểm theo bán kính (spatial index) — `GET /places/nearby` (2 km mặc định, 100 m – 20 km, lọc danh mục gồm con, gần nhất trước + `distanceM`): `MBRContains` + `FORCE INDEX (sx_places_location)` rồi `ST_Distance_Sphere`, test `EXPLAIN` (NFR-03); `GET /places/duplicates` (U7: tên gần giống trong 50 m, đã duyệt + đề xuất chờ của chính mình — chốt 2026-10-06); hàng chờ `/moderation/places` kèm `possibleDuplicates` (gồm đề xuất chờ của mọi người) để kiểm duyệt viên bắt trùng giữa người dùng
-- [ ] Tích hợp Meilisearch, cấu hình synonym tiếng Việt
+- [x] Tích hợp Meilisearch, cấu hình synonym tiếng Việt — `GET /search` (lọc như `/places` + `sort` RELEVANCE / SCORE / NEWEST / MOST_REVIEWED, cursor theo vị trí); Meilisearch tự bỏ dấu + `đ → d`, thêm synonym (`search/synonyms.json`, 30 nhóm), typo từ 4 ký tự, `matchingStrategy = last` + bỏ từ chỉ loại hình quán khỏi truy vấn (đo trên dữ liệu tiếng Việt, chốt 2026-10-08); chỉ trả id → nạp lại MySQL, chỉ giữ địa điểm đang APPROVED. Đồng bộ sau commit qua queue `search.reindex` (retry → DLQ) khi duyệt / chủ sửa / đổi tên danh mục + toàn bộ lúc khởi động; fallback `LIKE` trên tên (U9) với `degraded`, ngừng gọi Meilisearch 30 s sau lỗi. Rating / ẩn địa điểm phát `PlaceIndexChangedEvent` khi làm các mục đó
 - [ ] CRUD đánh giá + ràng buộc mỗi người một review
 - [ ] Ảnh đính kèm review
 - [ ] Vote hữu ích, bình luận (có phân cấp)

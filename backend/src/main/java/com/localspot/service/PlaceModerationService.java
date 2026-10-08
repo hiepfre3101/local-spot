@@ -6,6 +6,7 @@ import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
+import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.PlaceRepository;
@@ -13,6 +14,7 @@ import com.localspot.repository.UserRepository;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -31,7 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * Mỗi quyết định ghi {@code activity_log} qua {@link AuditedAction} (FR-42). Thông báo cho người đề xuất (UC11 hậu điều
- * kiện) và đồng bộ chỉ mục tìm kiếm (FR-35) gắn vào đây ở các mục thông báo / Meilisearch.
+ * kiện) gắn vào đây ở mục thông báo. Duyệt thì đồng bộ index tìm kiếm sau commit (FR-35, {@link PlaceIndexChangedEvent});
+ * từ chối thì không — địa điểm PENDING chưa từng có trong index.
  */
 @Service
 public class PlaceModerationService {
@@ -40,6 +43,7 @@ public class PlaceModerationService {
     private final UserRepository users;
     private final PlaceSummaries summaries;
     private final NearbyPlaceService nearby;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public PlaceModerationService(
@@ -47,11 +51,13 @@ public class PlaceModerationService {
             UserRepository users,
             PlaceSummaries summaries,
             NearbyPlaceService nearby,
+            ApplicationEventPublisher events,
             Clock clock) {
         this.places = places;
         this.users = users;
         this.summaries = summaries;
         this.nearby = nearby;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -92,6 +98,7 @@ public class PlaceModerationService {
         place.setStatus(PlaceStatus.APPROVED);
         place.setRejectReason(null);
         markModerated(place, moderatorId);
+        events.publishEvent(PlaceIndexChangedEvent.of(placeId));
     }
 
     /** Lý do bắt buộc — người đề xuất thấy lý do trên trang địa điểm / trang cá nhân. */

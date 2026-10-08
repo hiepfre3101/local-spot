@@ -66,6 +66,29 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
     @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.id IN :ids")
     List<Place> findWithCategoryByIdIn(@Param("ids") Collection<Long> ids);
 
+    /**
+     * Dữ liệu dựng tài liệu tìm kiếm: danh mục + danh mục cha + tiện ích nạp một lần cho cả lô (≤ 100 id) — không N+1.
+     * Địa điểm đã xóa mềm không có trong kết quả ({@code @SQLRestriction}) → consumer xóa khỏi index.
+     */
+    @Query("""
+            SELECT DISTINCT p FROM Place p
+            JOIN FETCH p.category c LEFT JOIN FETCH c.parent LEFT JOIN FETCH p.amenities
+            WHERE p.id IN :ids
+            """)
+    List<Place> findForSearchIndexByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Toàn bộ id đã duyệt — đồng bộ lại index khi khởi động (vài nghìn id, nhẹ). */
+    @Query("SELECT p.id FROM Place p WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED ORDER BY p.id")
+    List<Long> findApprovedIds();
+
+    /** Địa điểm đã duyệt thuộc danh mục hoặc danh mục con của nó — đổi tên / cha danh mục thì đồng bộ lại. */
+    @Query("""
+            SELECT p.id FROM Place p
+            WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED
+              AND (p.category.id = :categoryId OR p.category.parent.id = :categoryId)
+            """)
+    List<Long> findApprovedIdsInCategoryTree(@Param("categoryId") Long categoryId);
+
     @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.owner.id = :ownerId ORDER BY p.id DESC")
     List<Place> findOwnedBy(@Param("ownerId") Long ownerId);
 

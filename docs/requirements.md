@@ -174,7 +174,8 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Số chủ mỗi địa điểm | 1 | Đã chốt (U6) |
 | Cảnh báo trùng khi đề xuất địa điểm | Tên gần giống trong bán kính 50 m → cảnh báo, không chặn. Gần giống = chuẩn hóa (bỏ dấu, bỏ từ chung chung) rồi chứa nguyên từ hoặc Levenshtein ≥ 0.8; xét địa điểm đã duyệt + đề xuất chờ của chính người hỏi (chốt 2026-10-06). Trùng giữa hai người dùng: hàng chờ kiểm duyệt kèm `possibleDuplicates` gồm đề xuất chờ của mọi người (2026-10-07) | Đã chốt (U7) |
 | Tìm quanh vị trí | Mặc định 2 km, tối đa 20 km; tâm Hà Nội khi không có quyền vị trí | Đã chốt (U8) |
-| Meilisearch lỗi | Fallback MySQL `LIKE` | Đã chốt (U9) |
+| Meilisearch lỗi | Fallback MySQL `LIKE` trên tên (mọi từ khóa, không phân biệt dấu), `degraded = true`; ngừng gọi Meilisearch 30 s sau mỗi lần lỗi (2026-10-08) | Đã chốt (U9) |
+| Tham số tìm kiếm tiếng Việt | `matchingStrategy = last`, 1 lỗi chính tả từ 4 ký tự / 2 lỗi từ 8; bỏ "quán", "quán ăn", "tiệm", "nhà hàng", "cửa hàng", "shop" khỏi truy vấn (giữ "cà phê", "quan" trước số); synonym theo nhóm trong `search/synonyms.json`. Đo trên dữ liệu tiếng Việt — `frequency` trả rỗng cho truy vấn thường, typo 5 trả rỗng cho "bunn cha" | Đã chốt (2026-10-08) |
 | Báo cáo trùng | Mỗi người 1 báo cáo / đối tượng | Đã chốt (U10) |
 | Lưu token phía client | Refresh token: cookie HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth; access token chỉ trong bộ nhớ (không localStorage) | Đã chốt (S1) |
 | Upload ảnh review | Review + ảnh trong một request multipart qua API (không presigned URL) | Đã chốt (S2) |

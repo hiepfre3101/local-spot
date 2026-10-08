@@ -16,6 +16,7 @@ import org.springframework.context.annotation.Configuration;
  * <pre>
  * localspot.tasks (direct) ──mail.send─────▶ mail.send ─────(hết retry, reject)──▶ localspot.dlx ──▶ mail.send.dlq
  *                          ──photo.process─▶ photo.process ─(hết retry, reject)──▶ localspot.dlx ──▶ photo.process.dlq
+ *                          ──search.reindex▶ search.reindex ─(hết retry, reject)─▶ localspot.dlx ──▶ search.reindex.dlq
  * </pre>
  *
  * Retry nằm ở listener ({@code spring.rabbitmq.listener.simple.retry}); message lỗi sau lượt cuối được giữ lại ở DLQ để
@@ -32,6 +33,9 @@ public class RabbitConfig {
     public static final String PHOTO_QUEUE = "photo.process";
     public static final String PHOTO_ROUTING_KEY = "photo.process";
     public static final String PHOTO_DLQ = "photo.process.dlq";
+    public static final String SEARCH_QUEUE = "search.reindex";
+    public static final String SEARCH_ROUTING_KEY = "search.reindex";
+    public static final String SEARCH_DLQ = "search.reindex.dlq";
 
     @Bean
     DirectExchange tasksExchange() {
@@ -87,6 +91,29 @@ public class RabbitConfig {
     @Bean
     Binding photoDeadLetterBinding(Queue photoDeadLetterQueue, DirectExchange deadLetterExchange) {
         return BindingBuilder.bind(photoDeadLetterQueue).to(deadLetterExchange).with(PHOTO_DLQ);
+    }
+
+    @Bean
+    Queue searchQueue() {
+        return QueueBuilder.durable(SEARCH_QUEUE)
+                .deadLetterExchange(DEAD_LETTER_EXCHANGE)
+                .deadLetterRoutingKey(SEARCH_DLQ)
+                .build();
+    }
+
+    @Bean
+    Queue searchDeadLetterQueue() {
+        return QueueBuilder.durable(SEARCH_DLQ).build();
+    }
+
+    @Bean
+    Binding searchBinding(Queue searchQueue, DirectExchange tasksExchange) {
+        return BindingBuilder.bind(searchQueue).to(tasksExchange).with(SEARCH_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding searchDeadLetterBinding(Queue searchDeadLetterQueue, DirectExchange deadLetterExchange) {
+        return BindingBuilder.bind(searchDeadLetterQueue).to(deadLetterExchange).with(SEARCH_DLQ);
     }
 
     /** Message dạng JSON (đọc được trong Management UI) thay vì Java serialization mặc định. */

@@ -13,6 +13,13 @@ public interface PlaceSearchRepository {
     List<Place> searchApproved(PlaceFilter filter, PlaceSort sort, PlaceKeyset after, int limit);
 
     /**
+     * Fallback tìm kiếm khi Meilisearch lỗi (U9, UC08 3b): id địa điểm APPROVED có tên chứa <b>mọi</b> từ trong {@code q}
+     * ({@code LIKE '%từ%'}, collation {@code utf8mb4_0900_ai_ci} nên không phân biệt hoa thường / dấu, kể cả {@code đ = d}), cùng bộ lọc và
+     * thứ tự như {@link #searchApproved}, phân trang theo vị trí như Meilisearch. Quét bảng — chỉ dùng lúc sự cố.
+     */
+    List<Long> findApprovedIdsByNameWords(String q, PlaceFilter filter, PlaceSort sort, int offset, int limit);
+
+    /**
      * Địa điểm APPROVED trong bán kính {@code radiusM} quanh (lat, lng), gần nhất trước (FR-11). {@code categoryId} gồm
      * cả danh mục con (cây ≤ 2 cấp).
      */
