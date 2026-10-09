@@ -662,3 +662,27 @@ Chưa commit — chờ supervisor duyệt (gồm danh sách synonym).
 - **Test có bắt lỗi** (mutation, mỗi lần một chỗ): giới hạn bỏ qua review đã xóa; sửa REJECTED không về PENDING; bỏ chặn chủ tự đánh giá; ngưỡng IP lệch một (`>` thay `>=`) — mỗi lỗi làm đúng test tương ứng đỏ.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-09 (+07) — Checklist E7: Ảnh đính kèm review
+
+**Bối cảnh**: E6 (`feature/be-reviews`) đã push, chưa merge → nhánh `feature/be-review-photos` tạo từ `feature/be-reviews` (xếp chồng); mở PR sau khi E6 merge. Đã có: bảng `review_photos`, entity `ReviewPhoto`, pipeline ảnh địa điểm E2.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Thêm / xóa ảnh sau khi viết**: có — `POST /reviews/{id}/photos`, `DELETE /reviews/{id}/photos/{photoId}` (tác giả, giống endpoint ảnh của chủ địa điểm). Lý do: sửa một ảnh sai mà phải xóa review thì D2 khóa luôn địa điểm đó với người viết. Tổng ≤ 10 ảnh / review kể cả thêm sau; thêm ảnh **không** đổi trạng thái review (ảnh không duyệt lại); review `HIDDEN` khóa cả ảnh như khóa nội dung.
+- **Gallery địa điểm**: tách riêng — ảnh review chỉ hiện trong review. Đơn giản hơn, review bị ẩn / xóa thì ảnh tự biến mất theo; tab "ảnh từ đánh giá" làm ở frontend sau nếu cần.
+
+**Quyết định kỹ thuật:**
+- **Dùng chung pipeline, không nhân đôi code**: tách `PhotoFiles` khỏi `PlacePhotoService` (kiểm tra upload NFR-09, ảnh gốc riêng tư `incoming/…`, sinh 3 bản JPEG, URL, key các object); `PlacePhotoService` và `ReviewPhotoService` chỉ giữ phần bản ghi (bảng, trạng thái, giới hạn, ảnh bìa). Test E2 (`PlacePhotoFlowTests` 9 ca) vẫn xanh sau khi tách.
+- **Một queue `photo.process`**, message thêm `target` (PLACE / REVIEW); `@JsonAlias("placePhotoId")` + `target` rỗng → PLACE để message cũ còn trong queue / DLQ trước E7 vẫn xử lý đúng. Sự kiện `PlacePhotosStoredEvent` → `PhotosStoredEvent(target, …)` (commit → đưa vào queue, rollback → xóa ảnh gốc — như E2).
+- **Thứ tự khi viết review**: kiểm tra ảnh cùng nhóm validate (trước khi ghi gì — ảnh hỏng thì review không được tạo), lưu ảnh sau khi review đã INSERT, trong cùng transaction.
+- **Khóa dòng review** khi thêm / xóa ảnh — hai lần tải đồng thời lần lượt đếm giới hạn (như khóa địa điểm ở E2). Ảnh `FAILED` không tính vào giới hạn (người dùng tải lại được).
+- **Hiển thị**: người khác chỉ thấy ảnh READY; tác giả thấy cả `PROCESSING` / `FAILED` (biết ảnh vừa tải đang ở đâu). Ảnh nạp theo lô cho cả trang review (một truy vấn).
+- Thêm `localspot.photo.max-per-review: 10`.
+
+**Tài liệu**: openapi (ảnh khi viết, 2 endpoint mới, hiển thị ảnh trong danh sách), requirements (dòng "Ảnh review sau khi viết"), plan §10 E7.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **220 test** xanh (+4): `ReviewPhotoFlowTests` 4 ca qua RabbitMQ thật (ảnh kèm khi viết → PROCESSING → READY, URL đúng key `reviews/{id}/…`, ảnh gốc còn GPS bị xóa, không vào gallery địa điểm; ảnh hỏng → 422 `photos[1]` và review không được tạo; giới hạn 10 khi thêm sau (2 + 9 bị chặn, 2 + 8 được); thêm / xóa không đổi trạng thái review, không phát `ReviewChangedEvent`, object xóa sau commit, ảnh của review khác 404, người khác 403, `HIDDEN` 409 cả thêm lẫn xóa; ảnh lỗi chỉ tác giả thấy và không tính vào giới hạn). `PlacePhotoFlowTests` 9 ca vẫn xanh sau khi tách `PhotoFiles`. SpotBugs 0.
+- **Test có bắt lỗi** (mutation): hiện ảnh chưa READY cho mọi người; bỏ đếm giới hạn mỗi review; review `HIDDEN` vẫn nhận ảnh — mỗi lỗi làm đúng test tương ứng đỏ.
+
+Chưa commit — chờ supervisor duyệt.
