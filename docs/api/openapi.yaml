@@ -297,6 +297,7 @@ paths:
       parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /users/{userId}/follow:
     put:
       tags: [Users]
@@ -530,6 +531,10 @@ paths:
     get:
       tags: [Reviews]
       summary: Review đã công khai của địa điểm (FR-14)
+      description: |
+        *(chốt 2026-10-08)* Chỉ `PUBLISHED`. NEWEST: keyset theo id; HELPFUL: keyset `(helpfulCount, id)` — cursor của
+        thứ tự này dùng cho thứ tự kia → 422 `INVALID_CURSOR`. Địa điểm không tồn tại / chưa duyệt → 404.
+        Gửi kèm token để nhận `votedByMe`. `photos` rỗng tới mục "Ảnh đính kèm review".
       security: []
       parameters:
         - { $ref: '#/components/parameters/PlaceId' }
@@ -539,12 +544,18 @@ paths:
         - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Lọc theo số sao }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Reviews]
       summary: Viết review kèm ảnh — một request multipart (FR-17/19/23, UC12, S2)
       description: |
-        Kiểm tra theo thứ tự: email đã xác thực → validate → chưa có review (kể cả đã xóa, D2) → ≤ 5 review / 24 h →
-        trust ≥ 30 và < 3 review cùng /24 trong 24 h ⇒ `PUBLISHED`, ngược lại `PENDING`.
+        *(chốt 2026-10-08)* Kiểm tra theo thứ tự: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → validate (422; nội dung
+        ≥ 20 ký tự sau khi bỏ khoảng trắng hai đầu, `visitedAt` ≤ hôm nay theo giờ Việt Nam) → địa điểm APPROVED (404) →
+        không phải chủ địa điểm (409 `SELF_ACTION_FORBIDDEN`) → chưa có review, kể cả đã xóa (409 `REVIEW_ALREADY_EXISTS`,
+        D2) → ≤ 5 review / 24 h, đếm cả review đã xóa (429 + `Retry-After`) → trust ≥ 30 và địa điểm chưa nhận ≥ 3 review
+        từ cùng dải IP (IPv4 /24, IPv6 /64) trong 24 h ⇒ `PUBLISHED`, ngược lại `PENDING` (dải IP: gắn cờ `ipFlagged` — U3).
+        Phần `photos` được nhận từ mục "Ảnh đính kèm review" (E7).
       x-permission: review:create
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
@@ -570,6 +581,10 @@ paths:
     patch:
       tags: [Reviews]
       summary: Sửa review của mình (FR-18) — tác giả trust < 30 thì review về PENDING
+      description: |
+        *(chốt 2026-10-08)* `HIDDEN` (bị ẩn sau báo cáo) → 409 `REVIEW_LOCKED`. `REJECTED` → gửi lại: luôn về `PENDING`,
+        xóa `rejectReason`. `PUBLISHED` / `PENDING`: tác giả trust < 30 → `PENDING`, ngược lại giữ nguyên (review đang chờ
+        không tự được đăng vì sửa). `version` lệch → 409 `CONCURRENT_MODIFICATION`.
       x-permission: review:update-own
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
@@ -590,6 +605,7 @@ paths:
       responses:
         '204': { description: Đã xóa }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /reviews/{reviewId}/vote:
     put:
       tags: [Reviews]

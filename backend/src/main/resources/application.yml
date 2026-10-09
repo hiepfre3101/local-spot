@@ -90,6 +90,12 @@ localspot:
     helpful-cap: 36
     penalty-weight: 3
     publish-threshold: 30
+  # Chống review ảo khi viết review (FR-23, requirements §5, U3) — ngưỡng trust ở localspot.trust.publish-threshold
+  review:
+    max-per-window: 5 # đếm trong CSDL, cả review đã xóa
+    window: 24h
+    ip-alert-count: 3 # địa điểm đã nhận ≥ 3 review từ cùng /24 (IPv6: /64) trong 24 giờ → review kế tiếp vào hàng chờ
+    ip-window: 24h
   # Ảnh địa điểm / review (FR-16, NFR-09). maxPerPlace chốt 2026-10-06
   photo:
     max-per-request: 10

@@ -635,3 +635,30 @@ Chưa commit — chờ supervisor duyệt.
 - **Test có bắt lỗi** (mutation, mỗi lần một chỗ): bỏ lọc lại APPROVED khi nạp kết quả → test địa điểm bị ẩn đỏ; bỏ `SearchQueries` → test tiếng Việt đỏ ("quán phở thìn"); bỏ phát sự kiện khi duyệt → test đồng bộ qua queue đỏ.
 
 Chưa commit — chờ supervisor duyệt (gồm danh sách synonym).
+
+## 2026-10-08 (+07) — Checklist E6: CRUD đánh giá + mỗi người một review
+
+**Bối cảnh**: E5 đã merge (PR #10). Nhánh `feature/be-reviews` từ `develop`. Đã có sẵn: entity `Review` (cột IP, `ip_flagged`, `version`), `UNIQUE(place_id, user_id)`, `TrustScoreService`, `OwnershipPermissionEvaluator` cho review, IP thật sau nginx (`ClientInfos`).
+
+**Supervisor chốt (qua câu hỏi):**
+- **Phạm vi**: E6 làm **đủ cổng UC12 khi viết** (email → validate → địa điểm → chủ → trùng → 5 / 24 h → trust + IP ⇒ PUBLISHED / PENDING) và phát sự kiện tính lại rating; hàng chờ + duyệt review (UC28) ở mục "Trust score và hàng đợi duyệt review", ảnh ở mục "Ảnh đính kèm review", listener Bayesian ở mục "Tính lại rating". POST vẫn multipart (phần `review` giờ, phần `photos` sau) → API không đổi.
+- **Sửa theo trạng thái**: `HIDDEN` (bị ẩn sau báo cáo) → 409 `REVIEW_LOCKED` — không cho sửa lén nội dung bị báo cáo để hiện lại; `REJECTED` → gửi lại: luôn về `PENDING` (kiểm duyệt viên đã phản đối), xóa lý do; `PUBLISHED` / `PENDING` theo openapi (trust < 30 → `PENDING`, ngược lại giữ — review đang chờ, vd. bị cờ IP, không tự được đăng vì sửa).
+- **Chủ địa điểm không tự đánh giá** địa điểm của mình → 409 `SELF_ACTION_FORBIDDEN` (cùng tinh thần "kiểm duyệt viên không tự duyệt"); review viết trước khi thành chủ giữ nguyên.
+
+**Quyết định kỹ thuật:**
+- **Đếm cả review đã xóa** cho giới hạn 5 / 24 h (xóa không trả lại lượt — nếu không, viết–xóa–viết lách được) và cho luật IP; native query vì `@SQLRestriction` ẩn dòng đã xóa. `Retry-After` = lúc review cũ nhất trong cửa sổ rời cửa sổ.
+- **Khóa dòng người dùng** (`SELECT … FOR UPDATE`) khi viết: hai request đồng thời của cùng một người lần lượt đếm giới hạn — không cùng thấy "còn lượt". Hai request cùng địa điểm: `UNIQUE` chặn request sau (409 `DUPLICATE_RESOURCE` qua handler chung).
+- **Dải IP**: IPv4 /24 (requirements §5); IPv6 /64 — một thuê bao / hộ thường nhận nguyên /64, tương đương vai trò /24; `::ffff:a.b.c.d` coi là IPv4. Chỉ nhận chuỗi ký tự của địa chỉ, không bao giờ tra DNS.
+- **Lệch 7 giờ bắt được bằng test**: native `MIN(created_at)` trả `LocalDateTime` đã bị driver đổi sang múi giờ JVM (+07) → `Retry-After` sai 25 200 s. Sửa bằng `UNIX_TIMESTAMP` tính trong MySQL (phiên ép UTC) trả epoch ms — không phụ thuộc chuyển đổi của driver. Tham số `Instant` khi bind thì đúng (Hibernate `jdbc.time_zone = UTC`).
+- **Validate**: nội dung ≥ 20 ký tự **sau khi bỏ khoảng trắng hai đầu** (U4 — 20 dấu cách không phải đánh giá), lưu bản đã bỏ khoảng trắng; `visitedAt` ≤ hôm nay theo **giờ Việt Nam** (23:30 ở Hà Nội đã là "hôm nay" dù UTC còn hôm qua).
+- **Sự kiện** `ReviewChangedEvent(reviewId, placeId, before, after)` — gộp `ReviewCreatedEvent` / `ReviewStatusChangedEvent` của sơ đồ lớp: listener nào cũng chỉ cần "địa điểm này phải tính lại". Chỉ phát khi tập review PUBLISHED đổi (tạo PUBLISHED, xóa / sửa sao của review PUBLISHED, đổi trạng thái vào / ra PUBLISHED). Đã cập nhật `class-review-module.puml` (chưa render lại PNG — máy này chưa có PlantUML).
+- **Tách `ReviewRateLimiter`, `IpAnomalyDetector`** như sơ đồ lớp (để code khớp báo cáo); `ReviewService` chỉ điều phối.
+- **Danh sách**: NEWEST keyset theo id, HELPFUL keyset `(helpful_count, id)` (cursor riêng, dùng nhầm thứ tự → 422); `votedByMe`, `commentCount` (chỉ bình luận VISIBLE), `ownerReply` nạp theo lô cho cả trang (không N+1); `rejectReason` chỉ tác giả thấy; `photos` rỗng tới E7. `/me/reviews` mọi trạng thái; `/users/{id}/reviews` chỉ PUBLISHED, người dùng không tồn tại → 404. `SecurityConfig`: `GET /places/*/reviews`, `/users/*/reviews` công khai.
+
+**Tài liệu**: openapi (thứ tự kiểm tra + mã lỗi của POST, luật sửa của PATCH, 404 / 422 của danh sách), requirements (dải IP, sửa theo trạng thái, chủ không tự đánh giá), plan §10 E6, `class-review-module.puml`.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **216 test** xanh (+14): `ReviewFlowTests` 11 ca trên MySQL thật (đăng ngay khi trust ≥ 30 + hiện trên địa điểm + `myReviewId`; trust thấp → PENDING, chỉ tác giả thấy, không phát sự kiện; chưa xác thực email 403; 1 review / địa điểm kể cả sau khi xóa; chủ không tự đánh giá, địa điểm chưa duyệt 404; validate sao / nội dung 19 ký tự sau khi bỏ khoảng trắng / ngày tương lai; 5 / 24 h đếm cả review đã xóa, `Retry-After` ≈ 24 h, review cũ rời cửa sổ thì có lượt; review thứ 4 từ cùng /24 → PENDING + `ip_flagged`, dải khác / địa điểm khác bình thường; luật sửa theo trạng thái + version + 403 người khác; trust tụt → sửa thì về PENDING; NEWEST / HELPFUL + lọc sao + phân trang + cursor sai thứ tự 422, `votedByMe` / `commentCount` (bỏ bình luận ẩn) / `ownerReply`, `rejectReason` chỉ tác giả, `/users/{id}/reviews`), `IpPrefixesTest` 3 ca. Sự kiện kiểm bằng `@RecordApplicationEvents`. SpotBugs 0.
+- **Test có bắt lỗi** (mutation, mỗi lần một chỗ): giới hạn bỏ qua review đã xóa; sửa REJECTED không về PENDING; bỏ chặn chủ tự đánh giá; ngưỡng IP lệch một (`>` thay `>=`) — mỗi lỗi làm đúng test tương ứng đỏ.
+
+Chưa commit — chờ supervisor duyệt.

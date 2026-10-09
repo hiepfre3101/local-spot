@@ -66,5 +66,12 @@ public final class ErrorCode {
     /** OWNER chỉ gán qua duyệt yêu cầu sở hữu (UC30), không gán / gỡ tay (chốt O6 2026-10-03). */
     public static final String OWNER_ROLE_MANAGED_BY_CLAIM = "OWNER_ROLE_MANAGED_BY_CLAIM";
 
+    /** 403: thao tác cần email đã xác thực — viết review (UC12 ngoại lệ 1a). */
+    public static final String EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
+    /** 409: đã có review cho địa điểm này, kể cả review đã xóa (FR-17, D2) — gợi ý sửa review cũ. */
+    public static final String REVIEW_ALREADY_EXISTS = "REVIEW_ALREADY_EXISTS";
+    /** 409: review đã bị ẩn sau báo cáo vi phạm — tác giả không sửa được (chốt 2026-10-08). */
+    public static final String REVIEW_LOCKED = "REVIEW_LOCKED";
+
     private ErrorCode() {}
 }
