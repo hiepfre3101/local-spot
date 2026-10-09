@@ -20,7 +20,7 @@ public final class TestImages {
 
     /** Cấu hình giống application.yml. */
     public static final PhotoProperties PROPERTIES =
-            new PhotoProperties(10, 30, DataSize.ofMegabytes(5), 40_000_000L, 0.8f, 320, 960, 1920);
+            new PhotoProperties(10, 30, 10, DataSize.ofMegabytes(5), 40_000_000L, 0.8f, 320, 960, 1920);
 
     private TestImages() {}
 

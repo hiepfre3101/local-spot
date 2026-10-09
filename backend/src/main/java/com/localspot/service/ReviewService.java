@@ -4,6 +4,7 @@ import com.localspot.config.TrustProperties;
 import com.localspot.dto.request.ReviewCreateRequest;
 import com.localspot.dto.request.ReviewUpdateRequest;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.ReviewResponse;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
@@ -16,6 +17,7 @@ import com.localspot.exception.ErrorCode;
 import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.ReviewRepository;
 import com.localspot.repository.UserRepository;
+import com.localspot.service.ImageInspector.Inspected;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,10 +29,11 @@ import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Review: viết (UC12, FR-17, FR-23), sửa / xóa của mình (UC13, FR-18), danh sách (FR-14). Duyệt review trong hàng chờ
- * (UC28) nằm ở mục "Trust score và hàng đợi duyệt review"; ảnh ở mục "Ảnh đính kèm review".
+ * (UC28) nằm ở mục "Trust score và hàng đợi duyệt review". Ảnh: {@link ReviewPhotoService}.
  *
  * <p><b>Viết review — thứ tự kiểm tra</b> (UC12, chốt 2026-10-08): email đã xác thực (403) → dữ liệu hợp lệ (422) → địa điểm APPROVED (404) →
  * không phải chủ địa điểm (409) → chưa có review, kể cả đã xóa (409, D2) → ≤ 5 review / 24 giờ (429) → trust ≥ 30 và
@@ -55,6 +58,7 @@ public class ReviewService {
     private final ReviewRateLimiter rateLimiter;
     private final IpAnomalyDetector ipAnomalies;
     private final ReviewViews views;
+    private final ReviewPhotoService photos;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -67,6 +71,7 @@ public class ReviewService {
             ReviewRateLimiter rateLimiter,
             IpAnomalyDetector ipAnomalies,
             ReviewViews views,
+            ReviewPhotoService photos,
             ApplicationEventPublisher events,
             Clock clock) {
         this.reviews = reviews;
@@ -77,6 +82,7 @@ public class ReviewService {
         this.rateLimiter = rateLimiter;
         this.ipAnomalies = ipAnomalies;
         this.views = views;
+        this.photos = photos;
         this.events = events;
         this.clock = clock;
     }
@@ -84,13 +90,15 @@ public class ReviewService {
     // ─── Viết (UC12) ─────────────────────────────────────────────────────────
 
     @Transactional
-    public ReviewResponse create(Long userId, Long placeId, ReviewCreateRequest request, ClientInfo client) {
+    public ReviewResponse create(
+            Long userId, Long placeId, ReviewCreateRequest request, List<MultipartFile> photoFiles, ClientInfo client) {
         // Khóa dòng người dùng: các request đồng thời của cùng một người xếp hàng ở đây → đếm giới hạn đúng
         User author = users.findByIdForUpdate(userId).orElseThrow(ReviewService::userNotFound);
         if (!author.isEmailVerified()) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN, ErrorCode.EMAIL_NOT_VERIFIED, "Hãy xác thực email trước khi viết đánh giá.");
         }
+        List<Inspected> images = photos.inspect(photoFiles); // ảnh hỏng / quá số → 422 cùng nhóm validate
         String content = checkContent(request.content());
         LocalDate visitedAt = checkVisitedAt(request.visitedAt());
         Place place = places.findById(placeId)
@@ -127,6 +135,7 @@ public class ReviewService {
                 ipPrefix);
         review.setIpFlagged(ipFlagged);
         reviews.saveAndFlush(review); // INSERT ngay: trùng UNIQUE (request chen nhau) → 409 tại đây, có createdAt
+        photos.store(review, userId, images); // ảnh xử lý nền (UC12 bước 9)
         if (status == ReviewStatus.PUBLISHED) {
             events.publishEvent(new ReviewChangedEvent(review.getId(), placeId, null, status));
         }
@@ -152,12 +161,7 @@ public class ReviewService {
             throw concurrentModification();
         }
         ReviewStatus before = review.getStatus();
-        if (before == ReviewStatus.HIDDEN) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    ErrorCode.REVIEW_LOCKED,
-                    "Đánh giá đã bị ẩn sau báo cáo vi phạm nên không sửa được.");
-        }
+        requireEditable(review);
         int ratingBefore = review.getRating();
         if (request.rating() != null) {
             review.setRating(request.rating());
@@ -185,6 +189,38 @@ public class ReviewService {
                     new ReviewChangedEvent(reviewId, review.getPlace().getId(), before, after));
         }
         return views.of(review, userId);
+    }
+
+    /**
+     * Thêm ảnh vào review của mình (chốt 2026-10-09): tổng ≤ {@code max-per-review}, không đổi trạng thái review. Khóa
+     * dòng review để hai lần tải đồng thời lần lượt đếm giới hạn.
+     */
+    @Transactional
+    public List<PhotoResponse> addPhotos(Long userId, Long reviewId, List<MultipartFile> photoFiles) {
+        List<Inspected> images = photos.inspect(photoFiles);
+        if (images.isEmpty()) {
+            throw ApiException.fieldError(ErrorCode.VALIDATION_FAILED, "photos", "Hãy chọn ít nhất một ảnh.");
+        }
+        Review review = reviews.findByIdForUpdate(reviewId).orElseThrow(ReviewService::reviewNotFound);
+        requireEditable(review);
+        return photos.store(review, userId, images);
+    }
+
+    @Transactional
+    public void deletePhoto(Long reviewId, Long photoId) {
+        Review review = reviews.findByIdForUpdate(reviewId).orElseThrow(ReviewService::reviewNotFound);
+        requireEditable(review);
+        photos.delete(reviewId, photoId);
+    }
+
+    /** Review bị ẩn sau báo cáo không sửa được — cả nội dung lẫn ảnh (chốt 2026-10-08). */
+    private static void requireEditable(Review review) {
+        if (review.getStatus() == ReviewStatus.HIDDEN) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    ErrorCode.REVIEW_LOCKED,
+                    "Đánh giá đã bị ẩn sau báo cáo vi phạm nên không sửa được.");
+        }
     }
 
     /**

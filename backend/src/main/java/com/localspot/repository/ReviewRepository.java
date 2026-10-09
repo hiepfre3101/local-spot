@@ -1,11 +1,13 @@
 package com.localspot.repository;
 
 import com.localspot.entity.Review;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -124,4 +126,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT r FROM Review r JOIN FETCH r.user WHERE r.id = :id")
     Optional<Review> findWithAuthorById(@Param("id") Long id);
+
+    /** Khóa dòng review khi thêm / xóa ảnh: hai lần upload đồng thời lần lượt đếm giới hạn ảnh mỗi review. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Review r WHERE r.id = :id")
+    Optional<Review> findByIdForUpdate(@Param("id") Long id);
 }

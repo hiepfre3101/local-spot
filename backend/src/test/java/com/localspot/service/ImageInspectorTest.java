@@ -52,7 +52,8 @@ class ImageInspectorTest {
     void rejectsEmptyOversizedAndCorruptFiles() {
         expectInvalid(file("a.jpg", new byte[0]), "photos[0]", "rỗng");
 
-        PhotoProperties tiny = new PhotoProperties(10, 30, DataSize.ofBytes(100), 40_000_000L, 0.8f, 320, 960, 1920);
+        PhotoProperties tiny =
+                new PhotoProperties(10, 30, 10, DataSize.ofBytes(100), 40_000_000L, 0.8f, 320, 960, 1920);
         assertThatThrownBy(() -> new ImageInspector(tiny).inspect(file("a.jpg", TestImages.rotatedWithGps()), "f"))
                 .isInstanceOf(ApiException.class)
                 .hasMessageContaining("vượt quá");

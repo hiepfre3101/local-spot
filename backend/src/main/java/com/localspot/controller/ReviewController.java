@@ -3,6 +3,7 @@ package com.localspot.controller;
 import com.localspot.dto.request.ReviewCreateRequest;
 import com.localspot.dto.request.ReviewUpdateRequest;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.ReviewResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.OwnershipPermissionEvaluator;
@@ -12,6 +13,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import java.util.List;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * openapi tag Reviews (UC12–UC14). {@code GET} công khai (khai báo trong {@code SecurityConfig}); người đã đăng nhập gửi
@@ -65,8 +68,8 @@ public class ReviewController {
     }
 
     /**
-     * Viết review (UC12) — multipart theo openapi (S2): phần {@code review} là JSON. Phần {@code photos} thêm ở mục "Ảnh
-     * đính kèm review". 201 kèm {@code status}: PUBLISHED hoặc PENDING (chờ kiểm duyệt).
+     * Viết review (UC12) — multipart theo openapi (S2): phần {@code review} là JSON, phần {@code photos} (không bắt buộc,
+     * ≤ 10 ảnh JPEG / PNG) xử lý nền. 201 kèm {@code status}: PUBLISHED hoặc PENDING (chờ kiểm duyệt).
      */
     @PostMapping(path = "/places/{placeId}/reviews", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('" + Permissions.REVIEW_CREATE + "')")
@@ -74,9 +77,29 @@ public class ReviewController {
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable Long placeId,
             @Valid @RequestPart("review") ReviewCreateRequest review,
+            @RequestPart(value = "photos", required = false) List<MultipartFile> photos,
             HttpServletRequest http) {
         return ResponseEntity.status(201)
-                .body(reviewService.create(user.id(), placeId, review, ClientInfos.from(http)));
+                .body(reviewService.create(user.id(), placeId, review, photos, ClientInfos.from(http)));
+    }
+
+    /** Thêm ảnh vào review của mình (chốt 2026-10-09) — 201 kèm ảnh vừa nhận, PROCESSING. */
+    @PostMapping(path = "/reviews/{reviewId}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasPermission(#reviewId, '" + OwnershipPermissionEvaluator.REVIEW + "', '"
+            + Permissions.REVIEW_UPDATE_OWN + "')")
+    public ResponseEntity<List<PhotoResponse>> addPhotos(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable Long reviewId,
+            @RequestPart("photos") List<MultipartFile> photos) {
+        return ResponseEntity.status(201).body(reviewService.addPhotos(user.id(), reviewId, photos));
+    }
+
+    @DeleteMapping("/reviews/{reviewId}/photos/{photoId}")
+    @PreAuthorize("hasPermission(#reviewId, '" + OwnershipPermissionEvaluator.REVIEW + "', '"
+            + Permissions.REVIEW_UPDATE_OWN + "')")
+    public ResponseEntity<Void> deletePhoto(@PathVariable Long reviewId, @PathVariable Long photoId) {
+        reviewService.deletePhoto(reviewId, photoId);
+        return ResponseEntity.noContent().build();
     }
 
     @PatchMapping("/reviews/{reviewId}")

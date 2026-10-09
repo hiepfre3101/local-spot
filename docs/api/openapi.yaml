@@ -534,7 +534,8 @@ paths:
       description: |
         *(chốt 2026-10-08)* Chỉ `PUBLISHED`. NEWEST: keyset theo id; HELPFUL: keyset `(helpfulCount, id)` — cursor của
         thứ tự này dùng cho thứ tự kia → 422 `INVALID_CURSOR`. Địa điểm không tồn tại / chưa duyệt → 404.
-        Gửi kèm token để nhận `votedByMe`. `photos` rỗng tới mục "Ảnh đính kèm review".
+        Gửi kèm token để nhận `votedByMe`. `photos`: người khác chỉ thấy ảnh `READY`, tác giả thấy cả `PROCESSING` /
+        `FAILED`. Ảnh review không gộp vào gallery của địa điểm (chốt 2026-10-09).
       security: []
       parameters:
         - { $ref: '#/components/parameters/PlaceId' }
@@ -555,7 +556,8 @@ paths:
         không phải chủ địa điểm (409 `SELF_ACTION_FORBIDDEN`) → chưa có review, kể cả đã xóa (409 `REVIEW_ALREADY_EXISTS`,
         D2) → ≤ 5 review / 24 h, đếm cả review đã xóa (429 + `Retry-After`) → trust ≥ 30 và địa điểm chưa nhận ≥ 3 review
         từ cùng dải IP (IPv4 /24, IPv6 /64) trong 24 h ⇒ `PUBLISHED`, ngược lại `PENDING` (dải IP: gắn cờ `ipFlagged` — U3).
-        Phần `photos` được nhận từ mục "Ảnh đính kèm review" (E7).
+        Ảnh (`photos`, tùy chọn): kiểm tra cả lô trước khi ghi gì (một ảnh hỏng → 422 đúng `photos[i]`, review không được
+        tạo), xử lý nền như ảnh địa điểm; response trả ảnh `PROCESSING`. Tối đa 10 ảnh mỗi review, kể cả thêm sau.
       x-permission: review:create
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
@@ -606,6 +608,43 @@ paths:
         '204': { description: Đã xóa }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /reviews/{reviewId}/photos:
+    post:
+      tags: [Reviews]
+      summary: Thêm ảnh vào review của mình (FR-19 — chốt 2026-10-09)
+      description: |
+        Tổng ≤ 10 ảnh mỗi review (ảnh `FAILED` không tính) → vượt: 422 `PHOTO_LIMIT_EXCEEDED`. Không đổi trạng thái review
+        (ảnh không duyệt lại). Review `HIDDEN` → 409 `REVIEW_LOCKED`.
+      x-permission: review:update-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: binary } }
+      responses:
+        '201': { description: 'Ảnh vừa nhận, `PROCESSING`', content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Photo' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /reviews/{reviewId}/photos/{photoId}:
+    delete:
+      tags: [Reviews]
+      summary: Xóa một ảnh của review của mình (chốt 2026-10-09)
+      x-permission: review:update-own
+      parameters:
+        - { $ref: '#/components/parameters/ReviewId' }
+        - { name: photoId, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '204': { description: Đã xóa — object trong kho xóa sau commit }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review hoặc ảnh không tồn tại (`PHOTO_NOT_FOUND` — ảnh không thuộc review này)' }
+        '409': { description: 'Review `HIDDEN` → `REVIEW_LOCKED`' }
   /reviews/{reviewId}/vote:
     put:
       tags: [Reviews]

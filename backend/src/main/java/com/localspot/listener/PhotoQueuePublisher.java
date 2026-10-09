@@ -3,7 +3,7 @@ package com.localspot.listener;
 import com.localspot.amqp.PhotoProcessMessage;
 import com.localspot.config.RabbitConfig;
 import com.localspot.event.PhotoObjectsDeletedEvent;
-import com.localspot.event.PlacePhotosStoredEvent;
+import com.localspot.event.PhotosStoredEvent;
 import com.localspot.storage.ObjectStorage;
 import com.localspot.storage.StorageException;
 import java.util.List;
@@ -36,20 +36,22 @@ public class PhotoQueuePublisher {
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void enqueue(PlacePhotosStoredEvent event) {
+    public void enqueue(PhotosStoredEvent event) {
         for (Long photoId : event.photoIds()) {
             try {
                 rabbitTemplate.convertAndSend(
-                        RabbitConfig.TASKS_EXCHANGE, RabbitConfig.PHOTO_ROUTING_KEY, new PhotoProcessMessage(photoId));
+                        RabbitConfig.TASKS_EXCHANGE,
+                        RabbitConfig.PHOTO_ROUTING_KEY,
+                        new PhotoProcessMessage(event.target(), photoId));
             } catch (AmqpException e) {
-                log.error("Không đẩy được ảnh {} lên RabbitMQ: {}", photoId, e.getMessage());
+                log.error("Không đẩy được ảnh {} {} lên RabbitMQ: {}", event.target(), photoId, e.getMessage());
             }
         }
     }
 
     /** Request thất bại sau khi ảnh gốc đã lên kho (lỗi validate sau đó, trùng slug…) → không để ảnh mồ côi. */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_ROLLBACK)
-    public void discardIncoming(PlacePhotosStoredEvent event) {
+    public void discardIncoming(PhotosStoredEvent event) {
         deleteQuietly(event.incomingKeys());
     }
 

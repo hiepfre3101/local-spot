@@ -13,6 +13,8 @@ import org.springframework.validation.annotation.Validated;
  *
  * @param maxPerRequest số ảnh tối đa mỗi request (openapi {@code maxItems: 10})
  * @param maxPerPlace tổng ảnh tối đa của một địa điểm (chốt 2026-10-06)
+ * @param maxPerReview tổng ảnh tối đa của một review — bằng số ảnh một lần tải lên (openapi {@code maxItems: 10}), thêm
+ *     ảnh sau khi viết cũng không vượt (chốt 2026-10-09)
  * @param maxFileSize dung lượng tối đa mỗi ảnh (NFR-09) — khớp {@code spring.servlet.multipart.max-file-size}
  * @param maxPixels chặn "bom giải nén": ảnh vài trăm KB nhưng hàng trăm megapixel làm tràn bộ nhớ khi giải mã
  * @param jpegQuality chất lượng nén JPEG đầu ra (0–1)
@@ -25,6 +27,7 @@ import org.springframework.validation.annotation.Validated;
 public record PhotoProperties(
         @Positive int maxPerRequest,
         @Positive int maxPerPlace,
+        @Positive int maxPerReview,
         @NotNull DataSize maxFileSize,
         @Positive long maxPixels,
         @DecimalMin("0.1") @DecimalMax("1.0") float jpegQuality,

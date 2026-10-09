@@ -1,6 +1,7 @@
 package com.localspot.service;
 
 import com.localspot.dto.response.OwnerReplyResponse;
+import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.ReviewResponse;
 import com.localspot.entity.OwnerReply;
 import com.localspot.entity.Review;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
  * Dựng {@link ReviewResponse} cho cả trang: vote của người xem, số bình luận, phản hồi của chủ — mỗi loại một truy vấn
  * theo lô, không truy vấn từng review (N+1). Tác giả được nạp sẵn ({@code JOIN FETCH}) ở repository.
  *
- * <p>Ảnh review là mục "Ảnh đính kèm review" — tới lúc đó {@code photos} rỗng.
+ * <p>Ảnh: người khác chỉ thấy ảnh READY, tác giả thấy cả ảnh đang xử lý / lỗi ({@link ReviewPhotoService#photosOf}).
  */
 @Component
 public class ReviewViews {
@@ -30,16 +31,19 @@ public class ReviewViews {
     private final ReviewVoteRepository votes;
     private final CommentRepository comments;
     private final OwnerReplyRepository ownerReplies;
+    private final ReviewPhotoService photos;
 
     public ReviewViews(
             ReviewMapper mapper,
             ReviewVoteRepository votes,
             CommentRepository comments,
-            OwnerReplyRepository ownerReplies) {
+            OwnerReplyRepository ownerReplies,
+            ReviewPhotoService photos) {
         this.mapper = mapper;
         this.votes = votes;
         this.comments = comments;
         this.ownerReplies = ownerReplies;
+        this.photos = photos;
     }
 
     /** {@code viewerId = null}: khách. */
@@ -55,10 +59,12 @@ public class ReviewViews {
         }
         Map<Long, OwnerReply> replies = ownerReplies.findWithAuthorByReviewIdIn(ids).stream()
                 .collect(Collectors.toMap(reply -> reply.getReview().getId(), Function.identity()));
+        Map<Long, List<PhotoResponse>> photosByReview = photos.photosOf(reviews, viewerId);
         return reviews.stream()
                 .map(review -> toResponse(
                         review,
                         viewerId,
+                        photosByReview.getOrDefault(review.getId(), List.of()),
                         voted.contains(review.getId()),
                         commentCounts.getOrDefault(review.getId(), 0L),
                         replies.get(review.getId())))
@@ -70,7 +76,12 @@ public class ReviewViews {
     }
 
     private ReviewResponse toResponse(
-            Review review, Long viewerId, boolean votedByMe, long commentCount, OwnerReply reply) {
+            Review review,
+            Long viewerId,
+            List<PhotoResponse> photoList,
+            boolean votedByMe,
+            long commentCount,
+            OwnerReply reply) {
         boolean author = review.getUser().getId().equals(viewerId);
         OwnerReplyResponse ownerReply = reply == null ? null : mapper.toOwnerReply(reply);
         return new ReviewResponse(
@@ -82,7 +93,7 @@ public class ReviewViews {
                 review.getVisitedAt(),
                 review.getStatus(),
                 author ? review.getRejectReason() : null, // lý do từ chối chỉ tác giả thấy (openapi)
-                List.of(),
+                photoList,
                 review.getHelpfulCount(),
                 votedByMe,
                 commentCount,
