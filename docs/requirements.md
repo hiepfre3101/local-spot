@@ -182,6 +182,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Báo cáo trùng | Mỗi người 1 báo cáo / đối tượng | Đã chốt (U10) |
 | Lưu token phía client | Refresh token: cookie HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth; access token chỉ trong bộ nhớ (không localStorage) | Đã chốt (S1) |
 | Upload ảnh review | Review + ảnh trong một request multipart qua API (không presigned URL) | Đã chốt (S2) |
+| Ảnh review sau khi viết | Thêm (`POST /reviews/{id}/photos`) / xóa ảnh được; tổng ≤ 10 ảnh mỗi review (ảnh lỗi không tính); không đổi trạng thái review; review `HIDDEN` khóa cả ảnh. Ảnh review hiện trong review, **không** gộp vào gallery của địa điểm | Đã chốt (2026-10-09) |
 | Cột điểm địa điểm | Lưu cả `avg_rating` (trung bình thô) và `bayesian_score` | Đã chốt (S3) |
 
 ---

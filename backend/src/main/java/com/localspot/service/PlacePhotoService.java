@@ -1,14 +1,14 @@
 package com.localspot.service;
 
+import com.localspot.amqp.PhotoProcessMessage.Target;
 import com.localspot.config.PhotoProperties;
-import com.localspot.config.StorageProperties;
 import com.localspot.dto.response.PhotoResponse;
 import com.localspot.entity.PhotoStatus;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlacePhoto;
 import com.localspot.entity.User;
 import com.localspot.event.PhotoObjectsDeletedEvent;
-import com.localspot.event.PlacePhotosStoredEvent;
+import com.localspot.event.PhotosStoredEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.PlacePhotoRepository;
@@ -16,16 +16,13 @@ import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.UserRepository;
 import com.localspot.service.ImageInspector.Inspected;
 import com.localspot.service.ImageResizer.Resized;
-import com.localspot.service.ImageResizer.UnreadableImageException;
-import com.localspot.storage.ObjectStorage;
 import com.localspot.storage.StorageException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -39,9 +36,8 @@ import org.springframework.web.multipart.MultipartFile;
  * Ảnh địa điểm (FR-16, checklist E2): nhận upload → lưu ảnh gốc vào {@code incoming/…} + bản ghi PROCESSING → sau commit
  * đưa id vào queue {@code photo.process} → consumer {@link #process} sinh 3 bản JPEG vào {@code places/…} → READY.
  *
- * <p><b>Bố cục key</b>: {@code storage_key = places/{placeId}/{uuid}}; ảnh gốc {@code incoming/} + storage_key (riêng tư,
- * còn EXIF); các bản {@link PhotoSize#keyOf} (đọc công khai). Key chứa UUID ngẫu nhiên nên không đoán được URL ảnh của
- * địa điểm chưa duyệt.
+ * <p>Kiểm tra upload, lưu ảnh gốc, sinh các bản và URL dùng chung với ảnh review — {@link PhotoFiles}
+ * ({@code storage_key = places/{placeId}/{uuid}}).
  *
  * <p><b>Ảnh bìa</b>: ảnh đầu tiên của địa điểm chưa có bìa; bìa bị xóa / xử lý lỗi → chuyển cho ảnh kế tiếp theo
  * {@code sort_order}. Chủ chọn bìa không có trong openapi — để sau nếu cần.
@@ -51,17 +47,11 @@ public class PlacePhotoService {
 
     private static final Logger log = LoggerFactory.getLogger(PlacePhotoService.class);
 
-    static final String INCOMING_PREFIX = "incoming/";
-    private static final String JPEG = "image/jpeg";
-
     private final PlacePhotoRepository photos;
     private final PlaceRepository places;
     private final UserRepository users;
-    private final ImageInspector inspector;
-    private final ImageResizer resizer;
-    private final ObjectStorage storage;
+    private final PhotoFiles files;
     private final PhotoProperties properties;
-    private final StorageProperties storageProperties;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
 
@@ -69,46 +59,24 @@ public class PlacePhotoService {
             PlacePhotoRepository photos,
             PlaceRepository places,
             UserRepository users,
-            ImageInspector inspector,
-            ImageResizer resizer,
-            ObjectStorage storage,
+            PhotoFiles files,
             PhotoProperties properties,
-            StorageProperties storageProperties,
             ApplicationEventPublisher events,
             TransactionTemplate tx) {
         this.photos = photos;
         this.places = places;
         this.users = users;
-        this.inspector = inspector;
-        this.resizer = resizer;
-        this.storage = storage;
+        this.files = files;
         this.properties = properties;
-        this.storageProperties = storageProperties;
         this.events = events;
         this.tx = tx;
     }
 
     // ─── Nhận upload ─────────────────────────────────────────────────────────
 
-    /**
-     * Kiểm tra cả lô trước khi ghi gì (NFR-09) — một ảnh hỏng thì cả request bị từ chối, lỗi chỉ đúng {@code photos[i]}.
-     * {@code null} / rỗng = không có ảnh.
-     */
-    public List<Inspected> inspect(List<MultipartFile> files) {
-        if (files == null || files.isEmpty()) {
-            return List.of();
-        }
-        if (files.size() > properties.maxPerRequest()) {
-            throw ApiException.fieldError(
-                    ErrorCode.PHOTO_LIMIT_EXCEEDED,
-                    "photos",
-                    "Tối đa " + properties.maxPerRequest() + " ảnh mỗi lần tải lên.");
-        }
-        List<Inspected> images = new ArrayList<>(files.size());
-        for (int i = 0; i < files.size(); i++) {
-            images.add(inspector.inspect(files.get(i), "photos[" + i + "]"));
-        }
-        return images;
+    /** Kiểm tra cả lô trước khi ghi gì (NFR-09) — xem {@link PhotoFiles#inspect}. */
+    public List<Inspected> inspect(List<MultipartFile> uploads) {
+        return files.inspect(uploads);
     }
 
     /**
@@ -139,10 +107,8 @@ public class PlacePhotoService {
         List<String> incomingKeys = new ArrayList<>(images.size());
         try {
             for (Inspected image : images) {
-                String storageKey = "places/" + placeId + "/" + UUID.randomUUID();
-                String incomingKey = INCOMING_PREFIX + storageKey;
-                storage.put(incomingKey, image.content(), image.format().contentType());
-                incomingKeys.add(incomingKey);
+                String storageKey = PhotoFiles.newStorageKey("places/" + placeId);
+                incomingKeys.add(files.putOriginal(storageKey, image));
 
                 PlacePhoto photo = new PlacePhoto(place, uploader, storageKey);
                 photo.setSortOrder(++sortOrder);
@@ -153,14 +119,11 @@ public class PlacePhotoService {
         } catch (StorageException e) {
             log.error("Không lưu được ảnh gốc của địa điểm {}: {}", placeId, e.getMessage());
             // Ảnh đã lên kho trước lỗi vẫn được dọn: sự kiện phát trước khi ném → rollback kích hoạt xóa
-            events.publishEvent(new PlacePhotosStoredEvent(List.of(), incomingKeys));
-            throw new ApiException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    ErrorCode.SERVICE_UNAVAILABLE,
-                    "Kho ảnh tạm thời không khả dụng. Hãy thử lại sau.");
+            events.publishEvent(new PhotosStoredEvent(Target.PLACE, List.of(), incomingKeys));
+            throw PhotoFiles.storageUnavailable();
         }
-        events.publishEvent(
-                new PlacePhotosStoredEvent(saved.stream().map(PlacePhoto::getId).toList(), incomingKeys));
+        events.publishEvent(new PhotosStoredEvent(
+                Target.PLACE, saved.stream().map(PlacePhoto::getId).toList(), incomingKeys));
         return saved.stream().map(this::toResponse).toList();
     }
 
@@ -177,7 +140,7 @@ public class PlacePhotoService {
         if (wasCover) {
             reassignCover(placeId);
         }
-        events.publishEvent(new PhotoObjectsDeletedEvent(objectKeysOf(photo.getStorageKey())));
+        events.publishEvent(new PhotoObjectsDeletedEvent(PhotoFiles.objectKeysOf(photo.getStorageKey())));
     }
 
     // ─── Xử lý nền (consumer) ───────────────────────────────────────────────
@@ -202,22 +165,14 @@ public class PlacePhotoService {
             log.debug("Bỏ qua ảnh {}: không còn chờ xử lý", photoId);
             return;
         }
-        String incomingKey = INCOMING_PREFIX + storageKey;
-        byte[] original = storage.get(incomingKey);
-
-        Resized resized;
-        try {
-            resized = resizer.resize(original);
-        } catch (UnreadableImageException e) {
-            log.warn("Ảnh {} không xử lý được, đánh dấu FAILED: {}", photoId, e.getMessage());
+        Optional<Resized> resized = files.render(photoId, storageKey);
+        if (resized.isEmpty()) {
             tx.executeWithoutResult(status -> photos.findById(photoId).ifPresent(this::fail));
-            deleteQuietly(List.of(incomingKey));
             return;
         }
-        resized.variants().forEach((size, bytes) -> storage.put(size.keyOf(storageKey), bytes, JPEG));
-        tx.executeWithoutResult(
-                status -> photos.findById(photoId).ifPresent(p -> p.markReady(resized.width(), resized.height())));
-        deleteQuietly(List.of(incomingKey));
+        tx.executeWithoutResult(status -> photos.findById(photoId)
+                .ifPresent(p -> p.markReady(resized.get().width(), resized.get().height())));
+        files.discardOriginal(storageKey);
     }
 
     private void fail(PlacePhoto photo) {
@@ -268,34 +223,7 @@ public class PlacePhotoService {
         return byPlace;
     }
 
-    /** URL chỉ có khi READY — trước đó object các bản chưa tồn tại. */
     PhotoResponse toResponse(PlacePhoto photo) {
-        if (photo.getStatus() != PhotoStatus.READY) {
-            return new PhotoResponse(photo.getId(), photo.getStatus().name(), null, null, null);
-        }
-        String key = photo.getStorageKey();
-        return new PhotoResponse(
-                photo.getId(),
-                photo.getStatus().name(),
-                storageProperties.publicUrlOf(PhotoSize.THUMB.keyOf(key)),
-                storageProperties.publicUrlOf(PhotoSize.MEDIUM.keyOf(key)),
-                storageProperties.publicUrlOf(PhotoSize.LARGE.keyOf(key)));
-    }
-
-    /** Mọi object có thể có của một ảnh: ảnh gốc (nếu chưa xử lý xong) + các bản. */
-    static List<String> objectKeysOf(String storageKey) {
-        List<String> keys = new ArrayList<>();
-        keys.add(INCOMING_PREFIX + storageKey);
-        Arrays.stream(PhotoSize.values()).map(size -> size.keyOf(storageKey)).forEach(keys::add);
-        return keys;
-    }
-
-    private void deleteQuietly(List<String> keys) {
-        try {
-            storage.delete(keys);
-        } catch (StorageException e) {
-            // Chỉ còn rác trong kho, ảnh đã xử lý xong — không retry cả message vì việc dọn dẹp
-            log.warn("Không xóa được {}: {}", keys, e.getMessage());
-        }
+        return files.toResponse(photo.getId(), photo.getStatus(), photo.getStorageKey());
     }
 }

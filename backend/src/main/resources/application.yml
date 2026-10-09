@@ -100,6 +100,7 @@ localspot:
   photo:
     max-per-request: 10
     max-per-place: 30
+    max-per-review: 10 # tổng ảnh mỗi review, kể cả thêm sau khi viết (chốt 2026-10-09)
     max-file-size: 5MB
     max-pixels: 40000000 # ~ 7300 × 5500 — đủ cho ảnh điện thoại, chặn ảnh "bom giải nén"
     jpeg-quality: 0.8
