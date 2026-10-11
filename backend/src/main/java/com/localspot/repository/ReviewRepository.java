@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -126,6 +127,42 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     @Query("SELECT r FROM Review r JOIN FETCH r.user WHERE r.id = :id")
     Optional<Review> findWithAuthorById(@Param("id") Long id);
+
+    /**
+     * Review mọi người đang thấy: PUBLISHED trên địa điểm APPROVED (cùng điều kiện với danh sách review). Vote / bình
+     * luận chỉ áp lên review này — review khác coi như không tồn tại (404).
+     */
+    @Query("""
+            SELECT r FROM Review r JOIN FETCH r.user
+            WHERE r.id = :id AND r.status = com.localspot.entity.ReviewStatus.PUBLISHED
+              AND r.place.status = com.localspot.entity.PlaceStatus.APPROVED
+            """)
+    Optional<Review> findVisibleById(@Param("id") Long id);
+
+    // ─── Vote hữu ích (FR-20) — đếm nguyên tử, không qua entity ─────────────
+
+    /**
+     * Khóa độc quyền dòng review ({@code FOR UPDATE}) và đọc trạng thái <b>mới nhất</b> — truy vấn vô hướng nên không bị
+     * bản entity đã nạp trước trong phiên che mất. Rỗng = không tồn tại / đã xóa mềm.
+     */
+    @Query(value = "SELECT status FROM reviews WHERE id = :id AND deleted_at IS NULL FOR UPDATE", nativeQuery = true)
+    Optional<String> lockStatusById(@Param("id") Long id);
+
+    /** {@code helpful_count} mới nhất trong CSDL (bỏ qua bản trong bộ nhớ) — trả về sau khi vote / bỏ vote. */
+    @Query(value = "SELECT helpful_count FROM reviews WHERE id = :id", nativeQuery = true)
+    int findHelpfulCount(@Param("id") Long id);
+
+    /** Không đổi {@code updated_at} / {@code version}: vote không phải là sửa review, không làm hỏng bản sửa của tác giả. */
+    @Modifying
+    @Query(value = "UPDATE reviews SET helpful_count = helpful_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementHelpfulCount(@Param("id") Long id);
+
+    /** Chặn dưới 0 (cột UNSIGNED) — phòng thủ, bình thường mỗi lần trừ đi đôi với một vote vừa xóa. */
+    @Modifying
+    @Query(
+            value = "UPDATE reviews SET helpful_count = helpful_count - 1 WHERE id = :id AND helpful_count > 0",
+            nativeQuery = true)
+    void decrementHelpfulCount(@Param("id") Long id);
 
     /** Khóa dòng review khi thêm / xóa ảnh: hai lần upload đồng thời lần lượt đếm giới hạn ảnh mỗi review. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)

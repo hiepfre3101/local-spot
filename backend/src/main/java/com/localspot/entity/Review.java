@@ -63,8 +63,11 @@ public class Review extends AuditableEntity {
     @Column(name = "ip_flagged", nullable = false)
     private boolean ipFlagged;
 
-    /** Tổng vote hiển thị; cập nhật nguyên tử bằng UPDATE ± 1 ở repository, không qua entity. */
-    @Column(name = "helpful_count", nullable = false)
+    /**
+     * Tổng vote hiển thị; cập nhật nguyên tử bằng UPDATE ± 1 ở repository, không qua entity. Không insert / update qua
+     * entity: Hibernate ghi lại mọi cột khi review được sửa, một giá trị cũ trong bộ nhớ sẽ xóa mất vote đến cùng lúc.
+     */
+    @Column(name = "helpful_count", nullable = false, insertable = false, updatable = false)
     private int helpfulCount;
 
     @Column(name = "reject_reason", length = 500)

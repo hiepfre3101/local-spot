@@ -10,6 +10,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -69,4 +70,25 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :id")
     Optional<User> findByIdForUpdate(@Param("id") Long id);
+
+    /**
+     * Khóa nhiều dòng người dùng theo thứ tự id tăng dần (InnoDB khóa theo thứ tự quét khóa chính) — mọi transaction
+     * khóa cùng một tập theo cùng một thứ tự nên không thể chờ vòng tròn. Dùng khi vote: xem {@code ReviewVoteService}.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id IN :ids ORDER BY u.id")
+    List<User> findAllByIdForUpdate(@Param("ids") Collection<Long> ids);
+
+    // ─── Vote hữu ích hợp lệ (requirements §5.1) — đếm nguyên tử, không qua entity ─
+
+    @Modifying
+    @Query(value = "UPDATE users SET helpful_votes_count = helpful_votes_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementHelpfulVotesCount(@Param("id") Long id);
+
+    @Modifying
+    @Query(value = """
+            UPDATE users SET helpful_votes_count = helpful_votes_count - 1
+            WHERE id = :id AND helpful_votes_count > 0
+            """, nativeQuery = true)
+    void decrementHelpfulVotesCount(@Param("id") Long id);
 }

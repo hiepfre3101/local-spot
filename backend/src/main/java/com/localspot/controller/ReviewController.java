@@ -5,10 +5,12 @@ import com.localspot.dto.request.ReviewUpdateRequest;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.ReviewResponse;
+import com.localspot.dto.response.VoteResultResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.OwnershipPermissionEvaluator;
 import com.localspot.security.Permissions;
 import com.localspot.service.ReviewService;
+import com.localspot.service.ReviewVoteService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -42,9 +45,11 @@ public class ReviewController {
     private static final String RATING_RANGE = "Số sao từ 1 đến 5.";
 
     private final ReviewService reviewService;
+    private final ReviewVoteService voteService;
 
-    public ReviewController(ReviewService reviewService) {
+    public ReviewController(ReviewService reviewService, ReviewVoteService voteService) {
         this.reviewService = reviewService;
+        this.voteService = voteService;
     }
 
     @GetMapping("/places/{placeId}/reviews")
@@ -118,6 +123,17 @@ public class ReviewController {
     public ResponseEntity<Void> delete(@PathVariable Long reviewId) {
         reviewService.delete(reviewId);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Vote "hữu ích" (UC14) — idempotent; mọi thành viên đăng nhập (không có permission riêng trong RBAC). */
+    @PutMapping("/reviews/{reviewId}/vote")
+    public VoteResultResponse vote(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long reviewId) {
+        return voteService.vote(user.id(), reviewId);
+    }
+
+    @DeleteMapping("/reviews/{reviewId}/vote")
+    public VoteResultResponse unvote(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable Long reviewId) {
+        return voteService.unvote(user.id(), reviewId);
     }
 
     @GetMapping("/users/{userId}/reviews")

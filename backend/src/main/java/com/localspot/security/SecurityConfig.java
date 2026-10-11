@@ -80,6 +80,9 @@ public class SecurityConfig {
                         // Review đã công khai của địa điểm / người dùng (FR-14, openapi security: [])
                         .requestMatchers(HttpMethod.GET, "/api/v1/places/*/reviews", "/api/v1/users/*/reviews")
                         .permitAll()
+                        // Bình luận của review đang hiện (FR-21, openapi security: [])
+                        .requestMatchers(HttpMethod.GET, "/api/v1/reviews/*/comments")
+                        .permitAll()
                         // Tìm kiếm (UC08, openapi security: []) — khách tìm không cần đăng nhập
                         .requestMatchers(HttpMethod.GET, "/api/v1/search")
                         .permitAll()
