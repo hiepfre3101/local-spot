@@ -714,3 +714,30 @@ Chưa commit — chờ supervisor duyệt.
 - **Test có bắt lỗi** (mutation, mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa `users` theo thứ tự → vote chéo deadlock; cột đếm `updatable` lại → test mất cập nhật; bỏ điều kiện `counted` → test hai bộ đếm; bỏ nhánh placeholder (`OR EXISTS` → `AND EXISTS`); cho trả lời một trả lời; bỏ kiểm email khi bình luận.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-11 (+07) — Checklist E9: Tính lại rating Bayesian qua Spring Event + `@Async`
+
+**Bối cảnh**: E8 đã push (PR #13, chưa merge) → nhánh `feature/be-rating` tạo từ `feature/be-votes-comments` (xếp chồng như E6 → E7, tránh xung đột plan / progress log); mở PR sau khi #13 merge. Đã có: cột `review_count`, `avg_rating DECIMAL(3,2)`, `bayesian_score DECIMAL(4,3)` + index `(category_id, status, bayesian_score)`, `ReviewChangedEvent` (E6), `PlaceIndexChangedEvent` (E5), `m = 10`, D4 (job đêm 03:00).
+
+**Supervisor chốt (qua câu hỏi):**
+- **C** = `AVG(rating)` của mọi review `PUBLISHED` trên địa điểm `APPROVED` — mỗi review cùng trọng số (kiểu IMDb), không phải trung bình của các `avg_rating`.
+- **v = 0 → điểm 0** ("Chưa có đánh giá", đứng sau mọi địa điểm đã có review) thay vì đúng C theo công thức thuần — tránh quán mới chưa ai đánh giá đứng ngang mức trung bình (≈ 4) trên quán thật có nhiều review 3.9 ở mục "nổi bật".
+- **Seed review demo** (~2000 review) tách thành mục riêng ngay sau, giữ PR này tập trung vào phần lõi.
+
+**Quyết định kỹ thuật:**
+- **Tách theo sơ đồ lớp**: `RatingCalculator` (hàm thuần, unit test NFR-20), `RatingService` (nơi duy nhất ghi ba cột), `RecalculateRatingListener` (AFTER_COMMIT + `@Async`), `RatingRecalculationJob` (`@Scheduled` cron cấu hình, giờ VN), `RatingProperties` (`m`, cron). `AsyncConfig` bật `@EnableAsync` / `@EnableScheduling`, dùng executor mặc định của Spring Boot, lỗi tác vụ nền ghi ERROR. Sơ đồ lớp cập nhật (`RatingProperties` thay `AntiFakeProperties` cho `m`; calculator không phụ thuộc cấu hình).
+- **Đếm lại từ đầu, không cộng dồn ± 1**: idempotent — chạy lặp, trễ, chen nhau đều ra cùng kết quả; mất một sự kiện thì lần tính sau tự sửa. Chi phí: `COUNT/AVG` trên index `(place_id, status, created_at)` + một `AVG` toàn bảng cho C mỗi sự kiện — chấp nhận ở quy mô vài nghìn review (D4).
+- **Khóa trước, đếm sau** — tìm ra khi tự rà code, trước khi chạy test: bản đầu đọc C rồi mới khóa dòng địa điểm. Ở REPEATABLE READ (mặc định MySQL), ảnh chụp của transaction chốt ở **lần đọc thường đầu tiên**, nên phép đếm sau khóa vẫn dùng ảnh chụp cũ → lần tính chạy sau có thể ghi đè điểm mới bằng điểm cũ. Sửa: `SELECT … FOR UPDATE` dòng địa điểm là câu lệnh đầu tiên, C đọc sau đó. Hai lần tính cùng địa điểm chạy nối tiếp, lần sau luôn thấy dữ liệu ít nhất mới bằng lần trước. Chỉ khóa `places` → không đụng thứ tự khóa users → reviews của E8.
+- **AFTER_COMMIT + `@Async`**: rollback thì không tính; người viết review không chờ; lỗi tính điểm không làm hỏng request đã thành công. Đánh đổi: sự kiện chỉ trong bộ nhớ — máy chủ tắt đúng lúc thì điểm lệch tới job đêm (tự sửa vì đếm lại từ đầu). Không thêm outbox / queue cho giá trị dẫn xuất tự sửa được.
+- **Job đêm**: C tính một lần, rồi mỗi địa điểm một transaction ngắn (khóa một dòng; sự kiện xen giữa chỉ chờ đúng địa điểm đó). Gồm cả địa điểm chưa duyệt / bị ẩn (được hiện lại thì điểm đã đúng). Giả định một instance backend; chạy trùng vẫn đúng, chỉ tốn công.
+- **Làm tròn** theo kiểu cột, nửa lên; điểm Bayesian tính từ R **chưa làm tròn**. Chỉ ghi và chỉ báo đồng bộ index (`PlaceIndexChangedEvent`, địa điểm APPROVED) khi giá trị thật sự đổi.
+- **Mất cập nhật** như E8: ba cột điểm của `Place` thành `insertable = false, updatable = false` — chủ sửa / duyệt địa điểm qua entity không ghi đè điểm vừa tính. (`checkin_count` sẽ cần tương tự ở mục check-in.)
+- Còn mở cho các mục sau: duyệt / ẩn địa điểm làm đổi C (C chỉ tính địa điểm APPROVED) — hiện để job đêm cập nhật; duyệt review (UC28) phát `ReviewChangedEvent` như E6 là đủ.
+
+**Tài liệu**: requirements §5 (cách tính C, điểm khi chưa có review), database.md §4, openapi (`bayesianScore`: 0 khi chưa có review, tính lại trễ), `class-review-module.puml` (chưa render PNG), plan §10 E9, `application.yml` (`localspot.rating`).
+
+**Kiểm chứng**:
+- `./mvnw verify` — **244 test** xanh (+12), SpotBugs 0. `RatingCalculatorTest` 6 ca (ví dụ plan §5: 5★ × 1 = 4.091 < 4.6★ × 300 = 4.581; v = m nửa đường; nhiều review → R; v = 0 → 0; m = 0 → R; đầu vào âm). `RatingFlowTests` 6 ca qua HTTP + listener thật (viết / sửa sao / xóa / review chờ duyệt không tính; về 0 khi hết review; 6 review đồng thời cùng địa điểm → kết quả cuối đúng và không bị ghi đè sau 500 ms; job đêm sửa địa điểm bị mất sự kiện + điểm lệch, báo đồng bộ index, chạy lại không báo; C bỏ qua địa điểm bị ẩn; sửa địa điểm qua entity giữ nguyên điểm). Điểm mong đợi tính **độc lập trong test** từ `COUNT/AVG` SQL.
+- **Test có bắt lỗi** (mutation): listener không làm gì; v = 0 → C; cột điểm `updatable`; luôn coi là "đã đổi"; đảo trọng số m / v; C tính trên mọi địa điểm (lần đầu **sống sót** → thêm test địa điểm bị ẩn có 12 review 1 sao, giờ đỏ). Lỗi "đếm trước khi khóa" là race — test đồng thời chỉ bắt được theo xác suất, không khẳng định bằng mutation.
+
+Chưa commit — chờ supervisor duyệt.
