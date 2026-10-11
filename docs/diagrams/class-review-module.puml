@@ -65,11 +65,16 @@ package service {
     + isSuspicious(placeId : Long, ipPrefix : String, now : Instant) : boolean
   }
   class RatingCalculator <<@Component>> {
-    + bayesian(v : int, r : double, m : int, c : double) : double
+    + bayesian(v : long, r : double, m : int, c : double) : double
+    .. v = 0 → 0 (chốt 2026-10-11) ..
   }
   class RatingService <<@Service>> {
-    + recalculate(placeId : Long) : void
-    + recalculateAll() : void
+    + recalculate(placeId : Long) : boolean
+    + recalculateAll() : int
+  }
+  class RatingProperties <<@ConfigurationProperties>> {
+    minReviews : int = 10
+    recalculationCron : String
   }
   class ViolationService <<@Service>> {
     + record(userId, source : ViolationSource, sourceId, moderatorId) : void
@@ -163,7 +168,7 @@ RatingRecalculationJob --> RatingService
 RatingService --> RatingCalculator
 RatingService --> ReviewRepository
 RatingService --> PlaceRepository
-RatingCalculator --> AntiFakeProperties
+RatingService --> RatingProperties
 
 note right of RatingCalculator
   score = v/(v+m)·R + m/(v+m)·C

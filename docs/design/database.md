@@ -377,10 +377,12 @@ Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên)
 | Cột | Cập nhật khi | Bởi |
 |---|---|---|
 | `places.review_count`, `avg_rating`, `bayesian_score` | Review đổi sang / rời khỏi `PUBLISHED` | `RecalculateRatingListener` (AFTER_COMMIT, @Async) — tính lại `C` và địa điểm liên quan |
-| `places.bayesian_score` (mọi địa điểm) | Hằng đêm 03:00 (D4) | `RatingRecalculationJob` (`@Scheduled`) — cập nhật theo lô với `C` mới, vì `C` đổi làm điểm của mọi địa điểm khác lỗi thời |
+| `places.bayesian_score` (mọi địa điểm) | Hằng đêm 03:00 (D4) | `RatingRecalculationJob` (`@Scheduled`) — tính lại cả ba cột của mọi địa điểm với `C` mới (mỗi địa điểm một transaction ngắn), vì `C` đổi làm điểm của mọi địa điểm khác lỗi thời; đồng thời đối soát sự kiện bị mất |
 | `places.checkin_count` | Check-in thành công | `CheckInService` (cùng transaction) |
 | `reviews.helpful_count` | Vote / bỏ vote | `ReviewVoteService` (`UPDATE ... SET helpful_count = helpful_count ± 1`, nguyên tử) |
 | `users.helpful_votes_count` | Vote có `counted = 1` / bỏ vote đó | `ReviewVoteService` |
+
+Ba cột điểm của `places` (chốt 2026-10-11): luôn **đếm lại từ đầu** từ `reviews` (không cộng dồn ± 1) nên chạy lặp / trễ / chen nhau vẫn đúng; khóa dòng địa điểm là câu lệnh đầu tiên của transaction rồi mới đếm (ở REPEATABLE READ, ảnh chụp chốt ở lần đọc thường đầu tiên — đếm trước khi khóa sẽ dùng dữ liệu cũ); entity khai báo `insertable = false, updatable = false` như hai bộ đếm vote. `C` = AVG mọi review `PUBLISHED` trên địa điểm `APPROVED`; `v = 0` → điểm 0.
 
 Hai bộ đếm vote (chốt 2026-10-11): entity khai báo cột `insertable = false, updatable = false` — Hibernate ghi lại **mọi** cột khi review / người dùng được sửa, nên giá trị cũ trong bộ nhớ sẽ xóa mất vote đến cùng lúc (mất cập nhật). Vote khóa trước `users` (người vote + tác giả, id tăng dần) rồi `reviews`: `INSERT` vào `review_votes` giữ khóa chia sẻ trên dòng cha (kiểm tra khóa ngoại), sau đó `UPDATE` bộ đếm cần khóa độc quyền trên chính dòng đó → không khóa trước theo thứ tự chung thì hai vote đồng thời (hoặc A vote B trong khi B vote A) deadlock — bắt được bằng test đồng thời.
 | `users.contribution_points` | Review được công khai, địa điểm được duyệt... | Listener |

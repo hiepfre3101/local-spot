@@ -1479,7 +1479,7 @@ components:
         coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
         priceMin: { type: [integer, 'null'] }
         priceMax: { type: [integer, 'null'] }
-        bayesianScore: { type: number, description: Điểm xếp hạng hiển thị }
+        bayesianScore: { type: number, description: 'Điểm xếp hạng Bayesian (FR-22), 3 chữ số thập phân; 0 khi chưa có review PUBLISHED ("Chưa có đánh giá"). Tính lại bất đồng bộ sau khi review đổi — có thể trễ vài trăm ms' }
         avgRating: { type: number, description: Trung bình thô }
         reviewCount: { type: integer }
         status: { $ref: '#/components/schemas/PlaceStatus' }

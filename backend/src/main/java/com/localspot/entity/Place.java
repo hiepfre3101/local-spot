@@ -98,13 +98,15 @@ public class Place extends AuditableEntity {
     @Column(name = "moderated_at")
     private Instant moderatedAt;
 
-    @Column(name = "review_count", nullable = false)
+    // Ba cột điểm chỉ ghi bằng UPDATE native của RatingService (insertable / updatable = false): Hibernate ghi lại mọi
+    // cột khi địa điểm được sửa (chủ sửa, duyệt), giá trị cũ trong bộ nhớ sẽ đè mất điểm vừa tính lại cùng lúc.
+    @Column(name = "review_count", nullable = false, insertable = false, updatable = false)
     private int reviewCount;
 
-    @Column(name = "avg_rating", nullable = false, precision = 3, scale = 2)
+    @Column(name = "avg_rating", nullable = false, precision = 3, scale = 2, insertable = false, updatable = false)
     private BigDecimal avgRating = BigDecimal.ZERO;
 
-    @Column(name = "bayesian_score", nullable = false, precision = 4, scale = 3)
+    @Column(name = "bayesian_score", nullable = false, precision = 4, scale = 3, insertable = false, updatable = false)
     private BigDecimal bayesianScore = BigDecimal.ZERO;
 
     @Column(name = "checkin_count", nullable = false)

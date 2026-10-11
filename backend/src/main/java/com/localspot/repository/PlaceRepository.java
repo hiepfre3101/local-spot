@@ -3,6 +3,7 @@ package com.localspot.repository;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -109,4 +111,32 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
             """)
     List<Place> findByStatusNewestFirst(
             @Param("status") PlaceStatus status, @Param("afterId") Long afterId, Limit limit);
+
+    // ─── Tính lại rating (FR-22) — cột điểm chỉ ghi ở đây, không qua entity ────
+
+    /**
+     * Khóa dòng địa điểm và đọc điểm hiện tại — dòng {@code [status, review_count, avg_rating, bayesian_score]}. Khóa
+     * <b>trước</b> khi đếm review: hai lần tính lại cùng địa điểm chạy nối tiếp, lần sau luôn đọc dữ liệu ít nhất mới
+     * bằng lần trước nên không ghi đè điểm mới bằng điểm cũ. Rỗng = không tồn tại / đã xóa mềm.
+     */
+    @Query(value = """
+            SELECT status, review_count, avg_rating, bayesian_score FROM places
+            WHERE id = :id AND deleted_at IS NULL FOR UPDATE
+            """, nativeQuery = true)
+    List<Object[]> lockRatingById(@Param("id") Long id);
+
+    @Modifying
+    @Query(value = """
+            UPDATE places SET review_count = :reviewCount, avg_rating = :avgRating, bayesian_score = :bayesianScore
+            WHERE id = :id
+            """, nativeQuery = true)
+    void updateRating(
+            @Param("id") Long id,
+            @Param("reviewCount") long reviewCount,
+            @Param("avgRating") BigDecimal avgRating,
+            @Param("bayesianScore") BigDecimal bayesianScore);
+
+    /** Mọi địa điểm chưa xóa (kể cả chưa duyệt / bị ẩn — được hiện lại thì điểm đã đúng), tăng dần cho job đêm. */
+    @Query(value = "SELECT id FROM places WHERE deleted_at IS NULL ORDER BY id", nativeQuery = true)
+    List<Long> findAllIdsForRating();
 }

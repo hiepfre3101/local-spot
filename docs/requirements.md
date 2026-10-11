@@ -158,6 +158,8 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 |---|---|---|
 | `m` — ngưỡng review trong Bayesian | 10 | Đã chốt |
 | `C` — trung bình sao toàn hệ thống | Tính lại mỗi lần tính lại rating (cập nhật điểm địa điểm liên quan) + job đêm 03:00 tính lại `bayesian_score` của mọi địa điểm với `C` mới | Đã chốt (D4) |
+| Cách tính `C` | `AVG(rating)` của mọi review `PUBLISHED` trên địa điểm `APPROVED` — mỗi review cùng trọng số (kiểu IMDb), không phải trung bình của các `avg_rating` | Đã chốt (2026-10-11) |
+| Điểm khi chưa có review | `v = 0` → `bayesian_score = 0` ("Chưa có đánh giá", đứng sau mọi địa điểm đã có review), lệch công thức thuần (vốn cho `C`) đúng ở điểm này | Đã chốt (2026-10-11) |
 | N — số review tối đa / ngày / tài khoản | 5 — đếm trong bảng `reviews` (24 giờ trượt), không qua Redis: vẫn có hiệu lực khi Redis sập | Đã chốt (cách đếm 2026-10-04) |
 | Công thức trust score | Xem mục 5.1 | Đã chốt |
 | Ngưỡng trust score để bỏ qua hàng chờ duyệt | 30 — review từ trust ≥ 30 đăng ngay; **không** đưa mọi review vào hàng chờ (xác nhận lại 2026-09-29, khi đối chiếu design system) | Đã chốt |
