@@ -686,3 +686,31 @@ Chưa commit — chờ supervisor duyệt.
 - **Test có bắt lỗi** (mutation): hiện ảnh chưa READY cho mọi người; bỏ đếm giới hạn mỗi review; review `HIDDEN` vẫn nhận ảnh — mỗi lỗi làm đúng test tương ứng đỏ.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-11 (+07) — Checklist E8: Vote hữu ích, bình luận phân cấp
+
+**Bối cảnh**: E7 đã merge (PR #12). Nhánh `feature/be-votes-comments` từ `develop`. Đã có sẵn: bảng `review_votes` (PK `(review_id, user_id)`, cột `counted`), `comments` (2 cấp, xóa mềm, `VISIBLE` / `HIDDEN`), entity + `OwnershipPermissionEvaluator` cho `comment:delete-own`, `votedByMe` / `commentCount` trong danh sách review (E6).
+
+**Supervisor chốt (qua câu hỏi):**
+- **Xóa gốc còn trả lời**: giữ trả lời, gốc hiện dạng placeholder `deleted = true` (không tác giả / nội dung); hết trả lời thì gốc biến mất. Không làm mất lời người khác vì người viết gốc rút lại. Gốc `HIDDEN` xử lý như gốc đã xóa.
+- **Điều kiện**: bình luận cần email đã xác thực (nội dung công khai, chặn tài khoản rác); vote chỉ cần đăng nhập — vote của người trust < 30 (gồm chưa xác thực) vốn có `counted = false`, không ảnh hưởng trust ai.
+- **Vote review của mình** → 409 `SELF_ACTION_FORBIDDEN` (openapi cũ ghi 422) — nhất quán với chủ tự đánh giá / kiểm duyệt viên tự duyệt; đã sửa openapi.
+- **Thứ tự**: gốc cũ trước (keyset id tăng), mỗi gốc kèm toàn bộ trả lời cũ trước, không phân trang trả lời.
+
+**Quyết định kỹ thuật:**
+- **Idempotent không cần đọc trước**: PUT = `INSERT IGNORE` (1 dòng = vừa thêm, 0 = đã vote); DELETE = xóa theo `counted = 1` rồi `counted = 0`. Bộ đếm chỉ đổi theo số dòng ảnh hưởng → request chen nhau không cộng / trừ hai lần. `IGNORE` cũng nuốt lỗi khóa ngoại — chấp nhận vì review / người vote đã kiểm tồn tại trong cùng transaction (review chỉ xóa mềm).
+- **Chỉ vote / bình luận review đang hiện** (`PUBLISHED` + địa điểm `APPROVED`, cùng điều kiện danh sách) — còn lại 404 như không tồn tại.
+- **Deadlock bắt được bằng test đồng thời** (8 PUT cùng người → 500): `INSERT` vào `review_votes` giữ khóa **S** trên dòng cha `reviews` (kiểm khóa ngoại), rồi `UPDATE helpful_count` cần **X** trên chính dòng đó → hai transaction cùng giữ S, cùng chờ X. Biến thể hiếm hơn: A vote B đúng lúc B vote A (S trên dòng người vote của bên kia, chờ X trên dòng tác giả). Sửa bằng **khóa X trước theo thứ tự chung**: `users` (người vote + tác giả, id tăng dần, `ORDER BY id FOR UPDATE`) rồi `reviews` (`SELECT status … FOR UPDATE` — truy vấn vô hướng để đọc trạng thái mới nhất, không bị entity đã nạp che). Đánh đổi: vote cho cùng một tác giả xếp hàng nối tiếp — không đáng kể ở quy mô này. Lưu ý cho mục sau: luồng nào khóa cả `reviews` lẫn `users` phải theo cùng thứ tự users → reviews.
+- **Mất cập nhật bộ đếm** (phát hiện khi đọc code, không phải test): `Review` / `User` không `@DynamicUpdate` → sửa review / người dùng qua entity ghi lại **mọi** cột, giá trị `helpful_count` / `helpful_votes_count` cũ trong bộ nhớ xóa mất vote đến cùng lúc. Sửa: hai cột `insertable = false, updatable = false` (chỉ đổi bằng `UPDATE ± 1` native; INSERT dùng mặc định 0). Không code nào ghi hai cột qua entity (đã grep). `places.review_count` / `avg_rating` sẽ cần xử lý tương tự ở mục tính lại rating.
+- **Danh sách bình luận 3 truy vấn / trang** bất kể số gốc: trang gốc (native — `@SQLRestriction` sẽ loại gốc đã xóa cần làm placeholder; `EXISTS` trả lời đang hiện, dùng `ix_comments_parent_id`; thời điểm trả epoch ms tính trong MySQL như E6) → gốc đang hiện + tác giả → trả lời + tác giả. `commentCount` (E6) chỉ đếm bình luận đang hiện → placeholder không tính.
+- **`parentId` sai** → 422 theo trường (dữ liệu trong body, không phải tài nguyên trên đường dẫn): không tồn tại / đã xóa / ẩn / thuộc review khác → `VALIDATION_FAILED`; trả lời một trả lời → mã mới `COMMENT_DEPTH_EXCEEDED`. Nội dung kiểm sau khi bỏ khoảng trắng hai đầu.
+- **Xóa bình luận luôn được** (kể cả review đã bị ẩn) — rút lại lời của mình không gây hại. Không thêm sửa bình luận (không có UC). Không thêm giới hạn tần suất bình luận — đề xuất nếu cần ở phần chất lượng.
+- **RBAC**: vote / viết bình luận không có permission riêng trong 17 permission đã chốt → `authenticated()`; `SecurityConfig` thêm `GET /reviews/*/comments` công khai (openapi `security: []`).
+
+**Tài liệu**: openapi (vote: 401 / 404 / 409, `counted`; comments: thứ tự, placeholder, thứ tự kiểm tra, 401 / 403 / 404 / 422, schema `Comment` thêm `deleted`, `author` / `content` / `replies` nullable), requirements §5 (3 dòng chốt), database.md (placeholder; khóa + cột đếm chỉ đọc), `class-review-module.puml` (`ReviewVoteService` — chưa render PNG), plan §10 E8.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **232 test** xanh (+12), SpotBugs 0. `ReviewVoteFlowTests` 6 ca (idempotent + hai bộ đếm, vote trust thấp không cộng trust tác giả, bỏ vote trừ đúng bộ đếm, `votedByMe` theo người xem; HELPFUL theo vote; tự vote 409, khách 401, review PENDING / REJECTED / HIDDEN / đã xóa / địa điểm bị ẩn 404; 8 + 3 PUT đồng thời → đếm đúng 2; A ↔ B vote chéo đồng thời 10 vòng; hồi quy mất cập nhật: nạp entity → bộ đếm đổi → sửa + flush giữ nguyên số vote), `CommentFlowTests` 6 ca (thứ tự hội thoại, `commentCount`; 2 cấp + validate; email / review đang hiện; placeholder khi xóa gốc, 403 / 401 / 404, trả lời gốc đã xóa 422, hết trả lời thì biến mất; gốc HIDDEN; phân trang + cursor sai).
+- **Test có bắt lỗi** (mutation, mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa `users` theo thứ tự → vote chéo deadlock; cột đếm `updatable` lại → test mất cập nhật; bỏ điều kiện `counted` → test hai bộ đếm; bỏ nhánh placeholder (`OR EXISTS` → `AND EXISTS`); cho trả lời một trả lời; bỏ kiểm email khi bình luận.
+
+Chưa commit — chờ supervisor duyệt.
