@@ -6,6 +6,7 @@ import com.localspot.dto.response.ReviewResponse;
 import com.localspot.entity.OwnerReply;
 import com.localspot.entity.Review;
 import com.localspot.mapper.ReviewMapper;
+import com.localspot.repository.CheckInRepository;
 import com.localspot.repository.CommentRepository;
 import com.localspot.repository.OwnerReplyRepository;
 import com.localspot.repository.ReviewVoteRepository;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
- * Dựng {@link ReviewResponse} cho cả trang: vote của người xem, số bình luận, phản hồi của chủ — mỗi loại một truy vấn
+ * Dựng {@link ReviewResponse} cho cả trang: vote của người xem, nhãn đã check-in, số bình luận, phản hồi của chủ — mỗi loại một truy vấn
  * theo lô, không truy vấn từng review (N+1). Tác giả được nạp sẵn ({@code JOIN FETCH}) ở repository.
  *
  * <p>Ảnh: người khác chỉ thấy ảnh READY, tác giả thấy cả ảnh đang xử lý / lỗi ({@link ReviewPhotoService#photosOf}).
@@ -32,18 +33,21 @@ public class ReviewViews {
     private final CommentRepository comments;
     private final OwnerReplyRepository ownerReplies;
     private final ReviewPhotoService photos;
+    private final CheckInRepository checkIns;
 
     public ReviewViews(
             ReviewMapper mapper,
             ReviewVoteRepository votes,
             CommentRepository comments,
             OwnerReplyRepository ownerReplies,
-            ReviewPhotoService photos) {
+            ReviewPhotoService photos,
+            CheckInRepository checkIns) {
         this.mapper = mapper;
         this.votes = votes;
         this.comments = comments;
         this.ownerReplies = ownerReplies;
         this.photos = photos;
+        this.checkIns = checkIns;
     }
 
     /** {@code viewerId = null}: khách. */
@@ -53,6 +57,7 @@ public class ReviewViews {
         }
         List<Long> ids = reviews.stream().map(Review::getId).toList();
         Set<Long> voted = viewerId == null ? Set.of() : new HashSet<>(votes.findVotedReviewIds(viewerId, ids));
+        Set<Long> checkedIn = new HashSet<>(checkIns.findCheckedInReviewIds(ids));
         Map<Long, Long> commentCounts = new HashMap<>();
         for (Object[] row : comments.countVisibleByReviewIds(ids)) {
             commentCounts.put(((Number) row[0]).longValue(), ((Number) row[1]).longValue());
@@ -66,6 +71,7 @@ public class ReviewViews {
                         viewerId,
                         photosByReview.getOrDefault(review.getId(), List.of()),
                         voted.contains(review.getId()),
+                        checkedIn.contains(review.getId()),
                         commentCounts.getOrDefault(review.getId(), 0L),
                         replies.get(review.getId())))
                 .toList();
@@ -80,6 +86,7 @@ public class ReviewViews {
             Long viewerId,
             List<PhotoResponse> photoList,
             boolean votedByMe,
+            boolean authorCheckedIn,
             long commentCount,
             OwnerReply reply) {
         boolean author = review.getUser().getId().equals(viewerId);
@@ -96,6 +103,7 @@ public class ReviewViews {
                 photoList,
                 review.getHelpfulCount(),
                 votedByMe,
+                authorCheckedIn,
                 commentCount,
                 ownerReply,
                 review.getCreatedAt(),

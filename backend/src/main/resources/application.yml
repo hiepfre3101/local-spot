@@ -101,6 +101,10 @@ localspot:
   rating:
     min-reviews: 10 # m
     recalculation-cron: "0 0 3 * * *" # D4: tính lại toàn bộ hằng đêm (giờ Việt Nam) với C mới + đối soát
+  # Check-in (FR-24, U5): 1 check-in / địa điểm / ngày (giờ Việt Nam) ràng buộc ở CSDL
+  checkin:
+    radius-m: 200
+    max-accuracy-m: 100
   # Ảnh địa điểm / review (FR-16, NFR-09). maxPerPlace chốt 2026-10-06
   photo:
     max-per-request: 10

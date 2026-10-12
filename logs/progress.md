@@ -773,3 +773,32 @@ Chưa commit — chờ supervisor duyệt.
 - **Mutation**: `counted` luôn TRUE → đỏ test bộ đếm; bỏ tính lại rating khi khởi động → đỏ 2 test. Cho chủ tự đánh giá quán mình **sống sót** — với dữ liệu hiện tại công thức chọn người viết không bao giờ rơi vào đúng chủ của địa điểm, điều kiện SQL chỉ là phòng hờ; test giữ lại để chặn khi đổi công thức.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-12 (+07) — Checklist E10: Check-in kèm kiểm tra khoảng cách GPS
+
+**Bối cảnh**: seed review demo đã commit (`1e373af`, `902c291`, chưa push) → nhánh `feature/be-checkins` tạo từ `feature/be-demo-reviews` (xếp chồng). Đã có sẵn: bảng `check_ins` với `UQ(user_id, place_id, checkin_date)`, entity `CheckIn`, cột `places.checkin_count`, U5 (200 m, accuracy ≤ 100 m, 1 lần / địa điểm / ngày), UC16, openapi `POST /places/{id}/check-in`.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Ai được check-in**: email đã xác thực + không phải chủ địa điểm — `checkin_count` vào thống kê của chủ (FR-34) và nhãn trên review, không để chủ / tài khoản rác thổi phồng. Cùng luật với viết review.
+- **Nhãn "đã check-in" (P04)**: tác giả check-in tại địa điểm **trước hoặc trong ngày viết** review → `Review.authorCheckedIn`.
+- **Lịch sử**: chỉ chính chủ (`GET /me/check-ins`); không công khai vì lộ nơi và lúc một người có mặt.
+
+**Quyết định kỹ thuật:**
+- **Nhãn so theo ngày (giờ VN), không theo giờ phút** — người dùng hay viết review ngay tại quán rồi mới bấm check-in; so `created_at` chặt sẽ mất nhãn oan. Check-in sau ngày viết không gắn nhãn ngược cho review cũ. `CONVERT_TZ(…, '+00:00', '+07:00')` — VN không có giờ mùa hè, không cần bảng múi giờ của MySQL. Một truy vấn cho cả trang (`ReviewViews`), dùng đúng `uk(user_id, place_id, checkin_date)`.
+- **Thứ tự kiểm tra**: email (403) → validate / `accuracyM` (422 `GPS_INACCURATE`) → địa điểm APPROVED (404) → chủ (409) → đã check-in hôm nay (409 `CHECKIN_ALREADY_TODAY`) → khoảng cách (422 `CHECKIN_TOO_FAR` + `distanceM`). GPS kém báo trước khoảng cách: vị trí sai số 500 m thì "quá xa" là thông tin sai, gợi ý đúng là bật GPS.
+- **Khoảng cách tính trong CSDL bằng `ST_Distance_Sphere`** (như UC16 và `/places/nearby`) → "trong 200 m" ở check-in và ở danh sách gần tôi luôn khớp. `distanceM` trong lỗi **làm tròn lên** — 200.4 m bị từ chối không hiện thành "200 m".
+- **Khóa dòng `users` trước** (như viết review): hai lần bấm chen nhau xếp hàng → lần sau nhận 409 có mã riêng thay vì chạm UNIQUE của CSDL (`DUPLICATE_RESOURCE` chung chung + log WARN). UNIQUE vẫn là lớp phòng thủ cuối. Thứ tự khóa users → places, không trái với E8 (users → reviews) / E9 (chỉ places).
+- **`checkin_count`**: `UPDATE … + 1` nguyên tử, cột `insertable/updatable = false` trên `Place` (E9 đã ghi nhận cần làm) — chủ sửa / duyệt địa điểm qua entity không ghi đè về giá trị cũ.
+- **`ApiException` thêm `properties`** (trường mở rộng RFC 7807) để trả `distanceM` như openapi đã thiết kế; handler chỉ thêm một dòng. Không phải phần lõi mục 3 CLAUDE.md.
+- **Response không trả tọa độ người dùng gửi lên** (kể cả cho chính chủ) — chỉ lưu để giải trình. `place` là `PlaceSummary` để tab lịch sử dựng thẻ địa điểm không cần gọi thêm.
+- Ngưỡng ở `localspot.checkin.*` (`CheckInProperties`) — chỉnh khi thử thực địa không sửa code.
+- **Seed demo** `R__demo_04_checkins.sql`: check-in cho ~40% review demo đang hiện, đúng ngày đến (≤ ngày viết → đều có nhãn), cách 20–180 m, sai số 5–60 m; `checkin_count` đếm lại từ đầu.
+- Hoãn: số lượt check-in trên trang cá nhân công khai — chưa có endpoint hồ sơ công khai, làm cùng P06.
+
+**Tài liệu**: openapi (thứ tự kiểm tra + mã lỗi, `CheckInResponse` thêm `place` / `checkinDate`, `CheckInPage`, `/me/check-ins`, `Review.authorCheckedIn`), requirements §5 (3 dòng chốt), UC16 (ngoại lệ 3a), sitemap (P04, tab `checkins` chỉ của chính mình), database.md (bộ đếm), plan §10 E10.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **261 test** xanh (+9), SpotBugs 0. `CheckInFlowTests` 8 ca (thành công + bộ đếm + 409 cùng ngày, người khác vẫn được, `checkinCount` ở chi tiết; biên 199 / 201 m; GPS 100 nhận, 100.5 từ chối, GPS kém báo trước khoảng cách; email / chủ / PENDING / REJECTED / HIDDEN / không tồn tại / khách / validate; 8 lần bấm đồng thời → đúng 1 bản ghi, không có `DUPLICATE_RESOURCE`; sửa địa điểm qua entity giữ bộ đếm; lịch sử phân trang, chỉ của mình, không có tọa độ; nhãn: trước ngày viết / cùng ngày sau khi viết → có, sau ngày viết / không check-in / người khác check-in → không). `DemoSeedTests` +1 (check-in demo qua đúng luật U5 tính lại bằng `ST_Distance_Sphere`, bộ đếm khớp, mọi check-in demo gắn nhãn).
+- **Mutation** (mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa dòng user → test bấm đồng thời; cột đếm `updatable` lại → test sửa qua entity; nhãn so `created_at` chặt → test nhãn cùng ngày; bỏ cổng chủ địa điểm → test cổng.
+
+Chưa commit — chờ supervisor duyệt.

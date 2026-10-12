@@ -26,7 +26,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/places/:slug/review` | Viết / sửa đánh giá (P04) | UC12, UC13, UC22 | `auth` | Đã có đánh giá → chế độ sửa (1 đánh giá / người / địa điểm, D2) |
 | `/propose` | Đề xuất địa điểm (P05) | UC11, UC22 | `auth` | Một trang có thanh tiến độ; cảnh báo trùng U7 |
 | `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period`, `region` |
-| `/users/:id` | Trang cá nhân (P06) | UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|checkins\|badges`. Chính mình → nút "Chỉnh sửa hồ sơ" |
+| `/users/:id` | Trang cá nhân (P06) | UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|checkins\|badges`. Chính mình → nút "Chỉnh sửa hồ sơ". Tab `checkins` chỉ hiện trên trang của chính mình (`GET /me/check-ins` — chốt 2026-10-12) |
 | `/collections/:id` | Bộ sưu tập của mình | UC18 | `auth` (chủ bộ) | Bật/tắt công khai từng bộ (`is_public`) |
 | `/c/:shareSlug` | Bộ sưu tập chia sẻ | UC18 | — | Chỉ bộ công khai |
 | `/settings/profile` | Cài đặt — Hồ sơ (P06) | UC06 | `auth` | |
@@ -92,7 +92,7 @@ Supervisor duyệt toàn bộ P01–P12 → chấp nhận **phương án đề x
 | P03 | Địa điểm tương tự | Lưới 4 cố định | Phương án đề xuất |
 | P03 | Gắn thẻ | Thẻ tự do | FR-30 |
 | P04 | Số đánh giá / địa điểm | 1 | D2, `UNIQUE(place_id, user_id)` |
-| P04 | Bắt buộc check-in trước khi đánh giá | Không, chỉ hiện nhãn nếu đã check-in | Phương án đề xuất |
+| P04 | Bắt buộc check-in trước khi đánh giá | Không, chỉ hiện nhãn nếu đã check-in (`Review.authorCheckedIn`: check-in vào ngày viết hoặc trước đó — chốt 2026-10-12) | Phương án đề xuất |
 | P05 | Một trang hay nhiều bước | Một trang, thanh tiến độ | Phương án đề xuất |
 | P05 | Kiểm tra trùng | Cảnh báo tên gần giống trong 50 m, không chặn | U7 |
 | P05 | Theo dõi trạng thái đề xuất | Có — `GET /me/places` | openapi |

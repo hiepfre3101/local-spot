@@ -1,6 +1,7 @@
 package com.localspot.controller;
 
 import com.localspot.dto.request.ChangePasswordRequest;
+import com.localspot.dto.response.CheckInResponse;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.MeResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
@@ -8,6 +9,7 @@ import com.localspot.dto.response.ReviewResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.RefreshTokenCookies;
 import com.localspot.service.AccountService;
+import com.localspot.service.CheckInService;
 import com.localspot.service.PlaceService;
 import com.localspot.service.ProfileService;
 import com.localspot.service.ReviewService;
@@ -32,6 +34,7 @@ public class MeController {
     private final AccountService accountService;
     private final PlaceService placeService;
     private final ReviewService reviewService;
+    private final CheckInService checkInService;
     private final RefreshTokenCookies cookies;
 
     public MeController(
@@ -39,11 +42,13 @@ public class MeController {
             AccountService accountService,
             PlaceService placeService,
             ReviewService reviewService,
+            CheckInService checkInService,
             RefreshTokenCookies cookies) {
         this.profileService = profileService;
         this.accountService = accountService;
         this.placeService = placeService;
         this.reviewService = reviewService;
+        this.checkInService = checkInService;
         this.cookies = cookies;
     }
 
@@ -68,6 +73,18 @@ public class MeController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
         return reviewService.writtenBy(user.id(), cursor, limit);
+    }
+
+    /**
+     * Lịch sử check-in của tôi, mới nhất trước. Chỉ chính chủ xem được — không có bản công khai {@code /users/{id}/…}
+     * (chốt 2026-10-12: lịch sử check-in lộ nơi và lúc một người có mặt).
+     */
+    @GetMapping("/check-ins")
+    public CursorPage<CheckInResponse> myCheckIns(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit) {
+        return checkInService.mine(user.id(), cursor, limit);
     }
 
     /**

@@ -227,6 +227,16 @@ paths:
       parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+  /me/check-ins:
+    get:
+      tags: [Me, CheckIns]
+      summary: Lịch sử check-in của tôi, mới nhất trước (UC16)
+      description: |
+        *(chốt 2026-10-12)* Chỉ chính chủ — không có `/users/{id}/check-ins` công khai vì lịch sử check-in lộ nơi và lúc
+        một người có mặt. Không trả tọa độ đã gửi (chỉ lưu để giải trình).
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInPage' } } } }
   /me/places:
     get:
       tags: [Me]
@@ -719,6 +729,12 @@ paths:
     post:
       tags: [CheckIns]
       summary: Check-in — accuracy ≤ 100 m, cách địa điểm ≤ 200 m, 1 lần / ngày (FR-24, U5)
+      description: |
+        *(chốt 2026-10-12)* Kiểm tra theo thứ tự: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → validate (422
+        `VALIDATION_FAILED`) → `accuracyM` ≤ 100 (422 `GPS_INACCURATE`, trường `accuracyM`) → địa điểm `APPROVED` (404
+        `PLACE_NOT_FOUND`) → không phải chủ địa điểm (409 `SELF_ACTION_FORBIDDEN`) → chưa check-in địa điểm này hôm nay
+        theo giờ Việt Nam (409 `CHECKIN_ALREADY_TODAY`) → cách ≤ 200 m theo `ST_Distance_Sphere` (422 `CHECKIN_TOO_FAR`,
+        problem có `distanceM` làm tròn lên). Thành công → `checkinCount` của địa điểm +1.
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
         required: true
@@ -727,8 +743,11 @@ paths:
             schema: { $ref: '#/components/schemas/CheckInRequest' }
       responses:
         '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInResponse' } } } }
-        '409': { description: Đã check-in hôm nay }
-        '422': { description: 'GPS không đủ chính xác hoặc quá xa (problem có `distanceM`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Đã check-in hôm nay (`CHECKIN_ALREADY_TODAY`) hoặc là chủ địa điểm (`SELF_ACTION_FORBIDDEN`)' }
+        '422': { description: 'GPS không đủ chính xác (`GPS_INACCURATE`) hoặc quá xa (`CHECKIN_TOO_FAR`, problem có `distanceM`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
 
   # ───────────────────────────── Collections (UC18) ─────────────────────────────
   /collections:
@@ -1613,6 +1632,7 @@ components:
         photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
         helpfulCount: { type: integer }
         votedByMe: { type: boolean }
+        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review hoặc trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
         commentCount: { type: integer }
         ownerReply: { oneOf: [ { $ref: '#/components/schemas/OwnerReply' }, { type: 'null' } ] }
         createdAt: { type: string, format: date-time }
@@ -1671,8 +1691,15 @@ components:
       properties:
         id: { type: integer, format: int64 }
         placeId: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
         distanceM: { type: integer }
+        checkinDate: { type: string, format: date, description: Ngày theo giờ Việt Nam }
         createdAt: { type: string, format: date-time }
+    CheckInPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CheckInResponse' } }
+        nextCursor: { type: [string, 'null'] }
     CollectionRequest:
       type: object
       required: [name]

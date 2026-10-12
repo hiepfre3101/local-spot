@@ -109,7 +109,8 @@ public class Place extends AuditableEntity {
     @Column(name = "bayesian_score", nullable = false, precision = 4, scale = 3, insertable = false, updatable = false)
     private BigDecimal bayesianScore = BigDecimal.ZERO;
 
-    @Column(name = "checkin_count", nullable = false)
+    /** Chỉ {@code CheckInService} ghi bằng UPDATE nguyên tử — entity không ghi đè khi chủ sửa / duyệt địa điểm. */
+    @Column(name = "checkin_count", nullable = false, insertable = false, updatable = false)
     private int checkinCount;
 
     @Version
