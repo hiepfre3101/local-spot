@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * openapi {@code Review}. {@code rejectReason} chỉ có khi người xem là tác giả; {@code votedByMe} luôn {@code false}
- * với khách.
+ * với khách. {@code authorCheckedIn}: tác giả đã check-in tại địa điểm vào ngày viết hoặc trước đó (nhãn P04).
  */
 public record ReviewResponse(
         Long id,
@@ -21,6 +21,7 @@ public record ReviewResponse(
         List<PhotoResponse> photos,
         int helpfulCount,
         boolean votedByMe,
+        boolean authorCheckedIn,
         long commentCount,
         OwnerReplyResponse ownerReply,
         Instant createdAt,

@@ -378,7 +378,7 @@ Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên)
 |---|---|---|
 | `places.review_count`, `avg_rating`, `bayesian_score` | Review đổi sang / rời khỏi `PUBLISHED` | `RecalculateRatingListener` (AFTER_COMMIT, @Async) — tính lại `C` và địa điểm liên quan |
 | `places.bayesian_score` (mọi địa điểm) | Hằng đêm 03:00 (D4) | `RatingRecalculationJob` (`@Scheduled`) — tính lại cả ba cột của mọi địa điểm với `C` mới (mỗi địa điểm một transaction ngắn), vì `C` đổi làm điểm của mọi địa điểm khác lỗi thời; đồng thời đối soát sự kiện bị mất |
-| `places.checkin_count` | Check-in thành công | `CheckInService` (cùng transaction) |
+| `places.checkin_count` | Check-in thành công | `CheckInService` (cùng transaction, `UPDATE … + 1` nguyên tử; cột `insertable/updatable = false` trên entity — sửa địa điểm qua entity không ghi đè) |
 | `reviews.helpful_count` | Vote / bỏ vote | `ReviewVoteService` (`UPDATE ... SET helpful_count = helpful_count ± 1`, nguyên tử) |
 | `users.helpful_votes_count` | Vote có `counted = 1` / bỏ vote đó | `ReviewVoteService` |
 

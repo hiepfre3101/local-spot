@@ -139,4 +139,21 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
     /** Mọi địa điểm chưa xóa (kể cả chưa duyệt / bị ẩn — được hiện lại thì điểm đã đúng), tăng dần cho job đêm. */
     @Query(value = "SELECT id FROM places WHERE deleted_at IS NULL ORDER BY id", nativeQuery = true)
     List<Long> findAllIdsForRating();
+
+    // ─── Check-in (FR-24, U5) ───────────────────────────────────────────────
+
+    /**
+     * Khoảng cách (m, mặt cầu) từ địa điểm tới {@code point} — WKT {@code POINT(lat lng)} theo thứ tự trục của SRID 4326
+     * trong MySQL 8, như truy vấn bán kính ({@code PlaceSearchRepositoryImpl}). Tính trong CSDL bằng cùng hàm với
+     * {@code /places/nearby} → "trong 200 m" ở check-in và ở danh sách gần tôi luôn khớp nhau.
+     */
+    @Query(value = """
+            SELECT ST_Distance_Sphere(location, ST_PointFromText(:point, 4326)) FROM places WHERE id = :id
+            """, nativeQuery = true)
+    double distanceMeters(@Param("id") Long id, @Param("point") String point);
+
+    /** Đếm nguyên tử, không qua entity (cột {@code insertable/updatable = false}) — như bộ đếm vote ở E8. */
+    @Modifying
+    @Query(value = "UPDATE places SET checkin_count = checkin_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementCheckinCount(@Param("id") Long id);
 }

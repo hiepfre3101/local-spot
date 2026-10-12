@@ -67,6 +67,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         if (!ex.getErrors().isEmpty()) {
             body.setProperty("errors", ex.getErrors());
         }
+        ex.getProperties().forEach(body::setProperty);
         return ResponseEntity.status(ex.getStatus()).body(body);
     }
 

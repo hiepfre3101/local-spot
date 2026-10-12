@@ -74,6 +74,12 @@ public final class ErrorCode {
     public static final String REVIEW_LOCKED = "REVIEW_LOCKED";
     /** 422 trường {@code parentId}: chỉ trả lời được bình luận gốc — bình luận tối đa 2 cấp (Q5). */
     public static final String COMMENT_DEPTH_EXCEEDED = "COMMENT_DEPTH_EXCEEDED";
+    /** 422 trường {@code accuracyM}: GPS kém hơn 100 m — thường là vị trí ước lượng theo IP / wifi (U5, UC16 2b). */
+    public static final String GPS_INACCURATE = "GPS_INACCURATE";
+    /** 422: cách địa điểm quá 200 m (UC16 4a) — problem kèm {@code distanceM}. */
+    public static final String CHECKIN_TOO_FAR = "CHECKIN_TOO_FAR";
+    /** 409: đã check-in địa điểm này trong ngày (giờ Việt Nam) — 1 lần / địa điểm / ngày (U5, UC16 4b). */
+    public static final String CHECKIN_ALREADY_TODAY = "CHECKIN_ALREADY_TODAY";
 
     private ErrorCode() {}
 }

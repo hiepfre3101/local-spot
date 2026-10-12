@@ -179,6 +179,9 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Chủ địa điểm đánh giá địa điểm của mình | Không — 409 `SELF_ACTION_FORBIDDEN` (review viết trước khi thành chủ giữ nguyên) | Đã chốt (2026-10-08) |
 | Độ dài tối thiểu review | 20 ký tự | Đã chốt (U4) |
 | Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |
+| Ai được check-in | Cần email đã xác thực (403 `EMAIL_NOT_VERIFIED`); chủ không check-in địa điểm của mình (409 `SELF_ACTION_FORBIDDEN`) — `checkin_count` vào thống kê của chủ (FR-34) và nhãn trên review | Đã chốt (2026-10-12) |
+| Nhãn "đã check-in" trên review | Tác giả có check-in tại địa điểm vào ngày viết review hoặc trước đó, so theo **ngày** giờ Việt Nam (viết review tại quán rồi mới bấm check-in vẫn được nhãn); check-in sau ngày viết không gắn nhãn ngược | Đã chốt (2026-10-12) |
+| Lịch sử check-in | Chỉ chính chủ xem (`GET /me/check-ins`), không công khai — lộ nơi và lúc một người có mặt; không trả tọa độ đã gửi | Đã chốt (2026-10-12) |
 | Số chủ mỗi địa điểm | 1 | Đã chốt (U6) |
 | Cảnh báo trùng khi đề xuất địa điểm | Tên gần giống trong bán kính 50 m → cảnh báo, không chặn. Gần giống = chuẩn hóa (bỏ dấu, bỏ từ chung chung) rồi chứa nguyên từ hoặc Levenshtein ≥ 0.8; xét địa điểm đã duyệt + đề xuất chờ của chính người hỏi (chốt 2026-10-06). Trùng giữa hai người dùng: hàng chờ kiểm duyệt kèm `possibleDuplicates` gồm đề xuất chờ của mọi người (2026-10-07) | Đã chốt (U7) |
 | Tìm quanh vị trí | Mặc định 2 km, tối đa 20 km; tâm Hà Nội khi không có quyền vị trí | Đã chốt (U8) |

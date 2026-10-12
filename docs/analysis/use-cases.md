@@ -287,6 +287,7 @@ Tác vụ hệ thống (tính rating Bayesian FR-22, ghi nhật ký quản trị
 - 2b. `accuracy` > 100 m → từ chối, yêu cầu thử lại ở nơi có tín hiệu tốt hơn (tránh vị trí ước lượng theo IP/wifi).
 - 4a. Khoảng cách > 200 m → 422 "Bạn đang ở quá xa địa điểm (x m)".
 - 4b. Đã check-in địa điểm này trong cùng ngày → 409 (tối đa 1 check-in / địa điểm / ngày).
+- 3a. Email chưa xác thực → 403; người dùng là chủ địa điểm → 409 (chốt 2026-10-12 — không thổi phồng lượt check-in trong thống kê của chủ).
 
 **Quy tắc nghiệp vụ**
 - Tọa độ GPS có thể bị giả lập phía client; hạn chế này được ghi rõ trong báo cáo (Chương 5 — hạn chế), check-in chỉ là một lớp tín hiệu, không phải bằng chứng tuyệt đối.

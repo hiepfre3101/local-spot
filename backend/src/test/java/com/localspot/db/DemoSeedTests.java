@@ -303,13 +303,36 @@ class DemoSeedTests {
     }
 
     @Test
+    void checkInsPassTheCheckInRulesAndLabelReviews() {
+        assertThat(count("SELECT COUNT(*) FROM check_ins")).isGreaterThan(500);
+        // U5 tính lại bằng chính hàm của CheckInService, không tin cột distance_m của seed
+        assertThat(count("""
+                        SELECT COUNT(*) FROM check_ins c JOIN places p ON p.id = c.place_id
+                        WHERE ST_Distance_Sphere(c.location, p.location) > 200 OR c.accuracy_m > 100
+                           OR ABS(ST_Distance_Sphere(c.location, p.location) - c.distance_m) > 1
+                           OR p.status <> 'APPROVED' OR p.owner_id = c.user_id
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM places p
+                        WHERE p.checkin_count <> (SELECT COUNT(*) FROM check_ins c WHERE c.place_id = p.id)
+                        """)).isZero();
+        // Mọi check-in demo rơi vào ngày đến ≤ ngày viết → đều gắn nhãn cho review tương ứng
+        assertThat(count("""
+                        SELECT COUNT(*) FROM check_ins c
+                        JOIN reviews r ON r.user_id = c.user_id AND r.place_id = c.place_id
+                        WHERE c.checkin_date > DATE(CONVERT_TZ(r.created_at, '+00:00', '+07:00'))
+                        """)).isZero();
+    }
+
+    @Test
     void rerunningSeedScriptsChangesNothing() {
         List<Integer> before = snapshot();
 
         new ResourceDatabasePopulator(
                         new ClassPathResource("db/seed/dev/R__demo_01_users.sql"),
                         new ClassPathResource("db/seed/dev/R__demo_02_places.sql"),
-                        new ClassPathResource("db/seed/dev/R__demo_03_reviews.sql"))
+                        new ClassPathResource("db/seed/dev/R__demo_03_reviews.sql"),
+                        new ClassPathResource("db/seed/dev/R__demo_04_checkins.sql"))
                 .execute(dataSource);
         bootstrap.recalculateRatings();
         bootstrap.attachReviewPhotos();
@@ -331,6 +354,8 @@ class DemoSeedTests {
                 count("SELECT COUNT(*) FROM comments"),
                 count("SELECT COUNT(*) FROM user_violations"),
                 count("SELECT COUNT(*) FROM review_photos"),
+                count("SELECT COUNT(*) FROM check_ins"),
+                count("SELECT COALESCE(SUM(checkin_count), 0) FROM places"),
                 count("SELECT COALESCE(SUM(review_count), 0) FROM places"),
                 count("SELECT CAST(COALESCE(SUM(bayesian_score), 0) * 1000 AS SIGNED) FROM places"));
     }
