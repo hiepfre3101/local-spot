@@ -28,7 +28,7 @@ cd frontend && npm ci && npm run dev
 
 Chạy cả hệ thống trong Docker (giống môi trường deploy): `docker compose --profile app up -d --build` → http://localhost:8088 (đổi cổng bằng `APP_PORT` trong `.env`; bắt buộc đặt `JWT_SECRET` — tạo bằng `openssl rand -base64 32`).
 
-**Dữ liệu demo** (chỉ profile dev — Flyway nạp `backend/src/main/resources/db/seed/dev/` khi backend khởi động): 60 tài khoản và 300 địa điểm giả ở 5 thành phố. Mật khẩu chung `LocalSpot2026`:
+**Dữ liệu demo** (chỉ profile dev — Flyway nạp `backend/src/main/resources/db/seed/dev/` khi backend khởi động): 60 tài khoản, 300 địa điểm giả ở 5 thành phố, ~2000 review kèm vote hữu ích / bình luận; khi khởi động backend tự tính lại điểm Bayesian và tải ảnh minh họa cho một số review lên MinIO (`localspot.demo.bootstrap`). Mật khẩu chung `LocalSpot2026`:
 
 | Email | Vai trò |
 |---|---|
@@ -36,6 +36,8 @@ Chạy cả hệ thống trong Docker (giống môi trường deploy): `docker c
 | `mod1@localspot.test`, `mod2@localspot.test` | Kiểm duyệt viên |
 | `owner1@localspot.test` … `owner6@localspot.test` | Chủ địa điểm |
 | `member01@localspot.test` … `member51@localspot.test` | Thành viên (member09, 18, 27, 36, 45 chưa xác thực email) |
+
+Để demo trust score (requirements §5.1): `member07`, `member10`, `member19`… (tài khoản ≥ 250 ngày — "nhóm kỳ cựu") có trust cao, review đăng ngay; `member01`, `member11`, `member22`, `member33` (tài khoản < 60 ngày) trust < 30, review mới vào hàng chờ duyệt.
 
 Profile prod (Docker `--profile app`) không nạp dữ liệu demo.
 

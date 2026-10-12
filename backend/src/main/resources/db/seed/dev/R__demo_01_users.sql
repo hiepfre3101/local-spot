@@ -12,8 +12,7 @@
 --   mod1@, mod2@    USER + MODERATOR
 --   owner1..6@      USER + OWNER (sở hữu một số địa điểm ở R__demo_02_places.sql)
 --   member01..51@   USER; member09, 18, 27... chưa xác thực email; tuổi tài khoản 0–399 ngày
--- Chưa có review / vote nên trust mọi tài khoản < 30 — review demo seed sau khi có service tính
--- rating và trust (checklist E), để không chép công thức lõi ra SQL.
+-- Review / vote / bình luận demo ở R__demo_03_reviews.sql (trust của tài khoản đến từ vote ở đó).
 -- =====================================================================================
 
 SET @demo_pw = '$2a$10$6KpZwSyBc2bx/dKnOuPqY.mKYnWcXmonz5C3b/l7TpvZholAMoEq2';

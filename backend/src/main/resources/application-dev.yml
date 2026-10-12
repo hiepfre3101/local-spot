@@ -42,6 +42,9 @@ management:
       show-details: always
 
 localspot:
+  # Seed demo phần SQL không làm được (R__demo_03_reviews.sql): tính lại rating + ảnh review minh họa khi khởi động
+  demo:
+    bootstrap: true
   security:
     jwt:
       # Mặc định chỉ dùng cho dev cục bộ; đặt JWT_SECRET trong ../.env để thay. Prod không có mặc định.
