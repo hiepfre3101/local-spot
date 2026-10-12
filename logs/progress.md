@@ -802,3 +802,33 @@ Chưa commit — chờ supervisor duyệt.
 - **Mutation** (mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa dòng user → test bấm đồng thời; cột đếm `updatable` lại → test sửa qua entity; nhãn so `created_at` chặt → test nhãn cùng ngày; bỏ cổng chủ địa điểm → test cổng.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-12 (+07) — Checklist E11: Bộ sưu tập và chia sẻ công khai
+
+**Bối cảnh**: E10 đã commit + push (`8af94d0`, `9f6bc71`); PR seed review và PR check-in đưa link cho supervisor tự mở (máy không có `gh`). Nhánh `feature/be-collections` tạo từ `feature/be-checkins` (xếp chồng). Đã có sẵn: bảng `collections` (`share_slug` UNIQUE, NULL khi riêng tư) + `collection_place` (PK tổ hợp, ON DELETE CASCADE), entity `PlaceCollection` (`publish` / `makePrivate` thu hồi slug), openapi CRUD + `/shared/collections/{shareSlug}` + `/me/collections`. Chưa có: endpoint cho tab bộ sưu tập P06, luật địa điểm bị ẩn, trần số lượng.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Công khai = hiện trên trang cá nhân + link chia sẻ** (thêm `GET /users/{id}/collections`, chỉ bộ công khai); riêng tư = chỉ chủ. Slug dễ đọc (tên bỏ dấu + hậu tố).
+- **Chỉ thêm địa điểm APPROVED; bị ẩn sau đó → lọc khi xem**: người khác không thấy / không đếm; chủ thấy kèm trạng thái để tự bỏ ra.
+- **Trần 50 bộ / người, 100 địa điểm / bộ** — giữ chi tiết không phân trang như openapi.
+
+**Quyết định kỹ thuật:**
+- **Không tiết lộ tồn tại**: bộ riêng tư của người khác và mọi thao tác ghi lên bộ của người khác → 404 `COLLECTION_NOT_FOUND` (openapi cũ ghi 403 → sửa). 403 sẽ xác nhận id đó là một bộ sưu tập riêng tư có thật. Không có permission RBAC / quyền vượt cho nhân sự — dữ liệu cá nhân, không có luồng kiểm duyệt; kiểm chủ sở hữu trong service.
+- **Slug** = `Slugs.slugify(tên, 30)` + `-` + 6 ký tự `[a-z0-9]` từ `SecureRandom` (36⁶ ≈ 2,2 tỷ — trùng UNIQUE gần như không xảy ra; nếu có thì lớp phòng thủ UNIQUE trả 409). Tên không ra slug (toàn emoji) → tiền tố `bo-suu-tap`. Sửa tên khi vẫn công khai **giữ** slug (link đã chia sẻ không gãy); về riêng tư thu hồi, công khai lại sinh slug mới — rút lại là rút hẳn.
+- **Link chia sẻ luôn là góc nhìn công khai**, kể cả chủ tự mở (xem trước như người nhận); `/users/{id}/collections` cũng vậy.
+- **`PUT …/places/{placeId}` idempotent**: đã có → chỉ sửa ghi chú khi có body (không body giữ nguyên); vẫn sửa được ghi chú khi bộ đã đủ 100. Trần đếm theo **dòng** (kể cả địa điểm đã bị ẩn) — không để chủ vượt trần nhờ địa điểm bị ẩn.
+- **Khóa dòng**: tạo bộ khóa `users` (đếm 50 đúng khi chen nhau), thêm địa điểm khóa `collections` (đếm 100). Không đụng thứ tự khóa của các mục trước.
+- **Xóa hẳn** bộ sưu tập (bảng không có `deleted_at` theo thiết kế; mục 3 CLAUDE.md chỉ xóa mềm places / reviews / comments / users), `collection_place` theo CASCADE của CSDL; địa điểm giữ nguyên.
+- **Ảnh bìa** = ảnh bìa của địa điểm thêm gần nhất **mà người xem thấy**; `placeCount` theo người xem. Danh sách nhiều bộ: một truy vấn gom (`COUNT` + `GROUP_CONCAT … ORDER BY added_at DESC` lấy địa điểm bìa) + một truy vấn ảnh bìa — không N+1.
+- **`SecurityConfig`** (phần lõi mục 3): thêm **một** luật `permitAll` cho 3 GET công khai (`/collections/*`, `/shared/collections/*`, `/users/*/collections`) — cùng mẫu với bình luận / tìm kiếm, khớp openapi (`security: []` / tùy chọn); service tự giới hạn bộ riêng tư. Không đổi luật nào khác.
+- Ngưỡng ở `localspot.collection.*` (`CollectionProperties`).
+- **Seed demo** `R__demo_05_collections.sql`: 1–3 bộ cho thành viên số lẻ, chủ đề × thành phố, ~nửa công khai (slug cùng dạng nhưng hậu tố tất định), 3–12 địa điểm đã duyệt cùng thành phố. Gặp lỗi khi chạy: MySQL tính `CAST(SUBSTRING(email…))` trên cả dòng bị `WHERE` loại (`admin@…` → `'lo'`), chế độ strict của `INSERT … SELECT` biến cảnh báo thành lỗi → đổi sang `REGEXP_SUBSTR` (trả NULL thay vì lỗi).
+- **Lỗi bắt được nhờ test**: bộ rỗng không có địa điểm bìa → `Map.get(null)` trên map bất biến ném NPE (500 ở `/me/collections`) → sửa + thêm test ảnh bìa có giá trị thật.
+
+**Tài liệu**: openapi (mô tả luật, 403 → 404, 422 trần, `/users/{userId}/collections`, mô tả `placeCount` / `coverPhoto`), requirements §5 (3 dòng chốt), sitemap (`/c/:shareSlug`), database.md (xóa hẳn + trần), plan §10 E11.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **272 test** xanh (+11), SpotBugs 0. `CollectionFlowTests` 10 ca (riêng tư chỉ chủ — người khác / khách 404, không hiện trên trang cá nhân; công khai → slug dạng `quan-an-ha-noi-nen-thu-xxxxxx`, mở qua id / link / trang cá nhân, đổi tên giữ slug, về riêng tư link chết, công khai lại slug mới và link cũ vẫn chết; thêm idempotent + ghi chú + thứ tự mới nhất + bỏ idempotent + PENDING / REJECTED / HIDDEN 404 + ghi chú quá dài; địa điểm bị ẩn sau khi thêm: chủ thấy kèm `HIDDEN` và đếm, người khác không; ảnh bìa theo người xem; người khác sửa / xóa / thêm / bỏ → 404, khách tạo 401; xóa kéo theo `collection_place` nhưng giữ địa điểm; validate + tên không ra slug; 6 request tạo chen nhau khi đã có 48 → đúng 2 thành công; đủ 100 → 422 nhưng vẫn sửa ghi chú). `DemoSeedTests` +1 (seed bộ sưu tập theo đúng luật).
+- **Mutation** (mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa dòng user khi tạo → test chen nhau; bỏ lọc địa điểm bị ẩn → 2 test; không thu hồi slug khi về riêng tư → test link; bỏ kiểm chủ sở hữu → test người khác.
+
+Chưa commit — chờ supervisor duyệt.
