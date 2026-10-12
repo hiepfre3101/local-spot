@@ -7,7 +7,7 @@
 --   để thử truy vấn bán kính và marker cluster.
 --   Trạng thái: n % 20 = 0 → PENDING (hàng chờ duyệt), n % 37 = 0 → REJECTED, còn lại APPROVED.
 --   owner1..6 sở hữu các địa điểm n % 25 = 1 (đã duyệt).
---   review_count / avg_rating / bayesian_score giữ mặc định 0 — chưa có review demo (xem file 01).
+--   review_count / avg_rating / bayesian_score giữ mặc định 0 — tính lại từ review demo (R__demo_03) khi khởi động.
 --   phone để trống: số điện thoại bịa có thể trùng số thật của người khác.
 -- Khóa idempotent: slug = <tiền tố>-<tên>-<thành phố>-<n>.
 -- =====================================================================================

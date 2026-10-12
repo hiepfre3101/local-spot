@@ -3,6 +3,12 @@ package com.localspot.db;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.localspot.TestcontainersConfiguration;
+import com.localspot.entity.User;
+import com.localspot.listener.DemoDataBootstrap;
+import com.localspot.repository.UserRepository;
+import com.localspot.service.ReviewPhotoService;
+import com.localspot.service.TrustScoreService;
+import com.localspot.storage.InMemoryObjectStorage;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,11 +24,16 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
- * Seed demo của profile dev ({@code db/seed/dev}). Profile test mặc định không nạp seed; lớp này bật riêng để kiểm tra
- * seed chạy được trên schema hiện tại, đúng quy mô, và chạy lại không nhân đôi / không lỗi (yêu cầu của script R__).
+ * Seed demo của profile dev ({@code db/seed/dev}) + {@link DemoDataBootstrap}. Profile test mặc định không nạp seed; lớp
+ * này bật riêng để kiểm tra seed chạy được trên schema hiện tại, đúng quy mô, tôn trọng các ràng buộc nghiệp vụ mà service
+ * thật bảo đảm (cổng viết review, bộ đếm, counted, điểm, độ sâu bình luận), và chạy lại không nhân đôi / không lỗi.
  */
 @Import(TestcontainersConfiguration.class)
-@SpringBootTest(properties = "spring.flyway.locations=classpath:db/migration,classpath:db/seed/dev")
+@SpringBootTest(
+        properties = {
+            "spring.flyway.locations=classpath:db/migration,classpath:db/seed/dev",
+            "localspot.demo.bootstrap=true"
+        })
 @ActiveProfiles("test")
 class DemoSeedTests {
 
@@ -31,6 +42,21 @@ class DemoSeedTests {
 
     @Autowired
     private DataSource dataSource;
+
+    @Autowired
+    private DemoDataBootstrap bootstrap;
+
+    @Autowired
+    private ReviewPhotoService reviewPhotos;
+
+    @Autowired
+    private InMemoryObjectStorage storage;
+
+    @Autowired
+    private UserRepository users;
+
+    @Autowired
+    private TrustScoreService trust;
 
     @Test
     void seedsSixtyAccountsWithExpectedRoles() {
@@ -107,13 +133,186 @@ class DemoSeedTests {
     }
 
     @Test
+    void seedsAboutTwoThousandReviewsWithStatusMix() {
+        Map<String, Integer> byStatus = countBy("SELECT status AS k, COUNT(*) AS v FROM reviews GROUP BY status");
+        int total = byStatus.values().stream().mapToInt(Integer::intValue).sum();
+
+        assertThat(total).isBetween(1800, 2400);
+        assertThat(byStatus).containsOnlyKeys("PUBLISHED", "PENDING", "REJECTED");
+        assertThat(byStatus.get("PENDING")).isBetween(total * 4 / 100, total * 10 / 100);
+        assertThat(byStatus.get("REJECTED")).isBetween(total / 100, total * 5 / 100);
+        // Hàng chờ UC28 trông như vừa gửi: mọi review chờ đều trong 10 ngày trước mốc seed
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews
+                        WHERE status = 'PENDING' AND created_at < TIMESTAMP('2026-09-30') - INTERVAL 11 DAY
+                        """)).isZero();
+    }
+
+    @Test
+    void reviewsPassTheSameGatesAsTheWriteApi() {
+        // Cổng UC12: email đã xác thực, địa điểm đã duyệt, chủ không tự đánh giá, ≥ 20 ký tự, ngày đến ≤ ngày viết
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r JOIN users u ON u.id = r.user_id
+                        WHERE u.email_verified_at IS NULL
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r JOIN places p ON p.id = r.place_id
+                        WHERE p.status <> 'APPROVED' OR p.owner_id = r.user_id
+                        """)).isZero();
+        assertThat(count("SELECT COUNT(*) FROM reviews WHERE CHAR_LENGTH(TRIM(content)) < 20"))
+                .isZero();
+        assertThat(count("SELECT COUNT(*) FROM reviews WHERE visited_at > DATE(created_at)"))
+                .isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r
+                        JOIN users u ON u.id = r.user_id JOIN places p ON p.id = r.place_id
+                        WHERE r.created_at < u.created_at OR r.created_at < p.moderated_at
+                        """)).isZero();
+        // Nhân sự không viết review demo; review đã duyệt / từ chối có người duyệt, review chờ thì chưa
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r JOIN users u ON u.id = r.user_id
+                        WHERE u.email NOT REGEXP '^(member|owner)'
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews
+                        WHERE (status = 'PENDING' AND moderated_by IS NOT NULL)
+                           OR (status = 'REJECTED' AND (moderated_by IS NULL OR reject_reason IS NULL))
+                        """)).isZero();
+    }
+
+    @Test
+    void popularityIsSkewedSoBayesianRankingHasSomethingToShow() {
+        List<Integer> perPlace = jdbc.queryForList("""
+                SELECT COUNT(r.id) FROM places p
+                LEFT JOIN reviews r ON r.place_id = p.id AND r.status = 'PUBLISHED'
+                WHERE p.status = 'APPROVED' GROUP BY p.id
+                """, Integer.class);
+
+        assertThat(perPlace).contains(0);
+        assertThat(perPlace.stream().filter(c -> c >= 25)).hasSizeGreaterThan(10);
+        // Cặp minh họa plan §5: địa điểm ít review có trung bình thô cao hơn nhưng điểm Bayesian thấp hơn
+        assertThat(count("""
+                        SELECT COUNT(*) FROM places few JOIN places many
+                        WHERE few.review_count BETWEEN 1 AND 3 AND many.review_count >= 25
+                          AND few.avg_rating > many.avg_rating AND few.bayesian_score < many.bayesian_score
+                        """)).isPositive();
+    }
+
+    @Test
+    void startupRecalculatesEveryPlaceFromPublishedReviews() {
+        assertThat(count("""
+                        SELECT COUNT(*) FROM places p WHERE p.review_count <> (
+                          SELECT COUNT(*) FROM reviews r WHERE r.place_id = p.id AND r.status = 'PUBLISHED'
+                            AND r.deleted_at IS NULL)
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM places
+                        WHERE (review_count = 0 AND bayesian_score <> 0) OR (review_count > 0 AND bayesian_score = 0)
+                        """)).isZero();
+    }
+
+    @Test
+    void voteCountersMatchARecountAndOnlyVeteransAreCounted() {
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r
+                        WHERE r.helpful_count <> (SELECT COUNT(*) FROM review_votes v WHERE v.review_id = r.id)
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM users u WHERE u.helpful_votes_count <> (
+                          SELECT COUNT(*) FROM review_votes v JOIN reviews r ON r.id = v.review_id
+                          WHERE r.user_id = u.id AND v.counted)
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM review_votes v
+                        JOIN reviews r ON r.id = v.review_id JOIN users voter ON voter.id = v.user_id
+                        WHERE v.user_id = r.user_id OR r.status <> 'PUBLISHED' OR v.created_at < r.created_at
+                           OR v.counted <> (voter.email LIKE 'member%'
+                                            AND voter.created_at <= TIMESTAMP('2026-09-30') - INTERVAL 250 DAY)
+                        """)).isZero();
+        assertThat(count("SELECT COUNT(*) FROM review_votes WHERE counted")).isPositive();
+        assertThat(count("SELECT COUNT(*) FROM review_votes WHERE NOT counted")).isPositive();
+    }
+
+    @Test
+    void trustSpreadsAroundThePublishThreshold() {
+        List<User> verified = users.findAll().stream()
+                .filter(u -> u.getEmail().matches("^(member|owner).*@localspot\\.test$"))
+                .filter(User::isEmailVerified)
+                .toList();
+        Map<Long, Integer> scores = trust.trustScoresOf(verified);
+
+        // Có người đăng thẳng (≥ 30) và có người đã xác thực vẫn vào hàng chờ — cả hai nhánh FR-23 đều demo được
+        assertThat(scores.values().stream().filter(s -> s >= 30)).hasSizeGreaterThan(20);
+        assertThat(scores.values().stream().filter(s -> s < 30)).hasSizeGreaterThanOrEqualTo(5);
+        // Người mới (< 60 ngày): ít review, tất cả đang chờ duyệt
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r JOIN users u ON u.id = r.user_id
+                        WHERE u.email LIKE 'member%' AND u.created_at > TIMESTAMP('2026-09-30') - INTERVAL 60 DAY
+                          AND r.status <> 'PENDING'
+                        """)).isZero();
+        // Vi phạm của review bị từ chối đều đã hết hạn → không kéo trust hiện tại
+        assertThat(count("""
+                        SELECT COUNT(*) FROM reviews r WHERE r.status = 'REJECTED' AND NOT EXISTS (
+                          SELECT 1 FROM user_violations v WHERE v.source_type = 'REVIEW_REJECTED' AND v.source_id = r.id
+                            AND v.user_id = r.user_id AND v.points = 25 AND v.expires_at < NOW())
+                        """)).isZero();
+    }
+
+    @Test
+    void commentsAreTwoLevelsOnVisibleReviews() {
+        assertThat(count("SELECT COUNT(*) FROM comments WHERE parent_id IS NULL"))
+                .isGreaterThan(200);
+        assertThat(count("SELECT COUNT(*) FROM comments WHERE parent_id IS NOT NULL"))
+                .isPositive();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM comments reply JOIN comments root ON root.id = reply.parent_id
+                        JOIN reviews r ON r.id = reply.review_id
+                        WHERE root.parent_id IS NOT NULL OR root.review_id <> reply.review_id
+                           OR reply.user_id <> r.user_id OR reply.created_at < root.created_at
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM comments c
+                        JOIN reviews r ON r.id = c.review_id JOIN users u ON u.id = c.user_id
+                        WHERE r.status <> 'PUBLISHED' OR u.email_verified_at IS NULL OR c.created_at < r.created_at
+                        """)).isZero();
+    }
+
+    @Test
+    void startupAttachesPlaceholderPhotosThroughThePipeline() {
+        List<Map<String, Object>> photos = jdbc.queryForList("""
+                SELECT p.id, p.storage_key, r.rating, r.status FROM review_photos p
+                JOIN reviews r ON r.id = p.review_id
+                """);
+
+        assertThat(photos).hasSizeGreaterThan(100);
+        assertThat(photos).allSatisfy(p -> {
+            assertThat((Integer) p.get("rating")).isGreaterThanOrEqualTo(4);
+            assertThat(p.get("status")).isEqualTo("PUBLISHED");
+        });
+        // Consumer không chạy ở profile test → ảnh còn ở incoming/; xử lý một ảnh như consumer để chắc ảnh minh họa hợp
+        // lệ
+        Map<String, Object> first = photos.get(0);
+        String key = (String) first.get("storage_key");
+        assertThat(storage.contains("incoming/" + key)).isTrue();
+
+        reviewPhotos.process(((Number) first.get("id")).longValue());
+
+        assertThat(jdbc.queryForObject("SELECT status FROM review_photos WHERE id = ?", String.class, first.get("id")))
+                .isEqualTo("READY");
+        assertThat(storage.keysStartingWith(key)).hasSize(3);
+    }
+
+    @Test
     void rerunningSeedScriptsChangesNothing() {
         List<Integer> before = snapshot();
 
         new ResourceDatabasePopulator(
                         new ClassPathResource("db/seed/dev/R__demo_01_users.sql"),
-                        new ClassPathResource("db/seed/dev/R__demo_02_places.sql"))
+                        new ClassPathResource("db/seed/dev/R__demo_02_places.sql"),
+                        new ClassPathResource("db/seed/dev/R__demo_03_reviews.sql"))
                 .execute(dataSource);
+        bootstrap.recalculateRatings();
+        bootstrap.attachReviewPhotos();
 
         assertThat(snapshot()).isEqualTo(before);
     }
@@ -124,7 +323,16 @@ class DemoSeedTests {
                 count("SELECT COUNT(*) FROM user_roles"),
                 count("SELECT COUNT(*) FROM places"),
                 count("SELECT COUNT(*) FROM opening_hours"),
-                count("SELECT COUNT(*) FROM place_amenity"));
+                count("SELECT COUNT(*) FROM place_amenity"),
+                count("SELECT COUNT(*) FROM reviews"),
+                count("SELECT COUNT(*) FROM review_votes"),
+                count("SELECT COALESCE(SUM(helpful_count), 0) FROM reviews"),
+                count("SELECT COALESCE(SUM(helpful_votes_count), 0) FROM users"),
+                count("SELECT COUNT(*) FROM comments"),
+                count("SELECT COUNT(*) FROM user_violations"),
+                count("SELECT COUNT(*) FROM review_photos"),
+                count("SELECT COALESCE(SUM(review_count), 0) FROM places"),
+                count("SELECT CAST(COALESCE(SUM(bayesian_score), 0) * 1000 AS SIGNED) FROM places"));
     }
 
     private List<String> usersWithRole(String role) {
