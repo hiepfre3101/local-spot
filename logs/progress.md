@@ -741,3 +741,35 @@ Chưa commit — chờ supervisor duyệt.
 - **Test có bắt lỗi** (mutation): listener không làm gì; v = 0 → C; cột điểm `updatable`; luôn coi là "đã đổi"; đảo trọng số m / v; C tính trên mọi địa điểm (lần đầu **sống sót** → thêm test địa điểm bị ẩn có 12 review 1 sao, giờ đỏ). Lỗi "đếm trước khi khóa" là race — test đồng thời chỉ bắt được theo xác suất, không khẳng định bằng mutation.
 
 Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-12 (+07) — Seed review demo (mục riêng sau E9)
+
+**Bối cảnh**: `develop` local chậm 2 PR so với `origin/develop` → fast-forward tới `dc9b446` (#13 vote/bình luận, #14 rating đã merge). Nhánh `feature/be-demo-reviews` tạo từ `develop`. E9 đã chốt tách seed review demo (~2000 review) thành mục riêng; `R__demo_01_users.sql` ghi rõ hoãn tới khi có service rating / trust "để không chép công thức lõi ra SQL".
+
+**Vấn đề cần chốt**: trust tính trực tiếp (§5.1), không lưu. Không có vote hợp lệ thì trust tối đa 10 + 18 = 28 < 30, mà vote chỉ hợp lệ (`counted`) khi người vote đạt ≥ 30 lúc vote → seed đúng luật tuyệt đối thì không ai đạt 30, mọi review PENDING, demo không có điểm.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Nhóm kỳ cựu** phá vòng lặp: thành viên tạo tài khoản ≥ 250 ngày trước mốc seed (16 người) — coi như người dùng đầu tiên. Chỉ vote của nhóm này `counted = TRUE`.
+- **Điểm tính khi khởi động dev** bằng `RatingService.recalculateAll()` (chính job D4) — công thức Bayesian chỉ ở Java.
+- Seed gồm: vote hữu ích, bình luận 2 cấp, trộn trạng thái, **ảnh review**.
+
+**Quyết định kỹ thuật:**
+- **SQL tất định, idempotent** như seed 01 / 02 (CTE + số học, không RAND): review `INSERT IGNORE` theo `UNIQUE(place_id, user_id)`, vote theo PK; bình luận / vi phạm không có khóa tự nhiên → `NOT EXISTS`. Khóa ổn định của địa điểm = số cuối slug (không dùng id tự tăng).
+- **Seed tôn trọng cổng UC12** (test kiểm): người viết đã xác thực email, địa điểm APPROVED, chủ không tự đánh giá, ≥ 20 ký tự, ngày đến ≤ ngày viết, thời điểm viết sau khi tài khoản tạo và địa điểm được duyệt. Không seed review của nhân sự.
+- **`counted` chỉ của nhóm kỳ cựu**, kể cả khi người khác về sau đạt 30 → seed chỉ có thể tính **thiếu** trust, không bao giờ tính dư (bảo vệ được trước hội đồng: không có tài khoản nào được nâng trust trái luật). Không mô phỏng lại lịch sử trust theo thời gian — chi phí cao, không thêm giá trị demo.
+- **Người mới** (thành viên < 60 ngày, 8 người) — phát hiện khi chạy test: bản đầu mỗi thành viên ~38 review bất kể tuổi tài khoản → mọi người đã xác thực đều ≥ 30, không còn ai để demo nhánh hàng chờ, và tài khoản 7 ngày tuổi có 38 review là phi thực tế. Sửa: người mới chỉ viết ~1/8 số review, **tất cả PENDING** — đúng theo §5.1 (tài khoản mới chưa có vote hợp lệ ≤ 18 < 30); review chờ không nhận vote → họ vẫn dưới ngưỡng.
+- **Trạng thái**: PUBLISHED của nhóm kỳ cựu đăng thẳng (`moderated_by` NULL); của người khác ghi là đã qua kiểm duyệt viên duyệt (nhất quán bất kể trust lúc viết). PENDING nằm trong 10 ngày gần mốc → hàng chờ UC28 trông như vừa gửi. REJECTED chỉ người ngoài nhóm kỳ cựu, cũ hơn 45 ngày + vi phạm `REVIEW_REJECTED` 25 điểm **đã hết hạn** → có lịch sử, không kéo trust hiện tại.
+- **Bộ đếm đếm lại từ đầu** từ `review_votes` (cùng triết lý E9): `reviews.helpful_count` = mọi vote, `users.helpful_votes_count` = vote counted nhận được, kể cả trên review đã xóa — khớp `ReviewVoteService`. Đúng cả khi đã có vote thật qua API.
+- **Độ phổ biến lệch** (10% chưa có review … 10% 25–40 review) + mức chất lượng theo địa điểm → có sẵn cặp "ít review 5★ đứng sau nhiều review ~4.5★" để minh họa Bayesian (test kiểm cặp này tồn tại).
+- **IP** `10.20.<người viết>.x` — mỗi người một /24 trong dải riêng, không kích hoạt luật cảnh báo IP.
+- **`DemoDataBootstrap`** (`listener/`, `ApplicationReadyEvent`) bật bằng `localspot.demo.bootstrap` (chỉ `application-dev.yml`) thay vì `@Profile("dev")` — để test bật được trong context có seed. (1) tính lại rating; (2) ảnh minh họa cho ~1/8 review 4–5★ đang hiện chưa có ảnh nào, 1–3 ảnh: hình khối màu phẳng, **không chữ** (không phụ thuộc font của máy / container headless), đi qua đúng đường người dùng (`ReviewPhotoService.store` → `incoming/` → `photo.process` → 3 bản JPEG). Kho ảnh lỗi → log WARN, không chặn khởi động. Giới hạn đã ghi trong Javadoc: xóa volume MinIO nhưng giữ CSDL → ảnh READY trỏ object không còn; xóa hết ảnh của review demo qua UI → khởi động sau thêm lại.
+
+**Số liệu thực tế** (nạp vào MySQL 8.4 sạch): 2046 review (1879 PUBLISHED / 143 PENDING / 24 REJECTED), sao 1★ 58 · 2★ 244 · 3★ 487 · 4★ 795 · 5★ 462; 8799 vote (2617 counted), tối đa 20 vote / review; 908 bình luận gốc + 476 trả lời; 27 địa điểm đã duyệt chưa có review, 15 địa điểm ≥ 25 review (tối đa 33); khởi động: 250 địa điểm đổi điểm trong ~1.7 s, 297 ảnh cho 143 review.
+
+**Tài liệu**: plan §10 (mục mới sau E9), database.md §3.5, README (cách demo trust bằng tài khoản kỳ cựu / người mới), đầu file seed 01 / 02 / 03.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **252 test** xanh (+8), SpotBugs 0. `DemoSeedTests` thêm 8 ca (bật `localspot.demo.bootstrap` trong context có seed): quy mô + trộn trạng thái, PENDING trong 10 ngày; cổng UC12; độ phổ biến lệch + cặp minh họa Bayesian; điểm khớp tập PUBLISHED sau khởi động; bộ đếm khớp đếm lại + `counted` ⇔ kỳ cựu, không tự vote, vote chỉ trên review đang hiện; trust có cả ≥ 30 và < 30 (người đã xác thực), người mới chỉ có PENDING, vi phạm đã hết hạn; bình luận 2 cấp đúng tác giả / thời điểm; ảnh minh họa đi qua pipeline (xử lý một ảnh như consumer → READY + 3 bản). Ca chạy lại mở rộng: chạy lại 3 script + bootstrap không đổi 9 số đếm / tổng.
+- **Mutation**: `counted` luôn TRUE → đỏ test bộ đếm; bỏ tính lại rating khi khởi động → đỏ 2 test. Cho chủ tự đánh giá quán mình **sống sót** — với dữ liệu hiện tại công thức chọn người viết không bao giờ rơi vào đúng chủ của địa điểm, điều kiện SQL chỉ là phòng hờ; test giữ lại để chặn khi đổi công thức.
+
+Chưa commit — chờ supervisor duyệt.
