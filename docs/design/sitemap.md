@@ -28,7 +28,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period`, `region` |
 | `/users/:id` | Trang cá nhân (P06) | UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|checkins\|badges`. Chính mình → nút "Chỉnh sửa hồ sơ". Tab `checkins` chỉ hiện trên trang của chính mình (`GET /me/check-ins` — chốt 2026-10-12) |
 | `/collections/:id` | Bộ sưu tập của mình | UC18 | `auth` (chủ bộ) | Bật/tắt công khai từng bộ (`is_public`) |
-| `/c/:shareSlug` | Bộ sưu tập chia sẻ | UC18 | — | Chỉ bộ công khai |
+| `/c/:shareSlug` | Bộ sưu tập chia sẻ | UC18 | — | Chỉ bộ công khai; về riêng tư thì link cũ hết hiệu lực vĩnh viễn (chốt 2026-10-12) |
 | `/settings/profile` | Cài đặt — Hồ sơ (P06) | UC06 | `auth` | |
 | `/settings/password` | Cài đặt — Mật khẩu (P06) | UC06 | `auth` | |
 | `/owner` | Địa điểm của tôi (P09) | UC23 | `auth` | Chưa sở hữu địa điểm nào → form yêu cầu xác nhận sở hữu; đã có → danh sách |

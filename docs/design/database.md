@@ -295,6 +295,8 @@ Xóa gốc còn trả lời (chốt 2026-10-11): gốc vẫn xóa mềm, API tr�
 | collections | id, user_id FK, name VARCHAR(150), description VARCHAR(1000), is_public BOOLEAN, share_slug VARCHAR(40), created_at, updated_at | share_slug UQ (NULL khi riêng tư) |
 | collection_place | collection_id FK, place_id FK, note VARCHAR(500), added_at | **PK(collection_id, place_id)** (plan §5) |
 
+Bộ sưu tập xóa hẳn (không có `deleted_at` — dữ liệu cá nhân, không có luồng kiểm duyệt); `collection_place` đi theo bằng `ON DELETE CASCADE`. Trần 50 bộ / người, 100 địa điểm / bộ kiểm ở `CollectionService` dưới khóa dòng `users` / `collections` (chốt 2026-10-12).
+
 #### `follows`
 | Cột | Ràng buộc |
 |---|---|
