@@ -139,6 +139,26 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             """)
     Optional<Review> findVisibleById(@Param("id") Long id);
 
+    // ─── Tính lại rating (FR-22) ────────────────────────────────────────────
+
+    /**
+     * C — trung bình sao của mọi review PUBLISHED trên địa điểm APPROVED (mỗi review cùng trọng số, chốt 2026-10-11);
+     * {@code null} khi hệ thống chưa có review nào.
+     */
+    @Query("""
+            SELECT AVG(r.rating) FROM Review r
+            WHERE r.status = com.localspot.entity.ReviewStatus.PUBLISHED
+              AND r.place.status = com.localspot.entity.PlaceStatus.APPROVED
+            """)
+    Double findSystemAverageRating();
+
+    /** v và R của một địa điểm — index {@code (place_id, status, created_at)}. */
+    @Query("""
+            SELECT new com.localspot.repository.PlaceRatingStats(COUNT(r), AVG(r.rating)) FROM Review r
+            WHERE r.place.id = :placeId AND r.status = com.localspot.entity.ReviewStatus.PUBLISHED
+            """)
+    PlaceRatingStats findRatingStats(@Param("placeId") Long placeId);
+
     // ─── Vote hữu ích (FR-20) — đếm nguyên tử, không qua entity ─────────────
 
     /**
