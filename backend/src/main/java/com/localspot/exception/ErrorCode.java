@@ -72,6 +72,8 @@ public final class ErrorCode {
     public static final String REVIEW_ALREADY_EXISTS = "REVIEW_ALREADY_EXISTS";
     /** 409: review đã bị ẩn sau báo cáo vi phạm — tác giả không sửa được (chốt 2026-10-08). */
     public static final String REVIEW_LOCKED = "REVIEW_LOCKED";
+    /** 422 trường {@code parentId}: chỉ trả lời được bình luận gốc — bình luận tối đa 2 cấp (Q5). */
+    public static final String COMMENT_DEPTH_EXCEEDED = "COMMENT_DEPTH_EXCEEDED";
 
     private ErrorCode() {}
 }

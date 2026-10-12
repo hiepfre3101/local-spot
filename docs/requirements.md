@@ -164,6 +164,9 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Cảnh báo IP | ≥ 3 review cùng địa điểm từ cùng /24 trong 24 h | Đã chốt |
 | Bán kính check-in | 200 m | Theo plan (§5) |
 | Độ sâu bình luận | 2 cấp (bình luận + trả lời) | Đã chốt |
+| Điều kiện vote / bình luận | Vote: chỉ cần đăng nhập (vote của người trust < 30 vốn không tính vào trust); bình luận: cần email đã xác thực (403 `EMAIL_NOT_VERIFIED`). Chỉ trên review đang hiện (`PUBLISHED`, địa điểm `APPROVED`) — còn lại 404. Vote review của mình → 409 `SELF_ACTION_FORBIDDEN` | Đã chốt (2026-10-11) |
+| Xóa bình luận gốc còn trả lời | Gốc xóa mềm, hiện dạng placeholder "đã bị xóa" (`deleted = true`, không tác giả / nội dung) khi còn trả lời đang hiện; hết trả lời thì gốc biến mất. Gốc bị ẩn sau báo cáo xử lý giống vậy | Đã chốt (2026-10-11) |
+| Thứ tự bình luận | Gốc cũ trước (keyset theo id), mỗi gốc kèm toàn bộ trả lời cũ trước — không phân trang trả lời | Đã chốt (2026-10-11) |
 | Mật khẩu | ≥ 8 ký tự, có chữ và số | Đã chốt (U1) |
 | Hạn link xác thực email / đặt lại mật khẩu | 24 h / 30 phút | Đã chốt (U1) |
 | Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |

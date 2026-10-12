@@ -45,8 +45,11 @@ public class User extends AuditableEntity {
     @Column(name = "email_verified_at")
     private Instant emailVerifiedAt;
 
-    /** Vote hữu ích hợp lệ nhận được ({@code review_votes.counted = 1}) — thành phần helpful_score của trust. */
-    @Column(name = "helpful_votes_count", nullable = false)
+    /**
+     * Vote hữu ích hợp lệ nhận được ({@code review_votes.counted = 1}) — thành phần helpful_score của trust. Chỉ đổi bằng
+     * UPDATE ± 1 nguyên tử ở repository (như {@code reviews.helpful_count}), không ghi qua entity.
+     */
+    @Column(name = "helpful_votes_count", nullable = false, insertable = false, updatable = false)
     private int helpfulVotesCount;
 
     @Column(name = "contribution_points", nullable = false)

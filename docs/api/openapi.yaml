@@ -649,30 +649,47 @@ paths:
     put:
       tags: [Reviews]
       summary: Vote "hữu ích" — idempotent (FR-20)
-      description: '`counted` = trust người vote ≥ 30 tại thời điểm vote. Không vote review của chính mình.'
+      description: >-
+        Mọi thành viên đăng nhập (không cần email đã xác thực). `counted` = trust người vote ≥ 30 tại thời điểm vote —
+        chỉ vote `counted` cộng vào `users.helpful_votes_count` của tác giả (trust); `helpfulCount` đếm mọi vote. Vote
+        lần hai không đổi gì. Chỉ vote review đang hiện (`PUBLISHED`, địa điểm `APPROVED`). Chốt 2026-10-11.
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
-        '422': { description: Không thể vote review của chính mình }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+        '409': { description: 'Vote review của chính mình → `SELF_ACTION_FORBIDDEN`' }
     delete:
       tags: [Reviews]
       summary: Bỏ vote — idempotent
+      description: Chưa vote vẫn 200. Bỏ vote `counted` thì trừ lại trust của tác giả.
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
 
   # ───────────────────────────── Comments (UC15) ─────────────────────────────
   /reviews/{reviewId}/comments:
     get:
       tags: [Comments]
       summary: Bình luận của review — bình luận gốc kèm trả lời (2 cấp)
+      description: >-
+        Phân trang theo bình luận gốc, cũ trước; mỗi gốc kèm toàn bộ trả lời đang hiện, cũ trước. Gốc đã xóa / bị ẩn
+        nhưng còn trả lời → placeholder `deleted = true` (không `author` / `content`). Chốt 2026-10-11.
       security: []
       parameters: [ { $ref: '#/components/parameters/ReviewId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CommentPage' } } } }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+        '422': { description: 'Cursor / limit sai (`INVALID_CURSOR`, `VALIDATION_FAILED`)' }
     post:
       tags: [Comments]
       summary: Bình luận / trả lời (FR-21) — `parentId` phải là bình luận gốc
+      description: >-
+        Thứ tự kiểm tra: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → nội dung không rỗng sau khi bỏ khoảng trắng hai
+        đầu, ≤ 2000 ký tự (422) → review đang hiện (404) → `parentId` là bình luận gốc đang hiện của cùng review (422
+        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`).
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
         required: true
@@ -681,16 +698,21 @@ paths:
             schema: { $ref: '#/components/schemas/CommentCreateRequest' }
       responses:
         '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
         '422': { $ref: '#/components/responses/ValidationError' }
   /comments/{commentId}:
     delete:
       tags: [Comments]
       summary: Xóa mềm bình luận của mình
+      description: Xóa gốc không xóa các trả lời — gốc thành placeholder khi còn trả lời (chốt 2026-10-11).
       x-permission: comment:delete-own
       parameters: [ { name: commentId, in: path, required: true, schema: { type: integer, format: int64 } } ]
       responses:
         '204': { description: Đã xóa }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Không tồn tại / đã xóa (`COMMENT_NOT_FOUND`)' }
 
   # ───────────────────────────── Check-in (UC16) ─────────────────────────────
   /places/{placeId}/check-in:
@@ -1624,10 +1646,11 @@ components:
       type: object
       properties:
         id: { type: integer, format: int64 }
-        author: { $ref: '#/components/schemas/UserSummary' }
-        content: { type: string }
+        author: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ], description: '`null` khi `deleted`' }
+        content: { type: [string, 'null'], description: '`null` khi `deleted`' }
         parentId: { type: [integer, 'null'], format: int64 }
-        replies: { type: array, items: { $ref: '#/components/schemas/Comment' }, description: Chỉ có ở bình luận gốc }
+        deleted: { type: boolean, description: 'Placeholder của bình luận gốc đã xóa / bị ẩn nhưng còn trả lời' }
+        replies: { type: [array, 'null'], items: { $ref: '#/components/schemas/Comment' }, description: 'Chỉ có ở bình luận gốc (trả lời: `null`)' }
         createdAt: { type: string, format: date-time }
     CommentPage:
       type: object

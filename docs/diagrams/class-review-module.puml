@@ -50,6 +50,11 @@ package service {
     + approve(reviewId, moderatorId) : void
     + reject(reviewId, moderatorId, reason) : void
   }
+  class ReviewVoteService <<@Service>> {
+    + vote(userId, reviewId) : VoteResult
+    + unvote(userId, reviewId) : VoteResult
+    .. counted = trust người vote ≥ 30 lúc vote ..
+  }
   class TrustScoreService <<@Service>> {
     + computeTrust(userId : Long) : int
   }
@@ -128,6 +133,9 @@ package mapper {
 }
 
 ReviewController --> ReviewService
+ReviewController --> ReviewVoteService
+ReviewVoteService --> TrustScoreService
+ReviewVoteService --> ReviewRepository
 ReviewController ..> ReviewRequest
 ReviewController ..> ReviewResponse
 ReviewModerationController --> ReviewModerationService

@@ -263,6 +263,8 @@ Không cho vote review của chính mình (kiểm tra ở service).
 | created_at, updated_at, deleted_at | DATETIME(6) | | |
 | | | IX(review_id, created_at) | |
 
+Xóa gốc còn trả lời (chốt 2026-10-11): gốc vẫn xóa mềm, API trả placeholder "đã bị xóa" khi còn trả lời `VISIBLE`; trả lời không bị xóa kéo theo. Gốc `HIDDEN` xử lý như gốc đã xóa.
+
 #### `owner_replies`
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
 |---|---|---|---|
@@ -379,6 +381,8 @@ Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên)
 | `places.checkin_count` | Check-in thành công | `CheckInService` (cùng transaction) |
 | `reviews.helpful_count` | Vote / bỏ vote | `ReviewVoteService` (`UPDATE ... SET helpful_count = helpful_count ± 1`, nguyên tử) |
 | `users.helpful_votes_count` | Vote có `counted = 1` / bỏ vote đó | `ReviewVoteService` |
+
+Hai bộ đếm vote (chốt 2026-10-11): entity khai báo cột `insertable = false, updatable = false` — Hibernate ghi lại **mọi** cột khi review / người dùng được sửa, nên giá trị cũ trong bộ nhớ sẽ xóa mất vote đến cùng lúc (mất cập nhật). Vote khóa trước `users` (người vote + tác giả, id tăng dần) rồi `reviews`: `INSERT` vào `review_votes` giữ khóa chia sẻ trên dòng cha (kiểm tra khóa ngoại), sau đó `UPDATE` bộ đếm cần khóa độc quyền trên chính dòng đó → không khóa trước theo thứ tự chung thì hai vote đồng thời (hoặc A vote B trong khi B vote A) deadlock — bắt được bằng test đồng thời.
 | `users.contribution_points` | Review được công khai, địa điểm được duyệt... | Listener |
 
 Lý do denormalize (trả lời câu hỏi bảo vệ "vì sao denormalize `avg_rating`?"): trang danh sách / tìm kiếm sắp xếp theo điểm trên hàng trăm địa điểm; tính `AVG` mỗi request là `O(số review)` và không đánh index được, còn cột lưu sẵn cho phép index `(category_id, status, bayesian_score)` và đọc `O(1)`. Đánh đổi: phải giữ đồng bộ khi ghi — giải quyết bằng event sau commit và có thể chạy lại toàn bộ bằng job đối soát.
