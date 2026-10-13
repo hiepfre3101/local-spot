@@ -52,7 +52,8 @@ public class User extends AuditableEntity {
     @Column(name = "helpful_votes_count", nullable = false, insertable = false, updatable = false)
     private int helpfulVotesCount;
 
-    @Column(name = "contribution_points", nullable = false)
+    /** Chỉ {@code ContributionService} ghi (UPDATE trực tiếp) — sửa hồ sơ / khóa qua entity không ghi đè điểm vừa tính. */
+    @Column(name = "contribution_points", nullable = false, insertable = false, updatable = false)
     private int contributionPoints;
 
     @Column(name = "locked_until")

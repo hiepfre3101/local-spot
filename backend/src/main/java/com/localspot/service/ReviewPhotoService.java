@@ -7,6 +7,7 @@ import com.localspot.entity.PhotoStatus;
 import com.localspot.entity.Review;
 import com.localspot.entity.ReviewPhoto;
 import com.localspot.entity.User;
+import com.localspot.event.ContributionChangedEvent;
 import com.localspot.event.PhotoObjectsDeletedEvent;
 import com.localspot.event.PhotosStoredEvent;
 import com.localspot.exception.ApiException;
@@ -129,9 +130,16 @@ public class ReviewPhotoService {
             tx.executeWithoutResult(status -> photos.findById(photoId).ifPresent(ReviewPhoto::markFailed));
             return;
         }
-        tx.executeWithoutResult(status -> photos.findById(photoId)
-                .ifPresent(p -> p.markReady(resized.get().width(), resized.get().height())));
+        Long authorId = tx.execute(status -> photos.findById(photoId)
+                .map(p -> {
+                    p.markReady(resized.get().width(), resized.get().height());
+                    return p.getReview().getUser().getId();
+                })
+                .orElse(null));
         files.discardOriginal(storageKey);
+        if (authorId != null) {
+            events.publishEvent(new ContributionChangedEvent(authorId)); // ảnh READY: +2 điểm, có thể đạt PHOTOGRAPHER
+        }
     }
 
     /**

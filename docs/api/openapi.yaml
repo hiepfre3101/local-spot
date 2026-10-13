@@ -315,7 +315,8 @@ paths:
       parameters: [ { $ref: '#/components/parameters/UserId' } ]
       responses:
         '204': { description: Đang theo dõi }
-        '422': { description: Không thể tự theo dõi mình }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Tự theo dõi mình (`SELF_ACTION_FORBIDDEN` — cùng mã với vote review của mình; chốt 2026-10-12)' }
     delete:
       tags: [Users]
       summary: Bỏ theo dõi — idempotent
@@ -325,7 +326,7 @@ paths:
   /users/{userId}/followers:
     get:
       tags: [Users]
-      summary: Danh sách người theo dõi
+      summary: Danh sách người theo dõi — theo dõi gần nhất trước
       security: []
       parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
@@ -342,9 +343,15 @@ paths:
     get:
       tags: [Users]
       summary: Bảng xếp hạng đóng góp (FR-29)
+      description: |
+        *(O3 — chốt 2026-10-12)* Điểm tính từ nội dung **đang hiển thị**: review +10 · ảnh READY trong review +2 (tối đa 5
+        ảnh / review, tính theo ngày của review) · vote hữu ích hợp lệ nhận được +1 · check-in +1 · đề xuất địa điểm được
+        duyệt +15. `WEEK` / `MONTH` = 7 / 30 ngày trượt. Hạng kiểu thi đấu (cùng điểm cùng hạng). Bỏ tài khoản bị khóa;
+        0 điểm không có mặt. Cache 5 phút.
       security: []
       parameters:
         - { name: period, in: query, schema: { type: string, enum: [WEEK, MONTH, ALL], default: MONTH } }
+        - { name: city, in: query, description: 'Chỉ tính đóng góp cho địa điểm ở thành phố này (khớp `places.city`) — "region" của P08', schema: { type: string, maxLength: 100 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
         '200':
@@ -1454,15 +1461,16 @@ components:
             reviewCount: { type: integer }
             followerCount: { type: integer }
             followingCount: { type: integer }
-            contributionPoints: { type: integer }
-            badges: { type: array, items: { $ref: '#/components/schemas/Badge' } }
+            contributionPoints: { type: integer, description: Tổng toàn thời gian — tính lại sau mỗi đóng góp (nền) và hằng đêm }
+            badges: { type: array, items: { $ref: '#/components/schemas/Badge' }, description: Theo thứ tự đạt được; đã trao không thu hồi }
             followedByMe: { type: boolean }
     Badge:
       type: object
       properties:
-        code: { type: string }
+        code: { type: string, description: 'REVIEWER_1..5, EXPLORER, PHOTOGRAPHER, HELPFUL (V4__seed_badges.sql)' }
         name: { type: string }
-        icon: { type: string }
+        description: { type: [string, 'null'] }
+        icon: { type: string, description: Khóa trung tính — frontend ánh xạ sang icon của design system }
         awardedAt: { type: string, format: date-time }
     LeaderboardEntry:
       type: object

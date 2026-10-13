@@ -91,4 +91,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
             WHERE id = :id AND helpful_votes_count > 0
             """, nativeQuery = true)
     void decrementHelpfulVotesCount(@Param("id") Long id);
+
+    // ─── Điểm đóng góp (FR-29) ──────────────────────────────────────────────
+
+    /** Ghi điểm vừa tính lại từ đầu — trả số dòng đổi (0 khi điểm không đổi). */
+    @Modifying
+    @Query(value = """
+            UPDATE users SET contribution_points = :points WHERE id = :id AND contribution_points <> :points
+            """, nativeQuery = true)
+    int updateContributionPoints(@Param("id") Long id, @Param("points") int points);
+
+    /** Mọi tài khoản chưa xóa, tăng dần — job đêm đối soát điểm / huy hiệu. */
+    @Query(value = "SELECT id FROM users WHERE deleted_at IS NULL ORDER BY id", nativeQuery = true)
+    List<Long> findAllActiveIds();
 }

@@ -5,6 +5,7 @@ import com.localspot.dto.response.VoteResultResponse;
 import com.localspot.entity.Review;
 import com.localspot.entity.ReviewStatus;
 import com.localspot.entity.User;
+import com.localspot.event.ContributionChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.ReviewRepository;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,7 @@ public class ReviewVoteService {
     private final UserRepository users;
     private final TrustScoreService trust;
     private final TrustProperties trustProperties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public ReviewVoteService(
@@ -51,12 +54,14 @@ public class ReviewVoteService {
             UserRepository users,
             TrustScoreService trust,
             TrustProperties trustProperties,
+            ApplicationEventPublisher events,
             Clock clock) {
         this.votes = votes;
         this.reviews = reviews;
         this.users = users;
         this.trust = trust;
         this.trustProperties = trustProperties;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -77,6 +82,7 @@ public class ReviewVoteService {
             reviews.incrementHelpfulCount(reviewId);
             if (counted) {
                 users.incrementHelpfulVotesCount(authorId);
+                events.publishEvent(new ContributionChangedEvent(authorId)); // +1 điểm đóng góp của tác giả
             }
         }
         return new VoteResultResponse(reviews.findHelpfulCount(reviewId), true);
@@ -91,6 +97,7 @@ public class ReviewVoteService {
         if (votes.deleteVote(reviewId, userId, true) == 1) {
             reviews.decrementHelpfulCount(reviewId);
             users.decrementHelpfulVotesCount(authorId);
+            events.publishEvent(new ContributionChangedEvent(authorId));
         } else if (votes.deleteVote(reviewId, userId, false) == 1) {
             reviews.decrementHelpfulCount(reviewId);
         }

@@ -25,7 +25,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/places/:slug` | Chi tiết địa điểm (P03) | UC10, UC13–UC17, UC18, UC22, UC25 | — | Check-in mở hộp thoại P12 (không phải route). Chủ địa điểm thấy nút Phản hồi |
 | `/places/:slug/review` | Viết / sửa đánh giá (P04) | UC12, UC13, UC22 | `auth` | Đã có đánh giá → chế độ sửa (1 đánh giá / người / địa điểm, D2) |
 | `/propose` | Đề xuất địa điểm (P05) | UC11, UC22 | `auth` | Một trang có thanh tiến độ; cảnh báo trùng U7 |
-| `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period`, `region` |
+| `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period` (WEEK / MONTH / ALL), `city` (= "region", chốt 2026-10-12) |
 | `/users/:id` | Trang cá nhân (P06) | UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|checkins\|badges`. Chính mình → nút "Chỉnh sửa hồ sơ". Tab `checkins` chỉ hiện trên trang của chính mình (`GET /me/check-ins` — chốt 2026-10-12) |
 | `/collections/:id` | Bộ sưu tập của mình | UC18 | `auth` (chủ bộ) | Bật/tắt công khai từng bộ (`is_public`) |
 | `/c/:shareSlug` | Bộ sưu tập chia sẻ | UC18 | — | Chỉ bộ công khai; về riêng tư thì link cũ hết hiệu lực vĩnh viễn (chốt 2026-10-12) |
@@ -111,7 +111,7 @@ Supervisor duyệt toàn bộ P01–P12 → chấp nhận **phương án đề x
 |---|---|---|---|
 | O1 | P03 | Bình luận mở tại chỗ hay trang riêng của đánh giá | Nếu trang riêng → thêm route `/reviews/:id` |
 | O2 ✅ | P04 | Sửa đánh giá đã đăng khi tác giả trust < 30: bản cũ vẫn hiện trong lúc bản sửa chờ duyệt? | **Chốt 2026-09-30**: không giữ bản cũ — đánh giá về `PENDING` cả bài tới khi duyệt lại; `reviews` giữ một trạng thái, không thêm bảng |
-| O3 | P06, P08 | Bộ huy hiệu và công thức điểm đóng góp chính thức | Seed `badges`, listener `contribution_points` |
+| O3 ✅ | P06, P08 | Bộ huy hiệu và công thức điểm đóng góp chính thức | **Chốt 2026-10-12**: điểm tính từ nội dung đang hiện (review +10, ảnh +2 tối đa 5 / review, vote hợp lệ +1, check-in +1, đề xuất được duyệt +15); 8 huy hiệu (REVIEWER_1..5, EXPLORER, PHOTOGRAPHER, HELPFUL) seed ở `V4__seed_badges.sql`; P08 lọc theo thành phố — xem requirements §5 |
 | O4 | P07 | Gửi email kèm thông báo? Gom thông báo cùng loại? Cần trang "Tất cả thông báo"? | FR-27 chỉ yêu cầu trong ứng dụng; trang riêng → thêm route `/notifications` |
 | O5 ✅ | P09 | Chủ cập nhật thông tin (UC24) có phải duyệt lại? | **Chốt 2026-10-05**: không — áp dụng ngay (`PATCH /owner/places/{id}`, như E1). Chủ đã qua xác minh sở hữu (UC30); tên, vị trí, danh mục vốn không sửa được; thông tin sai → người dùng báo cáo WRONG_INFO |
 | O6 ✅ | P10 | Gán trực tiếp vai trò "Chủ địa điểm"? Khoá có lý do / thời hạn? | **Chốt 2026-10-03**: không gán / gỡ OWNER tại P10 (chỉ qua duyệt yêu cầu sở hữu UC30); mọi tài khoản giữ USER; admin không tự khóa / tự gỡ ADMIN. Khoá bắt buộc thời hạn + lý do (openapi `POST /admin/users/{id}/lock`) |
