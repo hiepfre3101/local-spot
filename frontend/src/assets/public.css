@@ -1,0 +1,691 @@
+/*
+ * Lớp thành phần trang công khai — module khám phá (trang chủ, P02 tìm kiếm & bản đồ, P03 chi tiết địa điểm). Port từ
+ * docs/design-system/components/bundle.css, giữ đúng tên lớp `ls-*` như README thành phần: ls-chip, ls-spot, ls-rating,
+ * ls-review, ls-feature, ls-faq, ls-tags, ls-ritem, ls-act, ls-reply, ls-crumb, ls-fchip, ls-dist, ls-map/ls-pin, ls-rrow,
+ * ls-car, ls-rmini. Tách khỏi components.css (nền tảng: nút, ô nhập, bảng, khung quản trị) cho dễ đối chiếu.
+ * Thêm so với bản gốc: biến thể responsive (bản gốc cố định 1200px), ảnh thật trong .ls-pic, cả thẻ bấm được qua liên
+ * kết ở tên, :disabled của chip lọc, khung chờ tải phẳng (.ls-skel).
+ */
+@layer components {
+  /* Chip công khai */
+  .ls-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-pill);
+    font: 600 12px/1 var(--font-sans);
+    background: var(--surface);
+    color: var(--ink);
+  }
+  .ls-chip--sun {
+    background: var(--sun);
+    color: var(--on-accent);
+  }
+
+  /* Ảnh thật trong khung ảnh (cùng khung với minh hoạ giữ chỗ) */
+  .ls-pic > img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  /* ---------- Spot card ---------- */
+  .ls-spot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    width: 100%;
+    min-width: 0;
+  }
+  .ls-spot .ls-pic {
+    aspect-ratio: 4/3;
+    border-radius: var(--radius-md);
+  }
+  .ls-spot .ls-chip {
+    position: absolute;
+    top: var(--space-3);
+    left: var(--space-3);
+  }
+  .ls-spot__name {
+    margin: 0;
+    font: 600 18px/24px var(--font-sans);
+  }
+  /* Cả thẻ bấm được qua liên kết ở tên — một điểm dừng tab, không lồng liên kết */
+  .ls-spot__name a,
+  .ls-rrow h3 a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .ls-spot__name a::after,
+  .ls-rrow h3 a::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+  .ls-spot__name a:focus-visible,
+  .ls-rrow h3 a:focus-visible {
+    outline: none;
+  }
+  .ls-spot:has(.ls-spot__name a:focus-visible),
+  .ls-rrow:has(h3 a:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 4px;
+    border-radius: var(--radius-md);
+  }
+  .ls-spot:hover .ls-spot__name a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .ls-spot__meta {
+    margin: 0;
+    font: 400 13px/18px var(--font-sans);
+    color: var(--ink-muted);
+  }
+
+  /* ---------- Rating: 5 hình tròn, tô sun theo tỷ lệ điểm ---------- */
+  .ls-rating {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font: 600 14px/1 var(--font-sans);
+    white-space: nowrap;
+  }
+  .ls-rating__n {
+    font-weight: 400;
+    color: var(--ink-muted);
+    margin-left: calc(var(--space-1) * -1);
+  }
+  .ls-stars {
+    display: inline-flex;
+    gap: 3px;
+  }
+  .ls-star {
+    position: relative;
+    display: block;
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--ink);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+  }
+  .ls-star i {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--sun);
+  }
+  .ls-stars--lg {
+    gap: 4px;
+  }
+  .ls-stars--lg .ls-star {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+  }
+  .ls-review .ls-star {
+    border-color: var(--on-accent);
+  }
+  .ls-review .ls-star i {
+    background: var(--on-accent);
+  }
+  .ls-review .ls-rating__n {
+    color: var(--on-accent);
+  }
+
+  /* ---------- Review card (sun) — trang chủ ---------- */
+  .ls-review {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-6);
+    padding: var(--space-6);
+    border-radius: var(--radius-md);
+    background: var(--sun);
+    color: var(--on-accent);
+  }
+  .ls-review blockquote {
+    margin: 0;
+    font: 500 17px/25px var(--font-sans);
+    overflow-wrap: anywhere;
+  }
+  .ls-review footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    font: 400 13px/18px var(--font-sans);
+  }
+  .ls-review b {
+    font-weight: 700;
+  }
+  .ls-review a {
+    color: inherit;
+  }
+  .ls-review :focus-visible {
+    outline-color: var(--ink);
+  }
+
+  /* ---------- Feature tile (olive) ---------- */
+  .ls-feature {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-6);
+    min-height: 168px;
+    padding: var(--space-6);
+    border-radius: var(--radius-md);
+    background: var(--olive);
+    color: var(--on-olive);
+  }
+  .ls-feature h3 {
+    margin: 0;
+    font: 700 26px/1.08 var(--font-sans);
+  }
+  .ls-feature p {
+    margin: 0;
+    font: 400 14px/20px var(--font-sans);
+    max-width: 34ch;
+  }
+  .ls-feature :focus-visible {
+    outline-color: var(--ink);
+  }
+
+  /* ---------- FAQ ---------- */
+  .ls-faq {
+    display: grid;
+    grid-template-columns: 1fr;
+    column-gap: var(--space-8);
+  }
+  @media (min-width: 768px) {
+    .ls-faq {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .ls-faq details {
+    border-bottom: 1px solid var(--line);
+  }
+  .ls-faq summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    list-style: none;
+    cursor: pointer;
+    font: 500 15px/22px var(--font-sans);
+  }
+  .ls-faq summary::-webkit-details-marker {
+    display: none;
+  }
+  .ls-faq summary::after {
+    content: '+';
+    font-weight: 400;
+    font-size: 20px;
+    color: var(--ink-muted);
+  }
+  .ls-faq details[open] summary::after {
+    content: '–';
+  }
+  .ls-faq details p {
+    margin: 0 0 var(--space-4);
+    font: 400 14px/20px var(--font-sans);
+    color: var(--ink-muted);
+  }
+
+  /* ---------- Thẻ gắn (UC22) ---------- */
+  .ls-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: 500 12px/16px var(--font-sans);
+    color: var(--sea);
+  }
+
+  /* ---------- Review item (P03) ---------- */
+  .ls-ritem {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    column-gap: var(--space-4);
+    padding: var(--space-6) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .ls-ritem__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+  }
+  .ls-ritem__name {
+    font: 600 15px/22px var(--font-sans);
+  }
+  .ls-ritem__meta {
+    font: 400 13px/18px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .ls-ritem__body {
+    margin: var(--space-2) 0 var(--space-3);
+    font: 400 15px/22px var(--font-sans);
+    max-width: 68ch;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  .ls-ritem__pics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+  .ls-ritem__pics .ls-pic {
+    width: 96px;
+    height: 72px;
+    border-radius: var(--radius-md);
+  }
+  .ls-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-left: calc(var(--space-3) * -1);
+  }
+  .ls-act {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 32px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink-muted);
+    font: 500 13px/1 var(--font-sans);
+  }
+  button.ls-act {
+    cursor: pointer;
+  }
+  button.ls-act:hover {
+    background: var(--surface-sunk);
+    color: var(--ink);
+  }
+  .ls-act svg {
+    width: 15px;
+    height: 15px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+  }
+  .ls-act[aria-pressed='true'] {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .ls-reply {
+    margin-top: var(--space-3);
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunk);
+    font: 400 14px/20px var(--font-sans);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+  }
+  .ls-reply b {
+    display: block;
+    margin-bottom: var(--space-1);
+    font: 600 13px/18px var(--font-sans);
+    white-space: normal;
+  }
+
+  /* ---------- Breadcrumb ---------- */
+  .ls-crumb {
+    margin: 0 0 var(--space-3);
+    font: 400 13px/18px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .ls-crumb a {
+    color: var(--sea);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  .ls-crumb a:hover {
+    text-decoration: underline;
+  }
+
+  /* ---------- Chip lọc (công khai) ---------- */
+  .ls-fchip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 36px;
+    padding: 0 var(--space-4);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink);
+    font: 500 13px/1 var(--font-sans);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .ls-fchip[aria-pressed='true'] {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
+  }
+  /* Chip dạng ô chọn (điểm, giá, sắp xếp): đang có giá trị thì đảo màu như chip đang bật — kèm chữ giá trị */
+  select.ls-fchip {
+    appearance: none;
+    padding-right: var(--space-8);
+    background-image: none;
+  }
+  .ls-fchip[data-active='true'] {
+    background: var(--ink);
+    color: var(--surface);
+    border-color: var(--ink);
+  }
+  .ls-fchipwrap {
+    position: relative;
+    display: inline-flex;
+  }
+  .ls-fchipwrap::after {
+    content: '';
+    position: absolute;
+    right: 14px;
+    top: 13px;
+    width: 6px;
+    height: 6px;
+    pointer-events: none;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    color: var(--ink-muted);
+  }
+  .ls-fchipwrap:has([data-active='true'])::after {
+    color: var(--surface);
+  }
+  details > summary.ls-fchip {
+    list-style: none;
+  }
+  details > summary.ls-fchip::-webkit-details-marker {
+    display: none;
+  }
+  .ls-fchip:disabled {
+    cursor: not-allowed;
+    color: var(--ink-muted);
+    border-color: var(--line);
+  }
+  .ls-fchip svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+
+  /* ---------- Phân bố sao ---------- */
+  .ls-dist {
+    display: grid;
+    grid-template-columns: 24px 1fr 48px;
+    gap: var(--space-2) var(--space-3);
+    align-items: center;
+    font: 400 13px/18px var(--font-sans);
+  }
+  .ls-dist .bar {
+    height: 8px;
+    background: var(--surface-sunk);
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+  }
+  .ls-dist .bar i {
+    display: block;
+    height: 100%;
+    background: var(--olive);
+  }
+  .ls-dist .c {
+    text-align: right;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Bản đồ + ghim (Leaflet: ghim là divIcon, khung Leaflet đặt vị trí) ---------- */
+  .ls-map {
+    position: relative;
+    overflow: hidden;
+    background: var(--surface-sunk);
+  }
+  .ls-pin {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 28px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--olive);
+    color: var(--on-olive);
+    font: 700 12px/1 var(--font-sans);
+    white-space: nowrap;
+  }
+  .ls-pin--active {
+    background: var(--coral);
+    color: var(--on-accent);
+  }
+  .ls-pin--me {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: var(--sea);
+    border: 3px solid var(--surface-raised);
+  }
+
+  /* ---------- Hàng kết quả gọn (P02) ---------- */
+  .ls-rrow {
+    position: relative;
+    display: grid;
+    grid-template-columns: 104px 1fr;
+    gap: var(--space-4);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  @media (min-width: 640px) {
+    .ls-rrow {
+      grid-template-columns: 132px 1fr;
+    }
+  }
+  .ls-rrow .ls-pic {
+    height: 100px;
+    border-radius: var(--radius-md);
+  }
+  .ls-rrow h3 {
+    margin: 0 0 var(--space-1);
+    font: 600 17px/22px var(--font-sans);
+  }
+  .ls-rrow[aria-current='true'] h3,
+  .ls-rrow:hover h3 {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+  }
+
+  /* ---------- Carousel ---------- */
+  .ls-car {
+    --per: 3;
+    --gap: var(--space-4);
+  }
+  .ls-car__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--space-4);
+    margin-bottom: var(--space-4);
+  }
+  .ls-car__head h2,
+  .ls-car__head h3 {
+    margin: 0;
+    font: 700 22px/28px var(--font-sans);
+  }
+  .ls-car__head p {
+    margin: var(--space-1) 0 0;
+    font: 400 14px/20px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .ls-car__ctl {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font: 500 13px/1 var(--font-sans);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ls-car__btn {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .ls-car__btn svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+  .ls-car__btn:disabled {
+    color: var(--ink-muted);
+    border-color: var(--line);
+    cursor: default;
+  }
+  .ls-car__track {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: calc((100% - (var(--per) - 1) * var(--gap)) / var(--per));
+    gap: var(--gap);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+  .ls-car__track::-webkit-scrollbar {
+    display: none;
+  }
+  .ls-car__track > * {
+    scroll-snap-align: start;
+    min-width: 0;
+  }
+
+  /* Thẻ đánh giá nhỏ trong carousel (danh sách ngang hàng — không phải ReviewCard sun) */
+  .ls-rmini {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-6);
+    border-radius: var(--radius-md);
+    background: var(--surface-sunk);
+    min-height: 200px;
+  }
+  .ls-rmini q {
+    flex: 1;
+    font: 500 15px/22px var(--font-sans);
+    quotes: '“' '”';
+    overflow-wrap: anywhere;
+  }
+  .ls-rmini footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font: 400 13px/18px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .ls-rmini footer b {
+    display: block;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* Khung chờ tải: khối phẳng surface-sunk, nhịp mờ nhẹ (không ánh gradient chạy ngang) */
+  .ls-skel {
+    display: block;
+    border-radius: var(--radius-md);
+    background: var(--surface-sunk);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ls-skel {
+      animation: ls-skel-pulse 1.4s ease-in-out infinite;
+    }
+  }
+  @keyframes ls-skel-pulse {
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+
+/* Màn hẹp: carousel hiện 1 mục + mép mục sau (biết còn vuốt được); máy tính bảng 2 mục. Ngoài layer để thắng --per
+   đặt inline trên từng carousel. */
+@media (max-width: 767px) {
+  .ls-car {
+    --per: 1.15 !important;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .ls-car {
+    --per: 2 !important;
+  }
+}
+
+/* Leaflet: ghim / cụm là divIcon — bỏ nền trắng mặc định; điều khiển và ghi công theo token (không bóng). */
+.leaflet-container {
+  font: 400 13px/18px var(--font-sans);
+  background: var(--surface-sunk);
+}
+/* Khung icon 0×0 đặt đúng tọa độ; ghim dịch lên trên-giữa (mũi ghim chạm điểm), chấm vị trí dịch về tâm */
+.leaflet-div-icon.ls-pin-icon {
+  width: 0;
+  height: 0;
+  background: transparent;
+  border: 0;
+}
+.ls-pin-icon .ls-pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  cursor: pointer;
+}
+.ls-pin-icon .ls-pin--me {
+  transform: translate(-50%, -50%);
+  cursor: default;
+}
+.ls-pin-icon:focus-visible {
+  outline: none;
+}
+.ls-pin-icon:focus-visible .ls-pin {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.leaflet-bar,
+.leaflet-touch .leaflet-bar {
+  border: 1px solid var(--line-strong);
+  box-shadow: none;
+}
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-bottom-color: var(--line);
+}
+.leaflet-control-attribution {
+  background: var(--surface-raised) !important;
+  color: var(--ink-muted);
+}
+.leaflet-control-attribution a {
+  color: var(--sea);
+}
+/* Lớp nền dự phòng không có bản tối (OSM Đức, xem utils/mapTiles.ts): đảo màu cho khỏi chói — chỉ lớp nền */
+.ls-map--invert .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}

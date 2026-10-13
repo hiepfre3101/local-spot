@@ -32,3 +32,17 @@ export function initials(name: string): string {
 export function retryAfterText(seconds: number): string {
   return seconds >= 60 ? `${Math.ceil(seconds / 60)} phút` : `${seconds} giây`
 }
+
+/** Thẻ hiển thị kiểu `#bình-dân` như mẫu SpotCard (giữ dấu tiếng Việt, khoảng trắng thành gạch nối). */
+export function tagLabel(name: string): string {
+  return `#${name.trim().toLocaleLowerCase('vi').replace(/\s+/g, '-')}`
+}
+
+/** Khoảng giá VND: "50.000 – 80.000 ₫", "từ 50.000 ₫"; `null` khi chưa khai giá. */
+export function formatPriceRange(min: number | null, max: number | null): string | null {
+  if (min === null && max === null) return null
+  if (min !== null && max !== null) {
+    return min === max ? `${formatNumber(min)} ₫` : `${formatNumber(min)} – ${formatNumber(max)} ₫`
+  }
+  return min !== null ? `từ ${formatNumber(min)} ₫` : `đến ${formatNumber(max!)} ₫`
+}

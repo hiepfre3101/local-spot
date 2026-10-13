@@ -55,3 +55,161 @@ export interface ProblemBody {
   errors?: { field: string; message: string }[]
   errorId?: string
 }
+
+// ─── Địa điểm, danh mục, review (module khám phá: trang chủ, P02, P03) ───
+
+/** openapi `UserSummary` — thông tin công khai tối thiểu. */
+export interface UserSummary {
+  id: number
+  displayName: string
+  avatarUrl: string | null
+}
+
+export type PhotoStatus = 'PROCESSING' | 'READY' | 'FAILED'
+
+/** openapi `Photo` — URL chỉ có khi `READY` (thumb ≤ 320 px, medium ≤ 960 px, large ≤ 1920 px). */
+export interface Photo {
+  id: number
+  status: PhotoStatus
+  thumbUrl: string | null
+  mediumUrl: string | null
+  largeUrl: string | null
+}
+
+export interface GeoPoint {
+  lat: number
+  lng: number
+}
+
+/** openapi `CategoryNode` — cây ≤ 2 cấp, danh mục con có `children` rỗng. */
+export interface CategoryNode {
+  id: number
+  name: string
+  slug: string
+  icon: string | null
+  children: CategoryNode[]
+}
+
+export interface CategoryRef {
+  id: number
+  name: string
+  slug: string
+}
+
+/** openapi `Amenity` — dùng chung cho mọi danh mục (O7). */
+export interface Amenity {
+  id: number
+  name: string
+  slug: string
+  icon: string | null
+}
+
+/** openapi `OpeningHour`: `dayOfWeek` 1 = Thứ Hai … 7 = Chủ nhật; `closeTime < openTime` = mở qua đêm. */
+export interface OpeningHour {
+  dayOfWeek: number
+  openTime: string
+  closeTime: string
+}
+
+export type PlaceStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'HIDDEN'
+
+/**
+ * openapi `PlaceSummary`. `bayesianScore` là điểm hiển thị / xếp hạng (0 = chưa có review PUBLISHED); `avgRating` là
+ * trung bình thô — không dùng để xếp hạng. `distanceM` chỉ có ở `/places/nearby`.
+ */
+export interface PlaceSummary {
+  id: number
+  slug: string
+  name: string
+  category: CategoryRef
+  address: string
+  location: GeoPoint
+  coverPhoto: Photo | null
+  priceMin: number | null
+  priceMax: number | null
+  bayesianScore: number
+  avgRating: number
+  reviewCount: number
+  status: PlaceStatus
+  distanceM: number | null
+  tags: string[]
+}
+
+/** openapi `PlaceDetail` = `PlaceSummary` + chi tiết; `myReviewId`, `claimable` theo người xem. */
+export interface PlaceDetail extends PlaceSummary {
+  description: string | null
+  city: string
+  phone: string | null
+  website: string | null
+  photos: Photo[]
+  openingHours: OpeningHour[]
+  amenities: Amenity[]
+  ratingDistribution: Record<'1' | '2' | '3' | '4' | '5', number>
+  checkinCount: number
+  owner: UserSummary | null
+  claimable: boolean
+  myReviewId: number | null
+  rejectReason: string | null
+  version: number
+}
+
+/** `GET /search`: `degraded = true` khi Meilisearch lỗi và đang dùng tìm theo tên (U9). */
+export interface SearchPage extends CursorPage<PlaceSummary> {
+  degraded: boolean
+}
+
+export interface PlaceRef {
+  id: number
+  slug: string
+  name: string
+}
+
+/** openapi `HomeReview` — đánh giá nổi bật trên trang chủ (ReviewCard), chỉ có đoạn trích ≤ 180 ký tự. */
+export interface HomeReview {
+  id: number
+  excerpt: string
+  rating: number
+  helpfulCount: number
+  author: UserSummary
+  place: PlaceRef
+  createdAt: string
+}
+
+/** openapi `HomeResponse` (FR-08). */
+export interface HomeResponse {
+  featured: PlaceSummary[]
+  latest: PlaceSummary[]
+  categories: CategoryNode[]
+  featuredReview: HomeReview | null
+}
+
+export type ReviewStatus = 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'HIDDEN'
+
+export interface OwnerReply {
+  id: number
+  owner: UserSummary
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+/** openapi `Review`. `authorCheckedIn`: tác giả check-in vào ngày viết hoặc trước đó (nhãn "✓ Đã check-in"). */
+export interface Review {
+  id: number
+  placeId: number
+  author: UserSummary
+  rating: number
+  content: string
+  visitedAt: string
+  status: ReviewStatus
+  rejectReason: string | null
+  photos: Photo[]
+  helpfulCount: number
+  votedByMe: boolean
+  authorCheckedIn: boolean
+  commentCount: number
+  ownerReply: OwnerReply | null
+  createdAt: string
+  updatedAt: string
+  version: number
+}

@@ -1,0 +1,169 @@
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query'
+import { flushPromises, mount } from '@vue/test-utils'
+import { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
+
+import type { PlaceDetail, Review } from '@/types/api'
+
+import PlaceDetailPage from '../PlaceDetailPage.vue'
+
+const detail = vi.fn()
+const reviews = vi.fn()
+const list = vi.fn()
+const nearby = vi.fn()
+
+vi.mock('@/api/places', () => ({
+  placesApi: {
+    detail: (...args: unknown[]) => detail(...args),
+    reviews: (...args: unknown[]) => reviews(...args),
+    list: (...args: unknown[]) => list(...args),
+    nearby: (...args: unknown[]) => nearby(...args),
+  },
+}))
+vi.mock('@/components/place/PlaceMap.vue', () => ({
+  __esModule: true,
+  default: { name: 'PlaceMap', render: () => null },
+}))
+
+const PLACE: PlaceDetail = {
+  id: 5,
+  slug: 'pho-thin-ha-noi',
+  name: 'Phở Thìn',
+  category: { id: 11, name: 'Phở & bún', slug: 'pho-bun' },
+  address: '13 Lò Đúc',
+  location: { lat: 21.0175, lng: 105.8523 },
+  coverPhoto: null,
+  priceMin: 50000,
+  priceMax: 80000,
+  bayesianScore: 4.412,
+  avgRating: 4.6,
+  reviewCount: 10,
+  status: 'APPROVED',
+  distanceM: null,
+  tags: ['Gia truyền'],
+  description: 'Phở bò tái lăn',
+  city: 'Hà Nội',
+  phone: '024 3821 2709',
+  website: null,
+  photos: [],
+  openingHours: [],
+  amenities: [{ id: 7, name: 'Wi-Fi miễn phí', slug: 'wifi', icon: null }],
+  ratingDistribution: { '1': 0, '2': 0, '3': 1, '4': 2, '5': 7 },
+  checkinCount: 3,
+  owner: null,
+  claimable: true,
+  myReviewId: null,
+  rejectReason: null,
+  version: 0,
+}
+
+function review(id: number, rating: number, helpfulCount: number): Review {
+  return {
+    id,
+    placeId: 5,
+    author: { id: 100 + id, displayName: `Người ${id}`, avatarUrl: null },
+    rating,
+    content: `Nội dung đánh giá số ${id} đủ dài.`,
+    visitedAt: '2026-10-01',
+    status: 'PUBLISHED',
+    rejectReason: null,
+    photos: [],
+    helpfulCount,
+    votedByMe: false,
+    authorCheckedIn: id === 1,
+    commentCount: 0,
+    ownerReply: null,
+    createdAt: '2026-10-02T03:00:00Z',
+    updatedAt: '2026-10-02T03:00:00Z',
+    version: 0,
+  }
+}
+
+async function mountAt(slug: string) {
+  const Empty = { render: () => null }
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'home', component: Empty },
+      { path: '/search', name: 'search', component: Empty },
+      { path: '/places/:slug', name: 'place', component: PlaceDetailPage, props: true },
+    ],
+  })
+  await router.push(`/places/${slug}`)
+  await router.isReady()
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const wrapper = mount(PlaceDetailPage, {
+    props: { slug },
+    global: { plugins: [router, [VueQueryPlugin, { queryClient }]] },
+  })
+  await flushPromises()
+  return wrapper
+}
+
+describe('PlaceDetailPage (P03)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    detail.mockReset().mockResolvedValue(PLACE)
+    reviews.mockReset().mockResolvedValue({
+      items: [review(1, 5, 12), review(2, 3, 30), review(3, 4, 0)],
+      nextCursor: null,
+    })
+    list.mockReset().mockResolvedValue({ items: [], nextCursor: null })
+    nearby.mockReset().mockResolvedValue([])
+  })
+
+  it('hiện thông tin, điểm Bayesian kèm trung bình thô, phân bố sao', async () => {
+    const wrapper = await mountAt('pho-thin-ha-noi')
+    expect(document.title).toBe('Phở Thìn · LocalSpot')
+    expect(wrapper.get('h1').text()).toBe('Phở Thìn')
+    expect(wrapper.text()).toContain('4.4')
+    expect(wrapper.text()).toContain('trung bình thô 4,6')
+    expect(wrapper.text()).toContain('#gia-truyền')
+    expect(wrapper.text()).toContain('50.000 – 80.000 ₫ / người')
+    expect(wrapper.text()).toContain('Chưa có giờ mở cửa')
+    expect(wrapper.get('a[href^="tel:"]').attributes('href')).toBe('tel:02438212709')
+  })
+
+  it('đánh giá nổi bật chỉ lấy từ 4 sao và có lượt hữu ích', async () => {
+    const wrapper = await mountAt('pho-thin-ha-noi')
+    const minis = wrapper.findAll('.ls-rmini')
+    expect(minis).toHaveLength(1)
+    expect(minis[0]!.text()).toContain('Người 1')
+    expect(minis[0]!.text()).toContain('✓ Đã check-in')
+  })
+
+  it('bấm một mức sao ở phân bố → lọc danh sách theo số sao', async () => {
+    const wrapper = await mountAt('pho-thin-ha-noi')
+    reviews.mockClear()
+    await wrapper.get('button[aria-label^="5 sao"]').trigger('click')
+    await flushPromises()
+    expect(reviews).toHaveBeenCalledWith(5, expect.objectContaining({ sort: 'HELPFUL', rating: 5 }))
+    expect(wrapper.get('button[aria-label^="5 sao"]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('không có nút dẫn tới màn chưa làm (viết đánh giá, check-in, lưu)', async () => {
+    const wrapper = await mountAt('pho-thin-ha-noi')
+    const labels = wrapper.findAll('a, button').map((el) => el.text())
+    expect(labels).not.toContain('Viết đánh giá')
+    expect(labels).not.toContain('Check-in')
+    expect(labels).not.toContain('Lưu')
+  })
+
+  it('404 → trang không tìm thấy', async () => {
+    const config = { headers: {} } as InternalAxiosRequestConfig
+    detail.mockRejectedValue(
+      new AxiosError('x', 'ERR', config, null, {
+        data: { code: 'PLACE_NOT_FOUND' },
+        status: 404,
+        statusText: '',
+        headers: {},
+        config,
+      }),
+    )
+    const wrapper = await mountAt('khong-ton-tai')
+    expect(wrapper.text()).toContain('Không tìm thấy trang này')
+    expect(reviews).not.toHaveBeenCalled()
+  })
+})
