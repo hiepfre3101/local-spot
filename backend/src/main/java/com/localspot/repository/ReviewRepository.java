@@ -139,6 +139,20 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             """)
     Optional<Review> findVisibleById(@Param("id") Long id);
 
+    /**
+     * Đánh giá nổi bật của trang chủ (ReviewCard, FR-08): review đang hiện (PUBLISHED trên địa điểm APPROVED) từ
+     * {@code minRating} sao, viết từ {@code since}, nhiều lượt hữu ích nhất — cùng số lượt thì mới hơn trước. Chỉ chạy khi
+     * cache trang chủ hết hạn / bị xóa.
+     */
+    @Query("""
+            SELECT r FROM Review r JOIN FETCH r.user JOIN FETCH r.place p
+            WHERE r.status = com.localspot.entity.ReviewStatus.PUBLISHED
+              AND p.status = com.localspot.entity.PlaceStatus.APPROVED
+              AND r.rating >= :minRating AND r.createdAt >= :since
+            ORDER BY r.helpfulCount DESC, r.id DESC
+            """)
+    List<Review> findMostHelpfulVisible(@Param("minRating") int minRating, @Param("since") Instant since, Limit limit);
+
     // ─── Tính lại rating (FR-22) ────────────────────────────────────────────
 
     /**

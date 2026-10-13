@@ -2,6 +2,7 @@ package com.localspot.config;
 
 import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryNode;
+import com.localspot.dto.response.HomeResponse;
 import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
@@ -21,7 +22,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Spring Cache trên Redis (plan §2): cây danh mục và tiện ích — đọc ở mọi form / bộ lọc, gần như không đổi. Ghi qua API
- * quản trị thì xóa cache sau commit; TTL chỉ là lưới an toàn (vd. sửa tay trong CSDL).
+ * quản trị thì xóa cache sau commit; TTL chỉ là lưới an toàn (vd. sửa tay trong CSDL). Trang chủ ({@link #HOME}) đổi
+ * thường hơn (điểm, vote) nên TTL ngắn hơn — xem {@code HomeService}.
  *
  * <p><b>Redis sập không làm hỏng request</b> (như rate limit — D8): lỗi cache chỉ ghi log, request đọc thẳng CSDL.
  */
@@ -31,25 +33,29 @@ public class CacheConfig implements CachingConfigurer {
 
     public static final String CATEGORIES = "categories";
     public static final String AMENITIES = "amenities";
+    public static final String HOME = "home";
 
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
     private static final Duration TTL = Duration.ofHours(1);
+    private static final Duration HOME_TTL = Duration.ofMinutes(10);
 
     /**
      * Mỗi cache một kiểu cụ thể: JSON đọc được trong Redis, không phụ thuộc Java serialization hay type info. Xóa cache
-     * khi ghi: {@code CatalogCacheInvalidator} (sau commit, đồng bộ).
+     * khi ghi: {@code CatalogCacheInvalidator}, {@code HomeCacheInvalidator} (sau commit, đồng bộ).
      */
     @Bean
     RedisCacheManagerBuilderCustomizer catalogCaches(JsonMapper jsonMapper) {
         JavaType categories = jsonMapper.getTypeFactory().constructCollectionType(List.class, CategoryNode.class);
         JavaType amenities = jsonMapper.getTypeFactory().constructCollectionType(List.class, AmenityResponse.class);
-        return builder -> builder.withCacheConfiguration(CATEGORIES, typed(jsonMapper, categories))
-                .withCacheConfiguration(AMENITIES, typed(jsonMapper, amenities));
+        JavaType home = jsonMapper.getTypeFactory().constructType(HomeResponse.class);
+        return builder -> builder.withCacheConfiguration(CATEGORIES, typed(jsonMapper, categories, TTL))
+                .withCacheConfiguration(AMENITIES, typed(jsonMapper, amenities, TTL))
+                .withCacheConfiguration(HOME, typed(jsonMapper, home, HOME_TTL));
     }
 
-    private static RedisCacheConfiguration typed(JsonMapper jsonMapper, JavaType type) {
+    private static RedisCacheConfiguration typed(JsonMapper jsonMapper, JavaType type, Duration ttl) {
         return RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(TTL)
+                .entryTtl(ttl)
                 .prefixCacheNameWith("localspot:")
                 .disableCachingNullValues()
                 .serializeValuesWith(
