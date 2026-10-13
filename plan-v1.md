@@ -415,10 +415,10 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Axios client, interceptor, xử lý refresh/401 — access token chỉ trong bộ nhớ; 401 → làm mới một lần cho mọi request đồng thời, khóa giữa các tab bằng Web Locks (refresh token xoay vòng — U2); lỗi chuẩn hoá từ RFC 7807
 - [ ] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); **place, filter xong** (2026-10-12: filter đọc / ghi bộ lọc trên URL, place giữ vị trí người dùng + địa điểm đang chọn); notification làm cùng module thông báo
 - [x] Màn tài khoản P01 (UC01–UC05) + Cài đặt — Mật khẩu (UC06) + quản trị Người dùng & vai trò P10 (UC31) — làm cùng nền tảng F, dùng API đã có của checklist D
-- [ ] Trang chủ: nổi bật, danh mục, mới nhất — code + test xong 2026-10-12 (backend `GET /home` cache Redis + `featuredReview`, thẻ `tags` trên PlaceSummary); **chờ chạy thử trên dữ liệu seed** trước khi đánh dấu
-- [ ] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll — code + test xong 2026-10-12 (bộ lọc trên URL; "Quanh tôi" chỉ lọc danh mục + bán kính — chốt); chờ chạy thử
-- [ ] Bản đồ Leaflet, marker cluster, "gần tôi" — code xong 2026-10-12 (ghim mang điểm, gom cụm, "Tìm trong vùng này"); chờ chạy thử
-- [ ] Trang chi tiết địa điểm: gallery, giờ mở cửa, tiện ích, review — bản đọc xong 2026-10-12 (thao tác ghi ở các mục sau); bỏ khối "Ảnh check-in" (check-in không có ảnh); chờ chạy thử
+- [x] Trang chủ: nổi bật, danh mục, mới nhất — backend `GET /home` cache Redis + `featuredReview`, thẻ `tags` trên PlaceSummary; supervisor chạy thử trên dữ liệu seed 2026-10-13
+- [x] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll — bộ lọc trên URL; "Quanh tôi" chỉ lọc danh mục + bán kính (chốt 2026-10-12)
+- [x] Bản đồ Leaflet, marker cluster, "gần tôi" — ghim mang điểm, gom cụm, "Tìm trong vùng này"; lớp nền MapTiler / OSM Đức; chỉ đường trong ứng dụng (OSRM)
+- [x] Trang chi tiết địa điểm: gallery, giờ mở cửa, tiện ích, review — bản đọc (thao tác ghi ở các mục sau); bỏ khối "Ảnh check-in" (check-in không có ảnh)
 - [ ] Form viết review: chấm sao, upload nhiều ảnh, crop
 - [ ] Bình luận, vote, báo cáo
 - [ ] Form đề xuất địa điểm mới (chọn tọa độ trên bản đồ)
