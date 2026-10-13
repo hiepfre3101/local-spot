@@ -105,6 +105,9 @@ public class SecurityConfig {
                         // Danh mục, tiện ích (openapi Catalog, security: []) — form và bộ lọc của khách
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/amenities")
                         .permitAll()
+                        // Trang chủ (FR-08, openapi security: []) — không có dữ liệu theo người xem
+                        .requestMatchers(HttpMethod.GET, "/api/v1/home")
+                        .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error")
                         .permitAll()
                         .anyRequest()

@@ -24,7 +24,8 @@ import org.mapstruct.Mapping;
 
 /**
  * Place ↔ DTO. Phần phụ thuộc người xem / bảng khác (thẻ, phân bố sao, ảnh — URL ảnh cần cấu hình kho lưu trữ) do service
- * tính rồi truyền vào ({@link DetailExtras}); ảnh bìa của thẻ gắn ở {@code PlaceSummaries} — mapper không truy vấn.
+ * tính rồi truyền vào ({@link DetailExtras}); ảnh bìa và thẻ của thẻ địa điểm gắn ở {@code PlaceSummaries} — mapper không
+ * truy vấn.
  */
 @Mapper
 public interface PlaceMapper {
@@ -33,6 +34,7 @@ public interface PlaceMapper {
 
     @Mapping(target = "coverPhoto", ignore = true)
     @Mapping(target = "distanceM", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     PlaceSummaryResponse toSummary(Place place);
 
     List<PlaceSummaryResponse> toSummaries(List<Place> places);

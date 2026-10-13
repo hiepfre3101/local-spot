@@ -2,12 +2,15 @@
  * Design tokens màu — chép từ design system LocalSpot (docs/design-system/tokens.css, bản xuất Claude Design,
  * không commit). Đổi màu thì sửa ở design system trước rồi chép lại đây, không sửa lẻ.
  * Theme: mặc định Sáng; Tối khi <html data-theme="dark">.
+ * 2026-10-13 (supervisor): nền theme Sáng đổi từ kem sang trắng — surface / surface-raised #ffffff (raised phân tách
+ * bằng viền `line`, không bằng màu nền), surface-sunk xám trung tính #f2f2ef. Đã kiểm lại tương phản: ink 16.4:1,
+ * ink-muted 7.1:1 trên trắng, ≥6.3:1 trên sunk; line-strong ≥3.4:1. Theme Tối giữ nguyên.
  */
 :root,
 [data-theme='light'] {
-  --surface: #f3efe2; /* Nền trang (kem cát) */
-  --surface-raised: #fbf9f3; /* Sidebar quản trị, ô nhập, dòng bảng. Không lồng raised trong raised */
-  --surface-sunk: #e8e3d1; /* Đầu bảng, hàng đang hover, vùng tải tệp */
+  --surface: #ffffff; /* Nền trang (trắng — trước 2026-10-13 là kem #f3efe2) */
+  --surface-raised: #ffffff; /* Sidebar quản trị, ô nhập, dòng bảng — tách bằng viền line. Không lồng raised trong raised */
+  --surface-sunk: #f2f2ef; /* Đầu bảng, hàng đang hover, vùng tải tệp, khung chờ tải */
   --ink: #1f201a; /* Chữ chính (≥12.7:1) */
   --ink-muted: #5a594d; /* Chữ phụ, chú thích, nhãn trục (≥5.5:1) */
   --line: #d6d0bc; /* Kẻ phân tách. Không dùng làm viền control */

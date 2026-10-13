@@ -47,7 +47,7 @@
 | Form | VeeValidate + Zod | Validate đồng bộ với rule backend. *(2026-10-05: Zod 3 + adapter chính thức `@vee-validate/zod` — VeeValidate 4.15 chưa hỗ trợ Zod 4)* |
 | HTTP | Axios + interceptor | Tự gắn token, xử lý 401 |
 | Data fetching | TanStack Query (Vue Query) | Cache, infinite scroll cho danh sách review |
-| Bản đồ | Leaflet + OpenStreetMap | Miễn phí, không cần thẻ tín dụng như Google Maps |
+| Bản đồ | Leaflet + OpenStreetMap | Miễn phí, không cần thẻ tín dụng như Google Maps. *(2026-10-12: thêm `leaflet.markercluster` — plugin chính thức gom ghim, supervisor duyệt)* *(2026-10-13: lớp nền MapTiler Dataviz / Dataviz Dark — key miễn phí `VITE_MAPTILER_KEY`, thiếu key dùng OSM Đức; `tile.openstreetmap.org` bị nhà mạng chặn DNS, CARTO bắt buộc key)* |
 | Ảnh | vue-advanced-cropper | Crop trước khi upload |
 | Khác | dayjs, vue-toastification | |
 
@@ -413,12 +413,12 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 ### F. Frontend
 - [x] Layout, router, navigation guard — 3 layout theo sitemap §1; guard theo permission (`MeResponse.permissions`), `?redirect=` chỉ nhận đường dẫn nội bộ; header / sidebar chỉ hiện mục đã có route
 - [x] Axios client, interceptor, xử lý refresh/401 — access token chỉ trong bộ nhớ; 401 → làm mới một lần cho mọi request đồng thời, khóa giữa các tab bằng Web Locks (refresh token xoay vòng — U2); lỗi chuẩn hoá từ RFC 7807
-- [ ] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); place / filter / notification làm cùng module tương ứng
+- [ ] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); **place, filter xong** (2026-10-12: filter đọc / ghi bộ lọc trên URL, place giữ vị trí người dùng + địa điểm đang chọn); notification làm cùng module thông báo
 - [x] Màn tài khoản P01 (UC01–UC05) + Cài đặt — Mật khẩu (UC06) + quản trị Người dùng & vai trò P10 (UC31) — làm cùng nền tảng F, dùng API đã có của checklist D
-- [ ] Trang chủ: nổi bật, danh mục, mới nhất
-- [ ] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll
-- [ ] Bản đồ Leaflet, marker cluster, "gần tôi"
-- [ ] Trang chi tiết địa điểm: gallery, giờ mở cửa, tiện ích, review
+- [x] Trang chủ: nổi bật, danh mục, mới nhất — backend `GET /home` cache Redis + `featuredReview`, thẻ `tags` trên PlaceSummary; supervisor chạy thử trên dữ liệu seed 2026-10-13
+- [x] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll — bộ lọc trên URL; "Quanh tôi" chỉ lọc danh mục + bán kính (chốt 2026-10-12)
+- [x] Bản đồ Leaflet, marker cluster, "gần tôi" — ghim mang điểm, gom cụm, "Tìm trong vùng này"; lớp nền MapTiler / OSM Đức; chỉ đường trong ứng dụng (OSRM)
+- [x] Trang chi tiết địa điểm: gallery, giờ mở cửa, tiện ích, review — bản đọc (thao tác ghi ở các mục sau); bỏ khối "Ảnh check-in" (check-in không có ảnh)
 - [ ] Form viết review: chấm sao, upload nhiều ảnh, crop
 - [ ] Bình luận, vote, báo cáo
 - [ ] Form đề xuất địa điểm mới (chọn tọa độ trên bản đồ)

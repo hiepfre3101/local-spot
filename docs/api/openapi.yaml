@@ -391,6 +391,13 @@ paths:
     get:
       tags: [Catalog]
       summary: Dữ liệu trang chủ — nổi bật (bayesian_score), danh mục, mới nhất (FR-08, cache)
+      description: |
+        *(chốt 2026-10-12)* Một request cho cả trang chủ. `featured`: tối đa 8 địa điểm APPROVED điểm Bayesian cao nhất
+        (cùng truy vấn / thứ tự với `GET /places?sort=SCORE`), bỏ địa điểm chưa có review PUBLISHED. `latest`: 8 địa điểm
+        mới nhất (`sort=NEWEST`). `featuredReview`: review đang hiện (PUBLISHED trên địa điểm APPROVED) từ 4 sao, nhiều lượt
+        hữu ích nhất trong 30 ngày gần đây (không có thì mọi thời điểm), chỉ trả đoạn trích ≤ 180 ký tự; `null` khi chưa có.
+        Không có trường theo người xem → cache Redis dùng chung (TTL 10 phút), xóa sau commit khi duyệt / sửa địa điểm,
+        điểm đổi, tập review đang hiện đổi, sửa danh mục. Vote và ảnh xử lý xong không xóa cache (trễ tối đa một TTL).
       security: []
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/HomeResponse' } } } }
@@ -1541,6 +1548,7 @@ components:
         reviewCount: { type: integer }
         status: { $ref: '#/components/schemas/PlaceStatus' }
         distanceM: { type: [integer, 'null'], description: 'Mét tới tâm tìm kiếm — chỉ có ở /places/nearby, /places/duplicates và possibleDuplicates của hàng chờ duyệt' }
+        tags: { type: array, items: { type: string }, description: 'Thẻ của địa điểm theo bảng chữ cái, đủ cả (giao diện SpotCard hiện tối đa 3) — nạp một truy vấn cho cả trang (chốt 2026-10-12)' }
     CategoryRef:
       type: object
       properties:
@@ -1632,6 +1640,24 @@ components:
         featured: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
         latest: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
         categories: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+        featuredReview: { oneOf: [ { $ref: '#/components/schemas/HomeReview' }, { type: 'null' } ] }
+    HomeReview:
+      type: object
+      description: Đánh giá nổi bật trên trang chủ (ReviewCard) — đoạn trích, không phải toàn văn (2026-10-12)
+      properties:
+        id: { type: integer, format: int64 }
+        excerpt: { type: string, maxLength: 180, description: 'Gộp khoảng trắng; dài hơn thì cắt ở ranh giới từ + "…"' }
+        rating: { type: integer }
+        helpfulCount: { type: integer }
+        author: { $ref: '#/components/schemas/UserSummary' }
+        place: { $ref: '#/components/schemas/PlaceRef' }
+        createdAt: { type: string, format: date-time }
+    PlaceRef:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        name: { type: string }
     PlaceStats:
       type: object
       properties:

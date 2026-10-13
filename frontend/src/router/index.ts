@@ -17,6 +17,21 @@ export const routes: RouteRecordRaw[] = [
     children: [
       { path: '', name: 'home', component: () => import('@/pages/HomePage.vue') },
       {
+        // P02 — bộ lọc trên query (sitemap §2.1): q, category, minRating, price, amenities, near, radius, sort
+        path: 'search',
+        name: 'search',
+        component: () => import('@/pages/SearchPage.vue'),
+        meta: { title: 'Khám phá' },
+      },
+      {
+        // P03 — tiêu đề tab đặt theo tên địa điểm khi tải xong
+        path: 'places/:slug',
+        name: 'place',
+        component: () => import('@/pages/PlaceDetailPage.vue'),
+        props: true,
+        meta: { title: 'Địa điểm' },
+      },
+      {
         path: 'settings/password',
         name: 'settings-password',
         component: () => import('@/pages/settings/PasswordSettingsPage.vue'),
@@ -108,7 +123,9 @@ export const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
-  scrollBehavior: (_to, _from, saved) => saved ?? { top: 0 },
+  // Đổi bộ lọc trên P02 (cùng route, chỉ khác query) giữ nguyên vị trí cuộn; trang mới thì về đầu trang
+  scrollBehavior: (to, from, saved) =>
+    saved ?? (to.name === 'search' && from.name === 'search' ? false : { top: 0 }),
 })
 
 installGuards(router, () => useAuthStore())
