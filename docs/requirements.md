@@ -181,6 +181,10 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Check-in | Từ chối nếu GPS accuracy > 100 m; tối đa 1 check-in / địa điểm / ngày | Đã chốt (U5) |
 | Ai được check-in | Cần email đã xác thực (403 `EMAIL_NOT_VERIFIED`); chủ không check-in địa điểm của mình (409 `SELF_ACTION_FORBIDDEN`) — `checkin_count` vào thống kê của chủ (FR-34) và nhãn trên review | Đã chốt (2026-10-12) |
 | Nhãn "đã check-in" trên review | Tác giả có check-in tại địa điểm vào ngày viết review hoặc trước đó, so theo **ngày** giờ Việt Nam (viết review tại quán rồi mới bấm check-in vẫn được nhãn); check-in sau ngày viết không gắn nhãn ngược | Đã chốt (2026-10-12) |
+| Điểm đóng góp (O3) | Tính từ nội dung đang hiển thị (không sổ điểm): review +10 · ảnh READY trong review +2, tối đa 5 / review · vote hữu ích hợp lệ nhận +1 · check-in +1 · đề xuất được duyệt +15. Xóa / ẩn nội dung thì điểm mất. `users.contribution_points` là bộ nhớ đệm tổng, tính lại sau sự kiện + hằng đêm | Đã chốt (2026-10-12) |
+| Huy hiệu (O3) | REVIEWER_1..5 (1 / 10 / 25 / 50 / 100 review đang hiện), EXPLORER (check-in 10 địa điểm khác nhau), PHOTOGRAPHER (20 ảnh), HELPFUL (50 vote hữu ích hợp lệ). Trao một lần, không thu hồi | Đã chốt (2026-10-12) |
+| Bảng xếp hạng | Tuần / tháng = 7 / 30 ngày trượt; lọc theo thành phố (P08 "region"); hạng kiểu thi đấu; bỏ tài khoản bị khóa; cache 5 phút | Đã chốt (2026-10-12) |
+| Tự theo dõi mình | 409 `SELF_ACTION_FORBIDDEN` (như vote review của mình) | Đã chốt (2026-10-12) |
 | Bộ sưu tập công khai | Công khai = hiện ở tab bộ sưu tập trên trang cá nhân **và** mở được qua link `/c/{shareSlug}` (tên bỏ dấu + 6 ký tự ngẫu nhiên); riêng tư = chỉ chủ, người khác nhận 404 như không tồn tại. Về riêng tư thu hồi link, công khai lại sinh link mới | Đã chốt (2026-10-12) |
 | Địa điểm trong bộ sưu tập | Chỉ thêm địa điểm đang hiện (`APPROVED`). Bị ẩn sau khi thêm → người khác không thấy, không tính vào số lượng; chủ thấy kèm trạng thái để tự bỏ ra | Đã chốt (2026-10-12) |
 | Giới hạn bộ sưu tập | 50 bộ / người, 100 địa điểm / bộ (chi tiết trả mọi địa điểm, không phân trang) | Đã chốt (2026-10-12) |

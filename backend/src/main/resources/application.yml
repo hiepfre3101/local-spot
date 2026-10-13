@@ -101,6 +101,9 @@ localspot:
   rating:
     min-reviews: 10 # m
     recalculation-cron: "0 0 3 * * *" # D4: tính lại toàn bộ hằng đêm (giờ Việt Nam) với C mới + đối soát
+  # Điểm đóng góp + huy hiệu (FR-29, O3 — chốt 2026-10-12); công thức ở ContributionQueries
+  contribution:
+    recalculation-cron: "0 30 3 * * *" # sau job rating 03:00
   # Bộ sưu tập (FR-26) — chốt 2026-10-12
   collection:
     max-per-user: 50

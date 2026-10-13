@@ -53,7 +53,7 @@ Ký hiệu: **PK** khóa chính · **FK** khóa ngoại · **UQ** unique · **IX
 | bio | VARCHAR(500) | | |
 | email_verified_at | DATETIME(6) | | NULL = chưa xác thực → không được viết review (FR-02) |
 | helpful_votes_count | INT UNSIGNED | NN, default 0 | Số vote hữu ích **hợp lệ** nhận được (`review_votes.counted = 1`) — thành phần `helpful_score` của trust |
-| contribution_points | INT UNSIGNED | NN, default 0 | Điểm đóng góp cho bảng xếp hạng (FR-29) |
+| contribution_points | INT UNSIGNED | NN, default 0 | Bộ nhớ đệm tổng điểm đóng góp toàn thời gian cho hồ sơ (FR-29) — `ContributionService` tính lại từ dữ liệu gốc; bảng xếp hạng tính trực tiếp từ dữ liệu gốc. Chỉ đọc trên entity |
 | locked_until | DATETIME(6) | | Khóa tài khoản đến thời điểm này (UC29) |
 | lock_reason | VARCHAR(500) | | |
 | created_at, updated_at, deleted_at | DATETIME(6) | | `created_at` là thành phần `age_score` của trust |
@@ -308,7 +308,7 @@ Bộ sưu tập xóa hẳn (không có `deleted_at` — dữ liệu cá nhân, k
 | badges | id, code VARCHAR(50), name, description, icon | code UQ — ví dụ `REVIEWER_1`…`REVIEWER_5`, `EXPLORER` |
 | user_badges | user_id FK, badge_id FK, awarded_at | PK(user_id, badge_id) |
 
-Tiêu chí trao huy hiệu viết trong code (không lưu JSON luật) — FR-29 là Could.
+Tiêu chí trao huy hiệu viết trong code (không lưu JSON luật) — FR-29 là Could. 8 huy hiệu seed ở `V4__seed_badges.sql` (O3, chốt 2026-10-12); tiêu chí ở `BadgeRule`; trao bằng `INSERT IGNORE` theo PK, không thu hồi.
 
 #### `reports` (UC17, UC29)
 | Cột | Kiểu | Ràng buộc | Ý nghĩa |
@@ -361,7 +361,8 @@ Schema trên được cài bằng Flyway ở `backend/src/main/resources/db/migr
 |---|---|
 | `V1__init.sql` | 32 bảng, khóa ngoại, index, CHECK |
 | `V2__seed_rbac.sql` | 4 role, 17 permission (khớp `x-permission` của openapi), gán theo Q2; OWNER ⊇ USER, ADMIN ⊇ MODERATOR |
-| `V3__seed_catalog.sql` | 3 danh mục gốc + 13 danh mục con, 14 tiện ích — cần ở mọi môi trường vì đề xuất địa điểm bắt buộc chọn danh mục. Huy hiệu chưa seed (chờ O3) |
+| `V3__seed_catalog.sql` | 3 danh mục gốc + 13 danh mục con, 14 tiện ích — cần ở mọi môi trường vì đề xuất địa điểm bắt buộc chọn danh mục |
+| `V4__seed_badges.sql` | 8 huy hiệu (O3, 2026-10-12) — mọi môi trường; tiêu chí trong code `BadgeRule` |
 
 Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên):
 - **Hành vi khóa ngoại**: mặc định `RESTRICT` — bảng nghiệp vụ xóa mềm nên xóa cứng là lỗi, RESTRICT chặn mất dữ liệu. `ON DELETE CASCADE` chỉ ở bảng nối thuần, phía có thể xóa cứng: `role_permissions`, `user_roles.role_id`, `place_amenity`, `opening_hours`, `place_views`, `collection_place`.

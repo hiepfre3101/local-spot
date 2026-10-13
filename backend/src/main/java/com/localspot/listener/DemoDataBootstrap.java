@@ -1,6 +1,7 @@
 package com.localspot.listener;
 
 import com.localspot.repository.ReviewRepository;
+import com.localspot.service.ContributionService;
 import com.localspot.service.ImageInspector.Format;
 import com.localspot.service.ImageInspector.Inspected;
 import com.localspot.service.RatingService;
@@ -31,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <ol>
  *   <li><b>Điểm địa điểm</b>: seed không chép công thức Bayesian ra SQL → tính lại toàn bộ bằng
  *       {@link RatingService#recalculateAll()} (chính job đêm D4). Idempotent, ~300 địa điểm mất vài giây.
+ *   <li><b>Điểm đóng góp + huy hiệu</b>: {@link ContributionService#refreshAll()} (chính job đêm).
  *   <li><b>Ảnh review</b>: cần object trong kho → tạo ảnh minh họa (hình khối màu phẳng, không chữ — không phụ thuộc font
  *       của máy) rồi đi qua đúng đường của người dùng: {@link ReviewPhotoService#store} → ảnh gốc {@code incoming/} →
  *       queue {@code photo.process} → 3 bản JPEG. Chỉ thêm cho review demo chưa có ảnh nào → khởi động lại không nhân đôi.
@@ -73,6 +75,7 @@ public class DemoDataBootstrap {
     private static final int HEIGHT = 900;
 
     private final RatingService ratingService;
+    private final ContributionService contributions;
     private final ReviewPhotoService reviewPhotos;
     private final ReviewRepository reviews;
     private final JdbcTemplate jdbc;
@@ -80,11 +83,13 @@ public class DemoDataBootstrap {
 
     public DemoDataBootstrap(
             RatingService ratingService,
+            ContributionService contributions,
             ReviewPhotoService reviewPhotos,
             ReviewRepository reviews,
             JdbcTemplate jdbc,
             TransactionTemplate tx) {
         this.ratingService = ratingService;
+        this.contributions = contributions;
         this.reviewPhotos = reviewPhotos;
         this.reviews = reviews;
         this.jdbc = jdbc;
@@ -94,7 +99,18 @@ public class DemoDataBootstrap {
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
         recalculateRatings();
+        refreshContributions();
         attachReviewPhotos();
+    }
+
+    /** Điểm đóng góp + huy hiệu cho dữ liệu seed — công thức chỉ ở Java như rating. Ảnh minh họa xử lý xong tự cộng thêm. */
+    public void refreshContributions() {
+        long started = System.nanoTime();
+        int awarded = contributions.refreshAll();
+        log.info(
+                "Demo: tính điểm đóng góp — {} huy hiệu mới trong {} ms",
+                awarded,
+                (System.nanoTime() - started) / 1_000_000);
     }
 
     public void recalculateRatings() {

@@ -188,4 +188,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT r FROM Review r WHERE r.id = :id")
     Optional<Review> findByIdForUpdate(@Param("id") Long id);
+
+    /** Tác giả của review, kể cả review đã xóa mềm — listener điểm đóng góp sau khi review đổi trạng thái. */
+    @Query(value = "SELECT user_id FROM reviews WHERE id = :id", nativeQuery = true)
+    Optional<Long> findAuthorIdIncludingDeleted(@Param("id") Long id);
 }

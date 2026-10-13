@@ -10,6 +10,7 @@ import com.localspot.entity.GeoPoints;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
 import com.localspot.entity.User;
+import com.localspot.event.ContributionChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
 import com.localspot.repository.CheckInRepository;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.IntStream;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -45,6 +47,7 @@ public class CheckInService {
     private final UserRepository users;
     private final PlaceSummaries summaries;
     private final CheckInProperties properties;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public CheckInService(
@@ -53,12 +56,14 @@ public class CheckInService {
             UserRepository users,
             PlaceSummaries summaries,
             CheckInProperties properties,
+            ApplicationEventPublisher events,
             Clock clock) {
         this.checkIns = checkIns;
         this.places = places;
         this.users = users;
         this.summaries = summaries;
         this.properties = properties;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -115,6 +120,7 @@ public class CheckInService {
                 (int) Math.round(distance),
                 today));
         places.incrementCheckinCount(placeId);
+        events.publishEvent(new ContributionChangedEvent(userId));
         return toResponses(List.of(checkIn)).getFirst();
     }
 
