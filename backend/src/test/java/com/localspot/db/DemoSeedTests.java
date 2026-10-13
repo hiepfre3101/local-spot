@@ -325,6 +325,52 @@ class DemoSeedTests {
     }
 
     @Test
+    void collectionsFollowTheCollectionRules() {
+        assertThat(count("SELECT COUNT(*) FROM collections WHERE is_public")).isGreaterThan(5);
+        assertThat(count("SELECT COUNT(*) FROM collections WHERE NOT is_public"))
+                .isGreaterThan(5);
+        // Công khai ⇔ có slug; slug cùng dạng CollectionService sinh; chỉ địa điểm đã duyệt; trần 50 / 100
+        assertThat(count("""
+                        SELECT COUNT(*) FROM collections
+                        WHERE is_public <> (share_slug IS NOT NULL)
+                           OR (share_slug IS NOT NULL AND share_slug NOT REGEXP '^[a-z0-9-]+-[a-z0-9]{6}$')
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM collection_place cp JOIN places p ON p.id = cp.place_id
+                        WHERE p.status <> 'APPROVED'
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM (SELECT collection_id FROM collection_place
+                                              GROUP BY collection_id HAVING COUNT(*) NOT BETWEEN 3 AND 100) x
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM (SELECT user_id FROM collections GROUP BY user_id HAVING COUNT(*) > 50) x
+                        """)).isZero();
+    }
+
+    @Test
+    void startupComputesContributionPointsAndBadges() {
+        // Mỗi người viết review demo có điểm; huy hiệu cấp 2+ có người đạt (thành viên ~38 review)
+        assertThat(count("""
+                        SELECT COUNT(*) FROM users u
+                        WHERE EXISTS (SELECT 1 FROM reviews r WHERE r.user_id = u.id AND r.status = 'PUBLISHED')
+                          AND u.contribution_points = 0
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(DISTINCT ub.user_id) FROM user_badges ub JOIN badges b ON b.id = ub.badge_id
+                        WHERE b.code = 'REVIEWER_3'
+                        """)).isPositive();
+        assertThat(count("SELECT COUNT(DISTINCT badge_id) FROM user_badges")).isGreaterThanOrEqualTo(4);
+        // Người mới (chỉ có review chờ duyệt) chưa có huy hiệu người đánh giá
+        assertThat(count("""
+                        SELECT COUNT(*) FROM user_badges ub JOIN users u ON u.id = ub.user_id
+                        JOIN badges b ON b.id = ub.badge_id
+                        WHERE b.code LIKE 'REVIEWER%' AND u.email LIKE 'member%'
+                          AND u.created_at > TIMESTAMP('2026-09-30') - INTERVAL 60 DAY
+                        """)).isZero();
+    }
+
+    @Test
     void rerunningSeedScriptsChangesNothing() {
         List<Integer> before = snapshot();
 
@@ -332,9 +378,11 @@ class DemoSeedTests {
                         new ClassPathResource("db/seed/dev/R__demo_01_users.sql"),
                         new ClassPathResource("db/seed/dev/R__demo_02_places.sql"),
                         new ClassPathResource("db/seed/dev/R__demo_03_reviews.sql"),
-                        new ClassPathResource("db/seed/dev/R__demo_04_checkins.sql"))
+                        new ClassPathResource("db/seed/dev/R__demo_04_checkins.sql"),
+                        new ClassPathResource("db/seed/dev/R__demo_05_collections.sql"))
                 .execute(dataSource);
         bootstrap.recalculateRatings();
+        bootstrap.refreshContributions();
         bootstrap.attachReviewPhotos();
 
         assertThat(snapshot()).isEqualTo(before);
@@ -355,6 +403,10 @@ class DemoSeedTests {
                 count("SELECT COUNT(*) FROM user_violations"),
                 count("SELECT COUNT(*) FROM review_photos"),
                 count("SELECT COUNT(*) FROM check_ins"),
+                count("SELECT COUNT(*) FROM collections"),
+                count("SELECT COUNT(*) FROM user_badges"),
+                count("SELECT COALESCE(SUM(contribution_points), 0) FROM users"),
+                count("SELECT COUNT(*) FROM collection_place"),
                 count("SELECT COALESCE(SUM(checkin_count), 0) FROM places"),
                 count("SELECT COALESCE(SUM(review_count), 0) FROM places"),
                 count("SELECT CAST(COALESCE(SUM(bayesian_score), 0) * 1000 AS SIGNED) FROM places"));

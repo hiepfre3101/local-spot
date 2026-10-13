@@ -6,6 +6,7 @@ import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceStatus;
+import com.localspot.event.ContributionChangedEvent;
 import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
@@ -99,6 +100,7 @@ public class PlaceModerationService {
         place.setRejectReason(null);
         markModerated(place, moderatorId);
         events.publishEvent(PlaceIndexChangedEvent.of(placeId));
+        events.publishEvent(new ContributionChangedEvent(place.getCreatedBy().getId())); // +15 cho người đề xuất
     }
 
     /** Lý do bắt buộc — người đề xuất thấy lý do trên trang địa điểm / trang cá nhân. */

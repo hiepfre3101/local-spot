@@ -247,7 +247,7 @@ paths:
   /me/collections:
     get:
       tags: [Me, Collections]
-      summary: Bộ sưu tập của tôi
+      summary: Bộ sưu tập của tôi — công khai lẫn riêng tư, mới tạo trước (≤ 50, không phân trang)
       responses:
         '200':
           description: OK
@@ -315,7 +315,8 @@ paths:
       parameters: [ { $ref: '#/components/parameters/UserId' } ]
       responses:
         '204': { description: Đang theo dõi }
-        '422': { description: Không thể tự theo dõi mình }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Tự theo dõi mình (`SELF_ACTION_FORBIDDEN` — cùng mã với vote review của mình; chốt 2026-10-12)' }
     delete:
       tags: [Users]
       summary: Bỏ theo dõi — idempotent
@@ -325,7 +326,7 @@ paths:
   /users/{userId}/followers:
     get:
       tags: [Users]
-      summary: Danh sách người theo dõi
+      summary: Danh sách người theo dõi — theo dõi gần nhất trước
       security: []
       parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
@@ -342,9 +343,15 @@ paths:
     get:
       tags: [Users]
       summary: Bảng xếp hạng đóng góp (FR-29)
+      description: |
+        *(O3 — chốt 2026-10-12)* Điểm tính từ nội dung **đang hiển thị**: review +10 · ảnh READY trong review +2 (tối đa 5
+        ảnh / review, tính theo ngày của review) · vote hữu ích hợp lệ nhận được +1 · check-in +1 · đề xuất địa điểm được
+        duyệt +15. `WEEK` / `MONTH` = 7 / 30 ngày trượt. Hạng kiểu thi đấu (cùng điểm cùng hạng). Bỏ tài khoản bị khóa;
+        0 điểm không có mặt. Cache 5 phút.
       security: []
       parameters:
         - { name: period, in: query, schema: { type: string, enum: [WEEK, MONTH, ALL], default: MONTH } }
+        - { name: city, in: query, description: 'Chỉ tính đóng góp cho địa điểm ở thành phố này (khớp `places.city`) — "region" của P08', schema: { type: string, maxLength: 100 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
       responses:
         '200':
@@ -761,6 +768,10 @@ paths:
     post:
       tags: [Collections]
       summary: Tạo bộ sưu tập (FR-26)
+      description: |
+        *(chốt 2026-10-12)* Công khai = hiện ở `GET /users/{id}/collections` (tab trên trang cá nhân) và mở được qua
+        `/shared/collections/{shareSlug}`; riêng tư = chỉ chủ. `shareSlug` = tên bỏ dấu (≤ 30 ký tự) + 6 ký tự ngẫu nhiên.
+        Tối đa 50 bộ / người (422 `COLLECTION_LIMIT_EXCEEDED`).
       requestBody:
         required: true
         content:
@@ -768,10 +779,15 @@ paths:
             schema: { $ref: '#/components/schemas/CollectionRequest' }
       responses:
         '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '422': { description: 'Validate hoặc quá 50 bộ (`COLLECTION_LIMIT_EXCEEDED`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
   /collections/{collectionId}:
     get:
       tags: [Collections]
       summary: Chi tiết bộ sưu tập (chủ sở hữu hoặc công khai)
+      description: |
+        Bộ riêng tư của người khác → 404 `COLLECTION_NOT_FOUND` (không tiết lộ có tồn tại). Địa điểm bị ẩn sau khi thêm:
+        chủ thấy kèm `place.status` để tự bỏ ra; người khác không thấy, không tính vào `placeCount` (chốt 2026-10-12).
+        Thêm gần nhất trước.
       security: [ {}, { bearerAuth: [] } ]
       parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
       responses:
@@ -780,6 +796,9 @@ paths:
     patch:
       tags: [Collections]
       summary: Sửa tên / mô tả / công khai — bật công khai thì sinh `shareSlug`
+      description: |
+        Gửi lại đủ form (tên bắt buộc; `isPublic` vắng = riêng tư). Về riêng tư thu hồi `shareSlug`; công khai lại sinh
+        slug mới — link cũ không mở lại được. Sửa tên khi vẫn công khai giữ slug. Bộ của người khác → 404.
       parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
       requestBody:
         required: true
@@ -788,18 +807,21 @@ paths:
             schema: { $ref: '#/components/schemas/CollectionRequest' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
     delete:
       tags: [Collections]
-      summary: Xóa bộ sưu tập
+      summary: Xóa bộ sưu tập — xóa hẳn kèm danh sách địa điểm (không xóa địa điểm)
       parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
       responses:
         '204': { description: Đã xóa }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /collections/{collectionId}/places/{placeId}:
     put:
       tags: [Collections]
       summary: Thêm địa điểm vào bộ sưu tập — idempotent
+      description: |
+        Đã có trong bộ → chỉ cập nhật ghi chú (khi có body). Địa điểm mới phải `APPROVED` (404 `PLACE_NOT_FOUND`); tối đa
+        100 địa điểm / bộ (422 `COLLECTION_LIMIT_EXCEEDED`). Bộ của người khác → 404 `COLLECTION_NOT_FOUND`.
       parameters: [ { $ref: '#/components/parameters/CollectionId' }, { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
         content:
@@ -807,7 +829,8 @@ paths:
             schema: { type: object, properties: { note: { type: string, maxLength: 500 } } }
       responses:
         '204': { description: OK }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: 'Ghi chú quá dài hoặc bộ đã đủ 100 địa điểm (`COLLECTION_LIMIT_EXCEEDED`)' }
     delete:
       tags: [Collections]
       summary: Bỏ địa điểm khỏi bộ sưu tập — idempotent
@@ -818,10 +841,24 @@ paths:
     get:
       tags: [Collections]
       summary: Xem bộ sưu tập công khai qua link chia sẻ
+      description: Luôn là góc nhìn công khai (kể cả khi chủ tự mở link). Bộ đã về riêng tư / slug cũ → 404.
       security: []
       parameters: [ { name: shareSlug, in: path, required: true, schema: { type: string } } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/collections:
+    get:
+      tags: [Collections]
+      summary: Bộ sưu tập công khai của một người — tab trên trang cá nhân P06 (chốt 2026-10-12)
+      security: []
+      parameters: [ { name: userId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ───────────────────────────── Reports (UC17) ─────────────────────────────
@@ -1431,15 +1468,16 @@ components:
             reviewCount: { type: integer }
             followerCount: { type: integer }
             followingCount: { type: integer }
-            contributionPoints: { type: integer }
-            badges: { type: array, items: { $ref: '#/components/schemas/Badge' } }
+            contributionPoints: { type: integer, description: Tổng toàn thời gian — tính lại sau mỗi đóng góp (nền) và hằng đêm }
+            badges: { type: array, items: { $ref: '#/components/schemas/Badge' }, description: Theo thứ tự đạt được; đã trao không thu hồi }
             followedByMe: { type: boolean }
     Badge:
       type: object
       properties:
-        code: { type: string }
+        code: { type: string, description: 'REVIEWER_1..5, EXPLORER, PHOTOGRAPHER, HELPFUL (V4__seed_badges.sql)' }
         name: { type: string }
-        icon: { type: string }
+        description: { type: [string, 'null'] }
+        icon: { type: string, description: Khóa trung tính — frontend ánh xạ sang icon của design system }
         awardedAt: { type: string, format: date-time }
     LeaderboardEntry:
       type: object
@@ -1740,8 +1778,8 @@ components:
         name: { type: string }
         isPublic: { type: boolean }
         shareSlug: { type: [string, 'null'] }
-        placeCount: { type: integer }
-        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+        placeCount: { type: integer, description: Theo người xem — người khác chỉ tính địa điểm đang hiện }
+        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ], description: Ảnh bìa của địa điểm thêm gần nhất mà người xem thấy }
     CollectionDetail:
       allOf:
         - { $ref: '#/components/schemas/CollectionSummary' }

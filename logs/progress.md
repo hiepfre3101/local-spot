@@ -803,6 +803,68 @@ Chưa commit — chờ supervisor duyệt.
 
 Chưa commit — chờ supervisor duyệt.
 
+## 2026-10-12 (+07) — Checklist E11: Bộ sưu tập và chia sẻ công khai
+
+**Bối cảnh**: E10 đã commit + push (`8af94d0`, `9f6bc71`); PR seed review và PR check-in đưa link cho supervisor tự mở (máy không có `gh`). Nhánh `feature/be-collections` tạo từ `feature/be-checkins` (xếp chồng). Đã có sẵn: bảng `collections` (`share_slug` UNIQUE, NULL khi riêng tư) + `collection_place` (PK tổ hợp, ON DELETE CASCADE), entity `PlaceCollection` (`publish` / `makePrivate` thu hồi slug), openapi CRUD + `/shared/collections/{shareSlug}` + `/me/collections`. Chưa có: endpoint cho tab bộ sưu tập P06, luật địa điểm bị ẩn, trần số lượng.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Công khai = hiện trên trang cá nhân + link chia sẻ** (thêm `GET /users/{id}/collections`, chỉ bộ công khai); riêng tư = chỉ chủ. Slug dễ đọc (tên bỏ dấu + hậu tố).
+- **Chỉ thêm địa điểm APPROVED; bị ẩn sau đó → lọc khi xem**: người khác không thấy / không đếm; chủ thấy kèm trạng thái để tự bỏ ra.
+- **Trần 50 bộ / người, 100 địa điểm / bộ** — giữ chi tiết không phân trang như openapi.
+
+**Quyết định kỹ thuật:**
+- **Không tiết lộ tồn tại**: bộ riêng tư của người khác và mọi thao tác ghi lên bộ của người khác → 404 `COLLECTION_NOT_FOUND` (openapi cũ ghi 403 → sửa). 403 sẽ xác nhận id đó là một bộ sưu tập riêng tư có thật. Không có permission RBAC / quyền vượt cho nhân sự — dữ liệu cá nhân, không có luồng kiểm duyệt; kiểm chủ sở hữu trong service.
+- **Slug** = `Slugs.slugify(tên, 30)` + `-` + 6 ký tự `[a-z0-9]` từ `SecureRandom` (36⁶ ≈ 2,2 tỷ — trùng UNIQUE gần như không xảy ra; nếu có thì lớp phòng thủ UNIQUE trả 409). Tên không ra slug (toàn emoji) → tiền tố `bo-suu-tap`. Sửa tên khi vẫn công khai **giữ** slug (link đã chia sẻ không gãy); về riêng tư thu hồi, công khai lại sinh slug mới — rút lại là rút hẳn.
+- **Link chia sẻ luôn là góc nhìn công khai**, kể cả chủ tự mở (xem trước như người nhận); `/users/{id}/collections` cũng vậy.
+- **`PUT …/places/{placeId}` idempotent**: đã có → chỉ sửa ghi chú khi có body (không body giữ nguyên); vẫn sửa được ghi chú khi bộ đã đủ 100. Trần đếm theo **dòng** (kể cả địa điểm đã bị ẩn) — không để chủ vượt trần nhờ địa điểm bị ẩn.
+- **Khóa dòng**: tạo bộ khóa `users` (đếm 50 đúng khi chen nhau), thêm địa điểm khóa `collections` (đếm 100). Không đụng thứ tự khóa của các mục trước.
+- **Xóa hẳn** bộ sưu tập (bảng không có `deleted_at` theo thiết kế; mục 3 CLAUDE.md chỉ xóa mềm places / reviews / comments / users), `collection_place` theo CASCADE của CSDL; địa điểm giữ nguyên.
+- **Ảnh bìa** = ảnh bìa của địa điểm thêm gần nhất **mà người xem thấy**; `placeCount` theo người xem. Danh sách nhiều bộ: một truy vấn gom (`COUNT` + `GROUP_CONCAT … ORDER BY added_at DESC` lấy địa điểm bìa) + một truy vấn ảnh bìa — không N+1.
+- **`SecurityConfig`** (phần lõi mục 3): thêm **một** luật `permitAll` cho 3 GET công khai (`/collections/*`, `/shared/collections/*`, `/users/*/collections`) — cùng mẫu với bình luận / tìm kiếm, khớp openapi (`security: []` / tùy chọn); service tự giới hạn bộ riêng tư. Không đổi luật nào khác.
+- Ngưỡng ở `localspot.collection.*` (`CollectionProperties`).
+- **Seed demo** `R__demo_05_collections.sql`: 1–3 bộ cho thành viên số lẻ, chủ đề × thành phố, ~nửa công khai (slug cùng dạng nhưng hậu tố tất định), 3–12 địa điểm đã duyệt cùng thành phố. Gặp lỗi khi chạy: MySQL tính `CAST(SUBSTRING(email…))` trên cả dòng bị `WHERE` loại (`admin@…` → `'lo'`), chế độ strict của `INSERT … SELECT` biến cảnh báo thành lỗi → đổi sang `REGEXP_SUBSTR` (trả NULL thay vì lỗi).
+- **Lỗi bắt được nhờ test**: bộ rỗng không có địa điểm bìa → `Map.get(null)` trên map bất biến ném NPE (500 ở `/me/collections`) → sửa + thêm test ảnh bìa có giá trị thật.
+
+**Tài liệu**: openapi (mô tả luật, 403 → 404, 422 trần, `/users/{userId}/collections`, mô tả `placeCount` / `coverPhoto`), requirements §5 (3 dòng chốt), sitemap (`/c/:shareSlug`), database.md (xóa hẳn + trần), plan §10 E11.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **272 test** xanh (+11), SpotBugs 0. `CollectionFlowTests` 10 ca (riêng tư chỉ chủ — người khác / khách 404, không hiện trên trang cá nhân; công khai → slug dạng `quan-an-ha-noi-nen-thu-xxxxxx`, mở qua id / link / trang cá nhân, đổi tên giữ slug, về riêng tư link chết, công khai lại slug mới và link cũ vẫn chết; thêm idempotent + ghi chú + thứ tự mới nhất + bỏ idempotent + PENDING / REJECTED / HIDDEN 404 + ghi chú quá dài; địa điểm bị ẩn sau khi thêm: chủ thấy kèm `HIDDEN` và đếm, người khác không; ảnh bìa theo người xem; người khác sửa / xóa / thêm / bỏ → 404, khách tạo 401; xóa kéo theo `collection_place` nhưng giữ địa điểm; validate + tên không ra slug; 6 request tạo chen nhau khi đã có 48 → đúng 2 thành công; đủ 100 → 422 nhưng vẫn sửa ghi chú). `DemoSeedTests` +1 (seed bộ sưu tập theo đúng luật).
+- **Mutation** (mỗi lần một chỗ, đều đỏ đúng test): bỏ khóa dòng user khi tạo → test chen nhau; bỏ lọc địa điểm bị ẩn → 2 test; không thu hồi slug khi về riêng tư → test link; bỏ kiểm chủ sở hữu → test người khác.
+
+Chưa commit — chờ supervisor duyệt.
+
+## 2026-10-13 (+07) — Checklist E12: Theo dõi người dùng, huy hiệu, bảng xếp hạng
+
+**Bối cảnh**: `develop` đã merge #15 (seed review demo) và #16 (check-in) → fast-forward local. E11 (bộ sưu tập) chưa merge → nhánh `feature/be-community` tạo từ `feature/be-collections` (xếp chồng). Đã có: bảng `follows` (PK + CHECK không tự theo dõi), `badges` / `user_badges`, cột `users.contribution_points`, entity tương ứng, openapi follow / followers / following / leaderboard (`period`) / `PublicProfile`. Chưa có: `GET /users/{id}` (hồ sơ công khai — làm luôn ở đây vì chứa số theo dõi, điểm, huy hiệu), O3 (bộ huy hiệu + công thức điểm) còn mở; cột điểm chỉ một tổng nên không phục vụ được WEEK / MONTH.
+
+**Supervisor chốt O3 (qua câu hỏi):**
+- **Công thức**: review đang hiện +10 · ảnh READY trong review +2, tối đa 5 ảnh / review · vote hữu ích hợp lệ nhận được +1 · check-in +1 · đề xuất địa điểm được duyệt +15. Chỉ nội dung đang hiển thị — xóa / ẩn thì mất điểm.
+- **Tính từ dữ liệu gốc** (không thêm bảng sổ điểm); `contribution_points` là bộ nhớ đệm tổng, tính lại sau sự kiện + hằng đêm.
+- **8 huy hiệu**: REVIEWER_1..5 (1 / 10 / 25 / 50 / 100), EXPLORER (10 địa điểm check-in khác nhau), PHOTOGRAPHER (20 ảnh), HELPFUL (50 vote hợp lệ); trao một lần, không thu hồi.
+- **Lọc theo thành phố** cho bảng xếp hạng ("region" của P08).
+
+**Quyết định kỹ thuật:**
+- **Một câu SQL nguồn duy nhất** (`ContributionQueries.POINTS`, `UNION ALL` 4 nguồn → `GROUP BY user`) dùng cho cả tổng của một người và bảng xếp hạng — hai nơi không thể lệch công thức. "Đang hiện" định nghĩa một lần (`VISIBLE_PLACE`) cho điểm và tiêu chí huy hiệu. Ảnh tính theo **ngày của review** (trần 5 / review áp đơn giản, không phải chia ảnh theo cửa sổ). Vote theo ngày vote, check-in theo ngày check-in, đề xuất theo ngày duyệt.
+- **Cửa sổ trượt** 7 / 30 ngày cho WEEK / MONTH — bảng không về rỗng vào đầu tuần / tháng. **Hạng kiểu thi đấu** (`RANK()`: 1, 2, 2, 4), cùng hạng xếp theo id cho ổn định. Bỏ tài khoản bị khóa / đã xóa, bỏ người 0 điểm. Cache Redis 5 phút (khóa = kỳ + thành phố + số dòng), không xóa khi ghi — chấp nhận trễ tối đa 5 phút cho một bảng xếp hạng.
+- **Làm mới điểm + trao huy hiệu** (`ContributionService.refresh`, idempotent — đếm lại từ đầu như rating E9): listener `@Async` AFTER_COMMIT trên **`ReviewChangedEvent` có sẵn** (tra tác giả theo id review, kể cả đã xóa — **không sửa luồng sự kiện rating lõi**) và `ContributionChangedEvent` mới phát từ vote hợp lệ / bỏ vote hợp lệ (tác giả), check-in, ảnh review READY (consumer chạy ngoài transaction → `fallbackExecution`), duyệt đề xuất địa điểm (người đề xuất). Job đêm 03:30 (sau rating 03:00) đối soát sự kiện mất + nội dung bị ẩn qua đường không phát sự kiện. Demo bootstrap gọi `refreshAll()` để dữ liệu seed có điểm / huy hiệu.
+- **`contribution_points` chỉ đọc trên entity** (`insertable/updatable = false`, ghi bằng UPDATE trực tiếp) — sửa hồ sơ / khóa tài khoản qua entity không ghi đè điểm vừa tính (cùng mẫu E8 / E9 / E10).
+- **Huy hiệu**: danh mục ở `V4__seed_badges.sql` (migration **mới**, mọi môi trường — không sửa migration cũ); tiêu chí trong code (`BadgeRule`); trao bằng `INSERT IGNORE` theo PK. `icon` là khóa trung tính để frontend ánh xạ (thư mục design system không có trong repo này).
+- **Theo dõi**: idempotent (`INSERT IGNORE` / `DELETE`), tự theo dõi → **409 `SELF_ACTION_FORBIDDEN`** (openapi cũ ghi 422 → sửa cho đồng nhất với vote review của mình). Danh sách keyset tổ hợp (thời điểm theo dõi, id người kia), gần nhất trước. Đếm qua `JOIN users` để bỏ tài khoản đã xóa — khớp danh sách. Chưa thông báo khi có người theo dõi (làm ở mục thông báo).
+- **Hồ sơ công khai** `GET /users/{id}`: không email (NFR-11), `reviewCount` chỉ review đang hiện (cùng định nghĩa với huy hiệu), điểm từ bộ nhớ đệm, huy hiệu theo thứ tự đạt.
+- **`SecurityConfig`** (phần lõi): thêm **một** luật `permitAll` cho 4 GET công khai (`/users/*`, `/users/*/followers`, `/users/*/following`, `/leaderboard`) — khớp openapi `security: []`. Không đổi luật khác.
+- **Tham số thời gian truyền vào SQL** là `LocalDateTime` theo UTC, không `Timestamp` — `Timestamp` bị đổi theo múi giờ của JVM (+07) trong khi cột lưu UTC.
+- Gặp khi chạy: `@Validated` trên controller đưa `@Max` qua đường validate khác (500) → bỏ, dùng validate tham số sẵn có của Spring (422 như các controller khác). SpotBugs `VA_FORMAT_STRING_USES_NEWLINE` cho `String.formatted` trên text block → đổi sang thay token có tên (`{VISIBLE_PLACE}`, `{POINTS}`).
+
+**Tài liệu**: openapi (luật điểm + cửa sổ + `city`, follow 409 / 404, `Badge.description`, mô tả `contributionPoints` / `badges`), requirements §5 (4 dòng chốt), sitemap (O3 ✅, P08 `city`), database.md (cột điểm là bộ nhớ đệm, V4, tiêu chí trong code), plan §10 E12.
+
+**Kiểm chứng**:
+- `./mvnw verify` — **281 test** xanh (+9), SpotBugs 0. `CommunityFlowTests` 8 ca (theo dõi idempotent + số đếm hai phía + `followedByMe` + không email; tự theo dõi 409, người không tồn tại 404, khách 401; danh sách mới nhất trước + cursor + cursor sai 422; công thức điểm đủ 5 nguồn — ảnh chưa READY / vote không hợp lệ / review chờ / đề xuất chưa duyệt không tính, trần 5 ảnh; ẩn địa điểm → mất điểm nhưng giữ huy hiệu; huy hiệu đúng ngưỡng, không trao lại, check-in địa điểm bị ẩn không tính; lưu user qua entity giữ điểm; vote / check-in / bỏ vote qua API → điểm cập nhật nền; bảng xếp hạng WEEK / MONTH / ALL theo cửa sổ, cùng điểm cùng hạng, lọc thành phố, bỏ người bị khóa, `limit` / `period` sai 4xx). `DemoSeedTests` +1 (sau khởi động mọi người có review đang hiện đều có điểm, có REVIEWER_3, người mới không có huy hiệu người đánh giá; chạy lại không đổi).
+- **Mutation** (mỗi lần một chỗ, đều đỏ đúng test): bỏ trần 5 ảnh; tính cả địa điểm không hiện; cột điểm `updatable`; hiện người bị khóa trên bảng xếp hạng; bỏ phát sự kiện khi vote.
+
+Chưa commit — chờ supervisor duyệt.
+
+---
+
 ## 2026-10-12 → 13 (+07) — Checklist F: module khám phá (trang chủ, P02 tìm kiếm & bản đồ, P03 chi tiết — bản đọc)
 
 **Bối cảnh**: `develop` fast-forward tới `ff8c706` (#16 check-in). Nhánh `feature/fe-discovery` tạo từ `develop`. Backend đã có đủ API đọc: `/places`, `/search`, `/places/nearby`, `/places/{slug}`, `/categories`, `/amenities`, review / vote / bình luận / rating / check-in. Máy Windows mới không có JDK / Docker → backend build & test trong WSL (JDK 21, Docker 29).

@@ -3,6 +3,7 @@ package com.localspot.config;
 import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryNode;
 import com.localspot.dto.response.HomeResponse;
+import com.localspot.dto.response.LeaderboardEntryResponse;
 import java.time.Duration;
 import java.util.List;
 import org.slf4j.Logger;
@@ -34,10 +35,13 @@ public class CacheConfig implements CachingConfigurer {
     public static final String CATEGORIES = "categories";
     public static final String AMENITIES = "amenities";
     public static final String HOME = "home";
+    /** Bảng xếp hạng (FR-29): tính từ dữ liệu gốc, chấp nhận trễ tối đa {@link #LEADERBOARD_TTL} — không xóa khi ghi. */
+    public static final String LEADERBOARD = "leaderboard";
 
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
     private static final Duration TTL = Duration.ofHours(1);
     private static final Duration HOME_TTL = Duration.ofMinutes(10);
+    private static final Duration LEADERBOARD_TTL = Duration.ofMinutes(5);
 
     /**
      * Mỗi cache một kiểu cụ thể: JSON đọc được trong Redis, không phụ thuộc Java serialization hay type info. Xóa cache
@@ -48,9 +52,12 @@ public class CacheConfig implements CachingConfigurer {
         JavaType categories = jsonMapper.getTypeFactory().constructCollectionType(List.class, CategoryNode.class);
         JavaType amenities = jsonMapper.getTypeFactory().constructCollectionType(List.class, AmenityResponse.class);
         JavaType home = jsonMapper.getTypeFactory().constructType(HomeResponse.class);
+        JavaType leaderboard =
+                jsonMapper.getTypeFactory().constructCollectionType(List.class, LeaderboardEntryResponse.class);
         return builder -> builder.withCacheConfiguration(CATEGORIES, typed(jsonMapper, categories, TTL))
                 .withCacheConfiguration(AMENITIES, typed(jsonMapper, amenities, TTL))
-                .withCacheConfiguration(HOME, typed(jsonMapper, home, HOME_TTL));
+                .withCacheConfiguration(HOME, typed(jsonMapper, home, HOME_TTL))
+                .withCacheConfiguration(LEADERBOARD, typed(jsonMapper, leaderboard, LEADERBOARD_TTL));
     }
 
     private static RedisCacheConfiguration typed(JsonMapper jsonMapper, JavaType type, Duration ttl) {

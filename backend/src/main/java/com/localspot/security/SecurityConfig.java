@@ -83,6 +83,22 @@ public class SecurityConfig {
                         // Bình luận của review đang hiện (FR-21, openapi security: [])
                         .requestMatchers(HttpMethod.GET, "/api/v1/reviews/*/comments")
                         .permitAll()
+                        // Bộ sưu tập công khai (UC18, chốt 2026-10-12): chi tiết (service chỉ trả bộ riêng tư cho chủ),
+                        // link chia sẻ, tab trên trang cá nhân
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/collections/*",
+                                "/api/v1/shared/collections/*",
+                                "/api/v1/users/*/collections")
+                        .permitAll()
+                        // Hồ sơ công khai, danh sách theo dõi, bảng xếp hạng (FR-28, FR-29, openapi security: [])
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/users/*",
+                                "/api/v1/users/*/followers",
+                                "/api/v1/users/*/following",
+                                "/api/v1/leaderboard")
+                        .permitAll()
                         // Tìm kiếm (UC08, openapi security: []) — khách tìm không cần đăng nhập
                         .requestMatchers(HttpMethod.GET, "/api/v1/search")
                         .permitAll()
