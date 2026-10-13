@@ -228,7 +228,7 @@ function nearMe(): void {
       class="mt-16 grid min-h-[360px] gap-4 rounded-lg bg-coral p-4 text-on-accent md:mt-24 md:grid-cols-[1.4fr_1fr]"
     >
       <div class="flex flex-col items-start justify-between gap-8 p-2 md:p-6">
-        <h2 class="disp band-title">ĐI CÙNG CỘNG ĐỒNG, TÌM ĐÚNG CHỖ, <br>ĐÚNG TRẢI NGHIỆM.</br></h2>
+        <h2 class="disp band-title">ĐI CÙNG CỘNG ĐỒNG, TÌM ĐÚNG CHỖ,<br />ĐÚNG TRẢI NGHIỆM.</h2>
         <div>
           <template v-if="auth.isAuthenticated">
             <p class="band-lead mb-4 max-w-[420px]">
