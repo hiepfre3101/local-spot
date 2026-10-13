@@ -2,6 +2,7 @@ package com.localspot.controller;
 
 import com.localspot.dto.request.ChangePasswordRequest;
 import com.localspot.dto.response.CheckInResponse;
+import com.localspot.dto.response.CollectionSummaryResponse;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.MeResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
@@ -10,11 +11,13 @@ import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.RefreshTokenCookies;
 import com.localspot.service.AccountService;
 import com.localspot.service.CheckInService;
+import com.localspot.service.CollectionService;
 import com.localspot.service.PlaceService;
 import com.localspot.service.ProfileService;
 import com.localspot.service.ReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,6 +38,7 @@ public class MeController {
     private final PlaceService placeService;
     private final ReviewService reviewService;
     private final CheckInService checkInService;
+    private final CollectionService collectionService;
     private final RefreshTokenCookies cookies;
 
     public MeController(
@@ -43,12 +47,14 @@ public class MeController {
             PlaceService placeService,
             ReviewService reviewService,
             CheckInService checkInService,
+            CollectionService collectionService,
             RefreshTokenCookies cookies) {
         this.profileService = profileService;
         this.accountService = accountService;
         this.placeService = placeService;
         this.reviewService = reviewService;
         this.checkInService = checkInService;
+        this.collectionService = collectionService;
         this.cookies = cookies;
     }
 
@@ -73,6 +79,12 @@ public class MeController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
         return reviewService.writtenBy(user.id(), cursor, limit);
+    }
+
+    /** Bộ sưu tập của tôi, công khai lẫn riêng tư, mới tạo trước (≤ 50 nên không phân trang). */
+    @GetMapping("/collections")
+    public List<CollectionSummaryResponse> myCollections(@AuthenticationPrincipal AuthenticatedUser user) {
+        return collectionService.mine(user.id());
     }
 
     /**

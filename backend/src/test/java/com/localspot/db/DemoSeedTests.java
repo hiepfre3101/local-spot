@@ -325,6 +325,30 @@ class DemoSeedTests {
     }
 
     @Test
+    void collectionsFollowTheCollectionRules() {
+        assertThat(count("SELECT COUNT(*) FROM collections WHERE is_public")).isGreaterThan(5);
+        assertThat(count("SELECT COUNT(*) FROM collections WHERE NOT is_public"))
+                .isGreaterThan(5);
+        // Công khai ⇔ có slug; slug cùng dạng CollectionService sinh; chỉ địa điểm đã duyệt; trần 50 / 100
+        assertThat(count("""
+                        SELECT COUNT(*) FROM collections
+                        WHERE is_public <> (share_slug IS NOT NULL)
+                           OR (share_slug IS NOT NULL AND share_slug NOT REGEXP '^[a-z0-9-]+-[a-z0-9]{6}$')
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM collection_place cp JOIN places p ON p.id = cp.place_id
+                        WHERE p.status <> 'APPROVED'
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM (SELECT collection_id FROM collection_place
+                                              GROUP BY collection_id HAVING COUNT(*) NOT BETWEEN 3 AND 100) x
+                        """)).isZero();
+        assertThat(count("""
+                        SELECT COUNT(*) FROM (SELECT user_id FROM collections GROUP BY user_id HAVING COUNT(*) > 50) x
+                        """)).isZero();
+    }
+
+    @Test
     void rerunningSeedScriptsChangesNothing() {
         List<Integer> before = snapshot();
 
@@ -332,7 +356,8 @@ class DemoSeedTests {
                         new ClassPathResource("db/seed/dev/R__demo_01_users.sql"),
                         new ClassPathResource("db/seed/dev/R__demo_02_places.sql"),
                         new ClassPathResource("db/seed/dev/R__demo_03_reviews.sql"),
-                        new ClassPathResource("db/seed/dev/R__demo_04_checkins.sql"))
+                        new ClassPathResource("db/seed/dev/R__demo_04_checkins.sql"),
+                        new ClassPathResource("db/seed/dev/R__demo_05_collections.sql"))
                 .execute(dataSource);
         bootstrap.recalculateRatings();
         bootstrap.attachReviewPhotos();
@@ -355,6 +380,8 @@ class DemoSeedTests {
                 count("SELECT COUNT(*) FROM user_violations"),
                 count("SELECT COUNT(*) FROM review_photos"),
                 count("SELECT COUNT(*) FROM check_ins"),
+                count("SELECT COUNT(*) FROM collections"),
+                count("SELECT COUNT(*) FROM collection_place"),
                 count("SELECT COALESCE(SUM(checkin_count), 0) FROM places"),
                 count("SELECT COALESCE(SUM(review_count), 0) FROM places"),
                 count("SELECT CAST(COALESCE(SUM(bayesian_score), 0) * 1000 AS SIGNED) FROM places"));

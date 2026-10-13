@@ -49,6 +49,8 @@ public final class ErrorCode {
 
     public static final String CATEGORY_NOT_FOUND = "CATEGORY_NOT_FOUND";
     public static final String AMENITY_NOT_FOUND = "AMENITY_NOT_FOUND";
+    /** Không tồn tại, hoặc riêng tư / của người khác — không tiết lộ bộ sưu tập riêng tư có tồn tại (chốt 2026-10-12). */
+    public static final String COLLECTION_NOT_FOUND = "COLLECTION_NOT_FOUND";
     /** 409 theo trường {@code slug}: slug danh mục / tiện ích đã có. */
     public static final String SLUG_TAKEN = "SLUG_TAKEN";
     /** 422 trường {@code parentId}: cây danh mục tối đa 2 cấp (chốt 2026-10-06). */
@@ -80,6 +82,8 @@ public final class ErrorCode {
     public static final String CHECKIN_TOO_FAR = "CHECKIN_TOO_FAR";
     /** 409: đã check-in địa điểm này trong ngày (giờ Việt Nam) — 1 lần / địa điểm / ngày (U5, UC16 4b). */
     public static final String CHECKIN_ALREADY_TODAY = "CHECKIN_ALREADY_TODAY";
+    /** 422: quá 50 bộ sưu tập mỗi người hoặc 100 địa điểm mỗi bộ (chốt 2026-10-12). */
+    public static final String COLLECTION_LIMIT_EXCEEDED = "COLLECTION_LIMIT_EXCEEDED";
 
     private ErrorCode() {}
 }

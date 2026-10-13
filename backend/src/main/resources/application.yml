@@ -101,6 +101,10 @@ localspot:
   rating:
     min-reviews: 10 # m
     recalculation-cron: "0 0 3 * * *" # D4: tính lại toàn bộ hằng đêm (giờ Việt Nam) với C mới + đối soát
+  # Bộ sưu tập (FR-26) — chốt 2026-10-12
+  collection:
+    max-per-user: 50
+    max-places: 100
   # Check-in (FR-24, U5): 1 check-in / địa điểm / ngày (giờ Việt Nam) ràng buộc ở CSDL
   checkin:
     radius-m: 200
