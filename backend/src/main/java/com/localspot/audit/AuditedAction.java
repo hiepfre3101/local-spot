@@ -22,7 +22,10 @@ public @interface AuditedAction {
     /** Mã thao tác ổn định, dạng {@code <ĐỐI_TƯỢNG>_<HÀNH_ĐỘNG>} (database.md §3: {@code PLACE_APPROVE}, {@code USER_LOCK}). */
     String action();
 
-    /** Loại đối tượng bị tác động: {@code PLACE}, {@code REVIEW}, {@code USER}… */
+    /**
+     * Loại đối tượng bị tác động: {@code PLACE}, {@code REVIEW}, {@code USER}… Bắt đầu bằng {@code #} thì là SpEL — cho
+     * thao tác mà loại đối tượng nằm trong tham số (xử lý báo cáo đa hình: {@code "#request.targetType()"}).
+     */
     String targetType();
 
     /** SpEL trả id đối tượng — bắt buộc khác null. */

@@ -3,6 +3,7 @@ package com.localspot.repository;
 import com.localspot.entity.Review;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Limit;
@@ -206,4 +207,15 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** Tác giả của review, kể cả review đã xóa mềm — listener điểm đóng góp sau khi review đổi trạng thái. */
     @Query(value = "SELECT user_id FROM reviews WHERE id = :id", nativeQuery = true)
     Optional<Long> findAuthorIdIncludingDeleted(@Param("id") Long id);
+
+    /** Hàng đợi báo cáo (UC29): review theo id ở mọi trạng thái, kèm địa điểm và tác giả — review đã xóa bị bỏ qua. */
+    @Query("SELECT r FROM Review r JOIN FETCH r.place JOIN FETCH r.user WHERE r.id IN :ids")
+    List<Review> findWithPlaceAndAuthorByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Tác giả các review đang PUBLISHED của địa điểm — điểm đóng góp của họ đổi khi địa điểm bị ẩn (UC29). */
+    @Query(value = """
+            SELECT DISTINCT user_id FROM reviews
+            WHERE place_id = :placeId AND status = 'PUBLISHED' AND deleted_at IS NULL
+            """, nativeQuery = true)
+    List<Long> findPublishedAuthorIdsOfPlace(@Param("placeId") Long placeId);
 }
