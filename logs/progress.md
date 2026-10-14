@@ -904,3 +904,33 @@ Chưa commit — chờ supervisor duyệt.
 - **Chạy thử trên trình duyệt** (backend profile dev + dữ liệu seed, 2026-10-13): supervisor kiểm tra và yêu cầu 3 chỉnh sửa đã làm ở trên (lớp nền bản đồ, nền trắng, chỉ đường trong ứng dụng) → đánh dấu xong 4 mục F trong plan.
 
 Đã commit `97c21d4`, `6d5268a`, `101320e` và push `feature/fe-discovery`.
+
+---
+
+## 2026-10-14 14:35 (+07) — Quyết định O8: báo cáo WRONG_INFO không có đường sửa tên / vị trí / danh mục
+
+**Bối cảnh**: rà quyền sửa địa điểm theo plan. `PATCH /owner/places/{id}` (`PlaceUpdateRequest`) cố ý không có tên, vị trí, danh mục (O5 — chủ không "dời" địa điểm để thoát review), không có endpoint nào khác sửa các trường này; O5 hướng thông tin sai sang báo cáo `WRONG_INFO`. Nhưng thao tác xử lý báo cáo của UC29 chỉ gồm ẩn nội dung, khóa tài khoản, RESOLVED / DISMISSED → báo cáo đúng về tên sai không thể dẫn tới sửa tên.
+
+**Phương án đã nêu**: (1) cho kiểm duyệt viên sửa tên / vị trí / danh mục khi xử lý `WRONG_INFO`, ghi nhật ký FR-42 — người trung lập sửa nên không trái lý do của O5; (2) giữ nguyên, ghi là giới hạn đã biết. Agent đề xuất (1).
+
+**Supervisor chốt: phương án (2)**. Không thêm thao tác sửa vào UC29, không đổi schema / API. Đánh đổi: ít việc hơn và không mở thêm đường sửa dữ liệu cốt lõi của địa điểm; đổi lại địa điểm có tên / vị trí sai chỉ có thể bị ẩn (và đề xuất lại) — cần nêu là giới hạn trong báo cáo đồ án.
+
+**Tài liệu**: sitemap §O8, plan §10 E (mục "Báo cáo vi phạm").
+
+Chưa commit.
+
+---
+
+## 2026-10-14 (+07) — Quyết định O9: ai nhận vi phạm khi ẩn địa điểm bị báo cáo
+
+**Bối cảnh**: `ReportDecision.HIDE` = ẩn nội dung + ghi 1 vi phạm cho tác giả (+25 `penalty_score`, trust −75 trong 30 ngày). Với review / bình luận tác giả rõ ràng; với địa điểm plan chưa nói là ai.
+
+**Phương án đã nêu**: người đề xuất theo lý do / không ai / người đề xuất luôn luôn / người đã check-in (supervisor gợi ý ban đầu). Agent phản biện phương án check-in: check-in không chứa nội dung nên người check-in không viết thông tin sai; phạt hàng loạt (địa điểm đông có hàng chục check-in) đẩy nhiều người dưới ngưỡng 30; làm người dùng ngại check-in — vốn là một lớp chống review ảo; trái nguyên tắc trust score đo hành vi của chính người đó.
+
+**Supervisor chốt: người đề xuất, theo lý do** — vi phạm chỉ khi lý do xác nhận là `SPAM` / `FAKE` / `OFFENSIVE` (cố ý gửi nội dung xấu); `WRONG_INFO` / `OTHER` → không ai, vì thông tin địa điểm có thể lỗi thời trung thực. Không ghi cho chủ (không sửa được tên / vị trí / danh mục — O5) hay người check-in. Người đề xuất = `places.created_by` (NOT NULL — luôn có).
+
+**Hệ quả thiết kế** (làm cùng module báo cáo): nhóm báo cáo gộp nhiều lý do → `ReportDecision` cần trường lý do được xác nhận khi `HIDE` địa điểm; cập nhật openapi khi cài đặt.
+
+**Tài liệu**: sitemap §O9, plan §10 E.
+
+Chưa commit.
