@@ -934,3 +934,34 @@ Chưa commit.
 **Tài liệu**: sitemap §O9, plan §10 E.
 
 Chưa commit.
+
+---
+
+## 2026-10-14 15:20 (+07) — Checklist E: báo cáo vi phạm (UC17) + xử lý báo cáo (UC29)
+
+**Bối cảnh**: nhánh `feature/be-reports` từ `develop` (`eeb1e3f`). Bảng `reports`, entity `Report` / `ReportReason` / `ReportStatus` / `ReportTargetType` và `user_violations` đã có từ V1; chưa có endpoint, chưa có chỗ nào ghi vi phạm. Đã chốt trước trong phiên: O8 (không sửa tên / vị trí / danh mục khi xử lý WRONG_INFO), O9 (ai bị phạt khi ẩn địa điểm).
+
+**Supervisor chốt thêm (qua câu hỏi):**
+- **Báo cáo người dùng**: HIDE = xác nhận — chỉ ghi vi phạm cho người đó, không có gì để ẩn; khóa tài khoản vẫn là `POST /admin/users/{id}/lock` của admin (UC29 3b). Không xóa / sửa hồ sơ người dùng.
+- **Người báo cáo cần email đã xác thực** — cùng cổng với review / bình luận, chặn tài khoản rác làm ngập hàng đợi.
+- **`detail` bắt buộc với WRONG_INFO / OTHER** — kiểm duyệt viên không xét được "sai thông tin" nếu không biết sai chỗ nào.
+
+**Quyết định kỹ thuật:**
+- **Chỉ báo cáo nội dung đang hiện công khai**, đối tượng không thấy → 404 mã theo loại (như endpoint đọc — không tiết lộ nội dung chưa duyệt / đã ẩn có tồn tại).
+- **Không tự báo cáo** review / bình luận / chính mình (409 `SELF_ACTION_FORBIDDEN`); **địa điểm thì được**, kể cả người đề xuất: tên / vị trí / danh mục không ai sửa được (O5, O8) nên báo cáo là kênh duy nhất để báo nhầm.
+- **Hàng đợi gom theo đối tượng**, FIFO theo báo cáo đầu tiên; keyset trên `MIN(id)` (id tăng theo thời gian) để dùng lại `KeysetCursor` và không trùng / sót nhóm khi có báo cáo mới giữa hai lần tải. Lý do + đối tượng nạp theo lô (mỗi loại một truy vấn). Thêm `targetStatus` (gồm `DELETED`) để kiểm duyệt viên thấy đối tượng đã bị xóa / ẩn.
+- **Thêm `GET /moderation/reports/{targetType}/{targetId}`** (chưa có trong openapi): sitemap đã có màn xử lý theo đối tượng, nhưng `ReportGroup` chỉ có số đếm — kiểm duyệt viên cần đọc mô tả của từng người báo cáo mới xét được WRONG_INFO. Trả kèm `author` = người sẽ bị ghi vi phạm.
+- **Quyết định áp lên mọi báo cáo đang mở của đối tượng**, dưới `SELECT … FOR UPDATE` các báo cáo đó: hai kiểm duyệt viên bấm cùng lúc thì người sau chờ, đọc lại thấy hết báo cáo mở → 409 `REPORT_ALREADY_HANDLED` — không ghi hai vi phạm. **Một quyết định một vi phạm** dù có bao nhiêu báo cáo; `source_id` = báo cáo đầu tiên.
+- **O9 trong code**: `confirmedReason` bắt buộc khi ẩn địa điểm và phải là một lý do có trong các báo cáo đang mở — không "nâng" WRONG_INFO thành SPAM để phạt người đề xuất.
+- **Không tự xử lý** báo cáo về nội dung của mình, hay địa điểm mình sở hữu (như không tự duyệt đề xuất, 2026-10-04).
+- **Đối tượng đã xóa** (UC29 3c): HIDE → báo cáo RESOLVED, không phạt; activity_log ghi `targetDeleted`.
+- **Ẩn = đổi trạng thái, không xóa dữ liệu.** Ẩn review phát `ReviewChangedEvent` (Bayesian, điểm đóng góp, cache trang chủ tự cập nhật); ẩn địa điểm phát `PlaceIndexChangedEvent` (rời tìm kiếm + trang chủ) và `ContributionChangedEvent` cho người đề xuất + tác giả review trên đó; check-in và hằng số `C` để job đêm đối soát (D4). Đều dùng lại sự kiện có sẵn, không đụng luồng rating.
+- **`ViolationService`** (mới, `Propagation.MANDATORY` — chạy trong transaction của thao tác kiểm duyệt) dùng chung cho UC28 sau này; mức phạt / thời hạn ở `localspot.violation.points` (25) / `ttl` (30d) — tách khỏi `TrustProperties` để không đổi record lõi.
+- **`@AuditedAction.targetType` nhận SpEL** khi bắt đầu bằng `#` (thay đổi nhỏ, tương thích ngược): nhật ký ghi đúng loại đối tượng bị báo cáo (PLACE / REVIEW / …), không gộp chung "REPORT".
+- `ReportTargets` gom bốn nhánh của quan hệ đa hình (tìm, mô tả, ẩn, "người liên quan") vào một chỗ.
+
+**Chưa làm (ghi để nối tiếp):** thông báo cho tác giả và người báo cáo (UC29 bước 5) — làm ở mục thông báo; hàng chờ gộp `/moderation/queue` — làm cùng "API quản trị"; khôi phục nội dung đã ẩn — chưa có trong UC.
+
+**Tài liệu**: openapi (`/reports` mô tả + mã lỗi, endpoint chi tiết mới, `ReportGroup.targetStatus`, `ReportItem`, `ReportGroupDetail`, `ReportDecision.confirmedReason`, `ReportCreateRequest.detail`), plan §10 E.
+
+**Kiểm chứng**: `./mvnw verify` — **302 test** xanh, spotless sạch, SpotBugs 0. `ReportFlowTests` 13 ca: báo cáo đủ bốn loại + một lần / đối tượng; email chưa xác thực / khách / thiếu `detail` / lý do sai; đối tượng không hiện (địa điểm PENDING / REJECTED / HIDDEN, review không PUBLISHED hoặc trên địa điểm chưa duyệt, bình luận ẩn / xóa / trên review ẩn, người dùng không có); không tự báo cáo nhưng người đề xuất báo được địa điểm của mình; hàng đợi gom nhóm FIFO, đi hết bằng `limit=1` không trùng, lọc theo loại; chi tiết; phân quyền (thành viên / chủ 403); ẩn review (1 vi phạm 25 điểm / 30 ngày, mọi báo cáo RESOLVED, activity_log, người thứ hai 409); ẩn địa điểm theo O9 (thiếu / sai `confirmedReason` 422, WRONG_INFO không phạt ai, SPAM phạt người đề xuất — không phạt chủ hay người check-in); ẩn bình luận + xác nhận báo cáo người dùng (không khóa); bỏ qua; đối tượng đã xóa; kiểm duyệt viên không tự xử lý.
