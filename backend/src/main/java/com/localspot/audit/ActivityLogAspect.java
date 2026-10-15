@@ -75,11 +75,22 @@ public class ActivityLogAspect {
         logs.save(new ActivityLog(
                 entityManager.getReference(User.class, currentActorId()),
                 audited.action(),
-                audited.targetType(),
+                targetType(audited, context),
                 targetId,
                 metadata(audited, context),
                 currentIp()));
         return result;
+    }
+
+    private String targetType(AuditedAction audited, MethodBasedEvaluationContext context) {
+        if (!audited.targetType().startsWith("#")) {
+            return audited.targetType();
+        }
+        Object type = evaluate(audited.targetType(), context, Object.class);
+        if (type == null) {
+            throw new IllegalStateException("targetType của @AuditedAction trả null: " + audited.action());
+        }
+        return type.toString();
     }
 
     private Map<String, Object> metadata(AuditedAction audited, MethodBasedEvaluationContext context) {

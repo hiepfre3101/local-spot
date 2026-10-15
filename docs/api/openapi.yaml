@@ -866,6 +866,10 @@ paths:
     post:
       tags: [Reports]
       summary: Báo cáo vi phạm — 1 báo cáo / người / đối tượng (FR-25, U10)
+      description: |
+        Chỉ báo cáo được nội dung đang hiện công khai: địa điểm APPROVED, review PUBLISHED trên địa điểm APPROVED, bình
+        luận VISIBLE trên review như vậy, người dùng chưa xóa. Không báo cáo review / bình luận của mình hay chính mình;
+        địa điểm thì được, kể cả người đề xuất — tên / vị trí / danh mục không ai sửa được (O5, O8) *(chốt 2026-10-14)*.
       requestBody:
         required: true
         content:
@@ -873,8 +877,12 @@ paths:
             schema: { $ref: '#/components/schemas/ReportCreateRequest' }
       responses:
         '201': { description: Đã ghi nhận }
-        '404': { description: Đối tượng không tồn tại }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '403': { description: '`EMAIL_NOT_VERIFIED` — cần email đã xác thực (như viết review / bình luận)' }
+        '404': { description: 'Đối tượng không tồn tại / không hiện công khai — `PLACE_NOT_FOUND`, `REVIEW_NOT_FOUND`, `COMMENT_NOT_FOUND`, `USER_NOT_FOUND`' }
+        '409':
+          description: '`REPORT_ALREADY_EXISTS` (đã báo cáo, kể cả khi đã được xử lý — U10), `SELF_ACTION_FORBIDDEN` (nội dung của mình)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Thiếu `detail` với lý do `WRONG_INFO` / `OTHER` }
 
   # ───────────────────────────── Owner (UC23–UC26) ─────────────────────────────
   /places/{placeId}/claims:
@@ -1097,10 +1105,27 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReportGroupPage' } } } }
+  /moderation/reports/{targetType}/{targetId}:
+    get:
+      tags: [Moderation]
+      summary: Chi tiết một nhóm — từng báo cáo đang mở kèm mô tả, người sẽ bị ghi vi phạm *(thêm 2026-10-14)*
+      x-permission: report:handle
+      parameters:
+        - { name: targetType, in: path, required: true, schema: { $ref: '#/components/schemas/ReportTargetType' } }
+        - { name: targetId, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReportGroupDetail' } } } }
+        '404': { description: '`REPORT_NOT_FOUND` — không còn báo cáo nào đang mở về đối tượng này' }
   /moderation/reports/decision:
     post:
       tags: [Moderation]
       summary: Xử lý mọi báo cáo về một đối tượng — HIDE (ẩn + ghi vi phạm) hoặc DISMISS
+      description: |
+        Không có thao tác sửa nội dung (O8). Ai bị ghi vi phạm khi HIDE (O9, chốt 2026-10-14): tác giả review / bình
+        luận; người bị báo cáo (USER: không có gì để ẩn, chỉ ghi vi phạm — khóa tài khoản là `POST /admin/users/{id}/lock`);
+        địa điểm: người đề xuất, **chỉ khi** `confirmedReason` là SPAM / FAKE / OFFENSIVE — không bao giờ chủ hay người
+        đã check-in. Đối tượng đã bị xóa → báo cáo đóng RESOLVED, không ghi vi phạm (UC29 3c). Ghi `activity_log`
+        `REPORT_HIDE` / `REPORT_DISMISS` với loại / id của đối tượng.
       x-permission: report:handle
       requestBody:
         required: true
@@ -1109,6 +1134,10 @@ paths:
             schema: { $ref: '#/components/schemas/ReportDecision' }
       responses:
         '204': { description: OK }
+        '409':
+          description: '`REPORT_ALREADY_HANDLED` (người khác vừa xử lý / không còn báo cáo mở), `SELF_ACTION_FORBIDDEN` (nội dung của mình, địa điểm mình sở hữu)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: 'Thiếu `confirmedReason` khi ẩn địa điểm, hoặc lý do không có trong các báo cáo đang mở' }
   /moderation/claims:
     get:
       tags: [Moderation]
@@ -1802,7 +1831,7 @@ components:
         targetType: { $ref: '#/components/schemas/ReportTargetType' }
         targetId: { type: integer, format: int64 }
         reason: { type: string, enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER] }
-        detail: { type: string, maxLength: 1000 }
+        detail: { type: string, maxLength: 1000, description: 'Bắt buộc với `WRONG_INFO` / `OTHER` (chốt 2026-10-14)' }
 
     # ── Notification ──
     Notification:
@@ -1872,6 +1901,27 @@ components:
         reportCount: { type: integer }
         reasons: { type: object, additionalProperties: { type: integer } }
         firstReportedAt: { type: string, format: date-time }
+        targetStatus:
+          type: string
+          description: |
+            Trạng thái hiện tại của đối tượng (PlaceStatus / ReviewStatus / CommentStatus; người dùng `ACTIVE` / `LOCKED`)
+            hoặc `DELETED` — khi đó `targetPreview` là null
+    ReportItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        reporter: { $ref: '#/components/schemas/UserSummary' }
+        reason: { type: string, enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER] }
+        detail: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    ReportGroupDetail:
+      type: object
+      properties:
+        group: { $ref: '#/components/schemas/ReportGroup' }
+        author:
+          description: Người đề xuất địa điểm / tác giả review, bình luận / chính người bị báo cáo; null khi đối tượng đã xóa
+          oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ]
+        reports: { type: array, items: { $ref: '#/components/schemas/ReportItem' }, description: Đang mở, cũ trước }
     ReportGroupPage:
       type: object
       properties:
@@ -1883,7 +1933,13 @@ components:
       properties:
         targetType: { $ref: '#/components/schemas/ReportTargetType' }
         targetId: { type: integer, format: int64 }
-        decision: { type: string, enum: [HIDE, DISMISS], description: 'HIDE: ẩn nội dung + ghi 1 vi phạm cho tác giả' }
+        decision: { type: string, enum: [HIDE, DISMISS], description: 'HIDE: ẩn nội dung + ghi 1 vi phạm theo luật O9' }
+        confirmedReason:
+          type: string
+          enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER]
+          description: |
+            Bắt buộc khi HIDE địa điểm (O9 — quyết định người đề xuất có bị ghi vi phạm không); phải là một lý do có trong
+            các báo cáo đang mở. Loại khác: tùy chọn, chỉ ghi nhật ký *(thêm 2026-10-14)*
         note: { type: string, maxLength: 500 }
     Claim:
       type: object

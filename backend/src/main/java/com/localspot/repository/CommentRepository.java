@@ -59,4 +59,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
             ORDER BY c.id
             """)
     List<Comment> findVisibleRepliesWithAuthor(@Param("rootIds") Collection<Long> rootIds);
+
+    /** Hàng đợi báo cáo (UC29): bình luận theo id kể cả đã ẩn, kèm tác giả — bình luận đã xóa không có trong kết quả. */
+    @Query("SELECT c FROM Comment c JOIN FETCH c.user WHERE c.id IN :ids")
+    List<Comment> findWithAuthorByIdIn(@Param("ids") Collection<Long> ids);
 }

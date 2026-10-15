@@ -84,6 +84,12 @@ public final class ErrorCode {
     public static final String CHECKIN_ALREADY_TODAY = "CHECKIN_ALREADY_TODAY";
     /** 422: quá 50 bộ sưu tập mỗi người hoặc 100 địa điểm mỗi bộ (chốt 2026-10-12). */
     public static final String COLLECTION_LIMIT_EXCEEDED = "COLLECTION_LIMIT_EXCEEDED";
+    /** 409: đã báo cáo đối tượng này — mỗi người một báo cáo / đối tượng, kể cả báo cáo đã xử lý (U10). */
+    public static final String REPORT_ALREADY_EXISTS = "REPORT_ALREADY_EXISTS";
+    /** 404: đối tượng không còn báo cáo nào đang mở (chi tiết nhóm trong hàng đợi UC29). */
+    public static final String REPORT_NOT_FOUND = "REPORT_NOT_FOUND";
+    /** 409: các báo cáo về đối tượng này đã được kiểm duyệt viên khác xử lý (UC29). */
+    public static final String REPORT_ALREADY_HANDLED = "REPORT_ALREADY_HANDLED";
 
     private ErrorCode() {}
 }
