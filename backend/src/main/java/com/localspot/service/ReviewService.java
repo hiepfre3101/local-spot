@@ -33,7 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 /**
  * Review: viết (UC12, FR-17, FR-23), sửa / xóa của mình (UC13, FR-18), danh sách (FR-14). Duyệt review trong hàng chờ
- * (UC28) nằm ở mục "Trust score và hàng đợi duyệt review". Ảnh: {@link ReviewPhotoService}.
+ * (UC28): {@link ReviewModerationService}. Ảnh: {@link ReviewPhotoService}.
  *
  * <p><b>Viết review — thứ tự kiểm tra</b> (UC12, chốt 2026-10-08): email đã xác thực (403) → dữ liệu hợp lệ (422) → địa điểm APPROVED (404) →
  * không phải chủ địa điểm (409) → chưa có review, kể cả đã xóa (409, D2) → ≤ 5 review / 24 giờ (429) → trust ≥ 30 và

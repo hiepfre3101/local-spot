@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Ghi một vi phạm vào penalty_score của trust (requirements §5.1). Một chỗ dùng chung cho hai nguồn: báo cáo được xác
- * nhận (UC29) và — khi làm hàng chờ review — review bị từ chối (UC28). Trust không lưu cột (D1) nên không có gì khác cần
+ * nhận (UC29) và review bị từ chối (UC28). Trust không lưu cột (D1) nên không có gì khác cần
  * cập nhật: lần tính trust kế tiếp đã thấy vi phạm.
  */
 @Service

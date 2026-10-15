@@ -218,4 +218,60 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             WHERE place_id = :placeId AND status = 'PUBLISHED' AND deleted_at IS NULL
             """, nativeQuery = true)
     List<Long> findPublishedAuthorIdsOfPlace(@Param("placeId") Long placeId);
+
+    // ─── Hàng chờ duyệt review (UC28, FR-36) ────────────────────────────────
+
+    /**
+     * Review PENDING trên địa điểm APPROVED, cũ nhất trước — kèm tác giả, địa điểm, danh mục cho thẻ. Review trên địa
+     * điểm đã bị ẩn không vào hàng chờ: duyệt cũng không ai thấy. Index {@code (status, created_at)}.
+     */
+    @Query("""
+            SELECT r FROM Review r JOIN FETCH r.user JOIN FETCH r.place p JOIN FETCH p.category
+            WHERE r.status = com.localspot.entity.ReviewStatus.PENDING
+              AND p.status = com.localspot.entity.PlaceStatus.APPROVED
+              AND (:ipFlagged IS NULL OR r.ipFlagged = :ipFlagged)
+              AND (:afterId IS NULL OR r.id > :afterId)
+            ORDER BY r.id ASC
+            """)
+    List<Review> findModerationQueue(
+            @Param("ipFlagged") Boolean ipFlagged, @Param("afterId") Long afterId, Limit limit);
+
+    /** Màn duyệt một review: mọi trạng thái (kể cả đã xử lý — để hiện kết quả), kèm tác giả, địa điểm, danh mục. */
+    @Query("SELECT r FROM Review r JOIN FETCH r.user JOIN FETCH r.place p JOIN FETCH p.category WHERE r.id = :id")
+    Optional<Review> findForModerationById(@Param("id") Long id);
+
+    /**
+     * Mỗi dòng {@code [reviewId, count]}: số review khác cùng địa điểm, cùng dải IP (U3), viết trong {@code windowSeconds}
+     * trước hoặc sau review đó — <b>kể cả đã xóa</b>, như luật gắn cờ. Review không có review cùng dải nào không có dòng.
+     * Một truy vấn cho cả trang hàng chờ; index {@code (place_id, ip_prefix, created_at)}.
+     */
+    @Query(value = """
+            SELECT r.id, COUNT(o.id) FROM reviews r
+            JOIN reviews o ON o.place_id = r.place_id AND o.ip_prefix = r.ip_prefix AND o.id <> r.id
+                          AND o.created_at BETWEEN r.created_at - INTERVAL :windowSeconds SECOND
+                                               AND r.created_at + INTERVAL :windowSeconds SECOND
+            WHERE r.id IN (:ids)
+            GROUP BY r.id
+            """, nativeQuery = true)
+    List<Object[]> countSameSubnetNearby(
+            @Param("ids") Collection<Long> ids, @Param("windowSeconds") long windowSeconds);
+
+    /** Các review khác cùng địa điểm, cùng dải IP trong khoảng thời gian (màn duyệt — UC28 bước 2), cũ nhất trước. */
+    @Query("""
+            SELECT o FROM Review o JOIN FETCH o.user
+            WHERE o.place.id = :placeId AND o.ipPrefix = :ipPrefix AND o.id <> :reviewId
+              AND o.createdAt BETWEEN :from AND :to
+            ORDER BY o.id ASC
+            """)
+    List<Review> findSameSubnetBetween(
+            @Param("placeId") Long placeId,
+            @Param("ipPrefix") String ipPrefix,
+            @Param("reviewId") Long reviewId,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            Limit limit);
+
+    /** Lịch sử tác giả (UC28 bước 2): mỗi dòng {@code [status, count]} của các review chưa xóa. */
+    @Query("SELECT r.status, COUNT(r) FROM Review r WHERE r.user.id = :userId GROUP BY r.status")
+    List<Object[]> countByStatusOfAuthor(@Param("userId") Long userId);
 }

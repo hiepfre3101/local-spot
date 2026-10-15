@@ -72,6 +72,8 @@ public final class ErrorCode {
     public static final String EMAIL_NOT_VERIFIED = "EMAIL_NOT_VERIFIED";
     /** 409: đã có review cho địa điểm này, kể cả review đã xóa (FR-17, D2) — gợi ý sửa review cũ. */
     public static final String REVIEW_ALREADY_EXISTS = "REVIEW_ALREADY_EXISTS";
+    /** 409: quyết định trên review không còn PENDING — đã được duyệt / từ chối / ẩn (UC28, chốt 2026-10-15). */
+    public static final String REVIEW_ALREADY_MODERATED = "REVIEW_ALREADY_MODERATED";
     /** 409: review đã bị ẩn sau báo cáo vi phạm — tác giả không sửa được (chốt 2026-10-08). */
     public static final String REVIEW_LOCKED = "REVIEW_LOCKED";
     /** 422 trường {@code parentId}: chỉ trả lời được bình luận gốc — bình luận tối đa 2 cấp (Q5). */
