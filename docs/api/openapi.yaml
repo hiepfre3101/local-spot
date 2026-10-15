@@ -1073,17 +1073,36 @@ paths:
     get:
       tags: [Moderation]
       summary: Hàng chờ review — kèm trust tác giả, cờ nghi ngờ IP (FR-36, UC28)
+      description: |
+        *(chốt 2026-10-15)* Review PENDING trên địa điểm APPROVED, FIFO theo id (= thứ tự viết; review gửi lại sau khi bị
+        từ chối giữ vị trí cũ). Review trên địa điểm đã bị ẩn không vào hàng chờ.
       x-permission: review:moderate
       parameters:
-        - { name: ipFlagged, in: query, schema: { type: boolean } }
+        - { name: ipFlagged, in: query, schema: { type: boolean }, description: Lọc theo cờ nghi ngờ IP; bỏ trống = tất cả }
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationReviewPage' } } } }
+  /moderation/reviews/{reviewId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một review — lịch sử tác giả, review cùng dải IP (UC28 bước 2)
+      description: |
+        *(thêm 2026-10-15 — sitemap có route `/admin/moderation/reviews/:id`)* Mọi trạng thái (review vừa được người khác
+        xử lý vẫn mở được để hiện kết quả); review đã xóa → 404.
+      x-permission: review:moderate
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationReviewDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /moderation/reviews/{reviewId}/decision:
     post:
       tags: [Moderation]
-      summary: Duyệt / từ chối review — từ chối ghi 1 vi phạm cho tác giả (UC28)
+      summary: Duyệt / từ chối review — từ chối ghi 1 vi phạm cho tác giả (UC28) — ghi activity_log (REVIEW_APPROVE / REVIEW_REJECT)
+      description: |
+        *(chốt 2026-10-15)* Chỉ áp dụng cho review PENDING. Duyệt → PUBLISHED, tính lại điểm Bayesian. Từ chối → REJECTED
+        kèm lý do (tác giả thấy ở `/me/reviews`) và **một vi phạm** cho tác giả (25 điểm phạt, hết hạn sau 30 ngày —
+        requirements §5.1). Kiểm duyệt viên không duyệt review của mình hay review về địa điểm mình sở hữu.
       x-permission: review:moderate
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
@@ -1093,7 +1112,13 @@ paths:
             schema: { $ref: '#/components/schemas/ModerationDecision' }
       responses:
         '204': { description: OK }
-        '409': { description: Đã được người khác xử lý (optimistic lock) }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `REVIEW_ALREADY_MODERATED` (không còn PENDING), `CONCURRENT_MODIFICATION` (`version` lệch / người khác vừa xử
+            lý — optimistic lock), `SELF_ACTION_FORBIDDEN` (review của mình / về địa điểm mình sở hữu)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
   /moderation/reports:
     get:
       tags: [Moderation]
@@ -1857,15 +1882,31 @@ components:
         reason: { type: string, maxLength: 500, description: Bắt buộc khi REJECT }
         version: { type: integer, description: 'Optimistic lock — lệch → 409' }
     ModerationReview:
-      allOf:
-        - { $ref: '#/components/schemas/Review' }
-        - type: object
-          properties:
-            place: { $ref: '#/components/schemas/PlaceSummary' }
-            authorTrustScore: { type: integer }
-            authorActiveViolations: { type: integer }
-            ipFlagged: { type: boolean }
-            sameSubnetReviewCount24h: { type: integer }
+      type: object
+      description: '*(2026-10-15)* Lồng `review` thay vì `allOf` — cùng khuôn với `ModerationPlace`'
+      properties:
+        review: { $ref: '#/components/schemas/Review' }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        authorTrustScore: { type: integer }
+        authorActiveViolations: { type: integer, description: Số vi phạm còn hiệu lực (chưa quá 30 ngày) }
+        ipFlagged: { type: boolean }
+        sameSubnetReviewCount24h:
+          type: integer
+          description: Số review khác cùng địa điểm, cùng dải IP (U3), viết trong 24 giờ trước hoặc sau review này — kể cả đã xóa, như luật gắn cờ
+    ModerationReviewDetail:
+      type: object
+      properties:
+        item: { $ref: '#/components/schemas/ModerationReview' }
+        authorJoinedAt: { type: string, format: date-time }
+        authorReviewCounts:
+          type: object
+          description: Số review của tác giả theo trạng thái (đủ 4 khóa, không tính review đã xóa)
+          additionalProperties: { type: integer }
+          examples: [ { PUBLISHED: 12, PENDING: 1, REJECTED: 2, HIDDEN: 0 } ]
+        sameSubnetReviews:
+          type: array
+          description: Review khác cùng địa điểm, cùng dải IP trong 24 giờ trước / sau (chưa xóa, tối đa 20, cũ nhất trước)
+          items: { $ref: '#/components/schemas/Review' }
     ModerationReviewPage:
       type: object
       properties:

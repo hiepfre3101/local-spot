@@ -26,4 +26,14 @@ public interface UserViolationRepository extends JpaRepository<UserViolation, Lo
             """)
     List<UserActivePoints> sumActivePointsByUserIds(
             @Param("userIds") Collection<Long> userIds, @Param("now") Instant now);
+
+    /** Số vi phạm còn hiệu lực theo người dùng (hàng chờ review — UC28); người không có vi phạm không có dòng. */
+    @Query("""
+            SELECT new com.localspot.repository.UserViolationCount(v.user.id, COUNT(v))
+            FROM UserViolation v
+            WHERE v.user.id IN :userIds AND v.expiresAt > :now
+            GROUP BY v.user.id
+            """)
+    List<UserViolationCount> countActiveByUserIds(
+            @Param("userIds") Collection<Long> userIds, @Param("now") Instant now);
 }
