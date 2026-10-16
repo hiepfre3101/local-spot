@@ -93,5 +93,14 @@ public final class ErrorCode {
     /** 409: các báo cáo về đối tượng này đã được kiểm duyệt viên khác xử lý (UC29). */
     public static final String REPORT_ALREADY_HANDLED = "REPORT_ALREADY_HANDLED";
 
+    /** 404: không có yêu cầu sở hữu / file minh chứng này (UC30). */
+    public static final String CLAIM_NOT_FOUND = "CLAIM_NOT_FOUND";
+    /** 409: địa điểm đã có chủ — mỗi địa điểm tối đa một chủ (U6, UC23 3a). */
+    public static final String PLACE_ALREADY_OWNED = "PLACE_ALREADY_OWNED";
+    /** 409: người dùng đã có yêu cầu đang chờ cho địa điểm này (FR-31, UC23 3b). */
+    public static final String CLAIM_ALREADY_PENDING = "CLAIM_ALREADY_PENDING";
+    /** 409: quyết định trên yêu cầu không còn PENDING — đã duyệt / từ chối / tự từ chối khi địa điểm có chủ (UC30). */
+    public static final String CLAIM_ALREADY_MODERATED = "CLAIM_ALREADY_MODERATED";
+
     private ErrorCode() {}
 }

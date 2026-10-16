@@ -1,5 +1,7 @@
 package com.localspot.storage;
 
+import java.net.URI;
+import java.time.Duration;
 import java.util.Collection;
 
 /**
@@ -17,4 +19,10 @@ public interface ObjectStorage {
 
     /** Xóa nhiều object; key không tồn tại được bỏ qua (xóa lặp lại an toàn). */
     void delete(Collection<String> keys);
+
+    /**
+     * Link đọc tạm cho một object riêng tư (minh chứng yêu cầu sở hữu — UC30): ai có link đọc được trong {@code ttl},
+     * hết hạn thì vô hiệu. Ký cục bộ, không gọi kho — không kiểm object có tồn tại.
+     */
+    URI presignedGetUrl(String key, Duration ttl);
 }

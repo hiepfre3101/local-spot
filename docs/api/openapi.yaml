@@ -889,6 +889,10 @@ paths:
     post:
       tags: [Owner]
       summary: Yêu cầu xác nhận sở hữu kèm minh chứng (FR-31, UC23)
+      description: |
+        *(chốt 2026-10-16)* Cần email đã xác thực. Minh chứng: 1–5 ảnh JPEG / PNG (≤ 5 MB, ≤ 40 MP — cùng kiểm tra với
+        ảnh địa điểm), lưu nguyên bản ở kho **riêng tư**, chỉ kiểm duyệt viên xem qua link tạm. Người khác đang chờ cho
+        cùng địa điểm không chặn — duyệt một yêu cầu thì các yêu cầu còn lại tự bị từ chối.
       parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
       requestBody:
         required: true
@@ -902,14 +906,20 @@ paths:
                   type: object
                   required: [contactPhone]
                   properties:
-                    contactPhone: { type: string, maxLength: 20 }
+                    contactPhone: { type: string, maxLength: 20, description: 'Chữ số và + ( ) . - khoảng trắng, 6–20 ký tự' }
                     note: { type: string, maxLength: 1000 }
                 evidence: { type: array, minItems: 1, maxItems: 5, items: { type: string, format: binary } }
             encoding:
               claim: { contentType: application/json }
       responses:
         '201': { description: 'Đã gửi, chờ duyệt' }
-        '409': { description: Địa điểm đã có chủ hoặc đã có yêu cầu đang chờ }
+        '403': { description: '`EMAIL_NOT_VERIFIED`' }
+        '404': { description: 'Địa điểm không tồn tại / chưa duyệt — `PLACE_NOT_FOUND`' }
+        '409':
+          description: '`PLACE_ALREADY_OWNED` (đã có chủ — UC23 3a), `CLAIM_ALREADY_PENDING` (bạn đã có yêu cầu đang chờ — 3b)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: 'Thiếu / quá 5 ảnh (`evidence`), ảnh hỏng (`evidence[i]`), số điện thoại sai (`contactPhone`)' }
+        '503': { description: Kho file tạm thời không khả dụng — không có gì được lưu }
   /owner/places:
     get:
       tags: [Owner]
@@ -1167,25 +1177,51 @@ paths:
     get:
       tags: [Moderation]
       summary: Hàng chờ yêu cầu sở hữu (FR-40)
+      description: '*(2026-10-16)* PENDING, FIFO theo id (= thứ tự gửi)'
       x-permission: claim:approve
       parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClaimPage' } } } }
+  /moderation/claims/{claimId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một yêu cầu sở hữu (UC30)
+      description: |
+        *(thêm 2026-10-16 — sitemap có route `/admin/moderation/claims/:id`)* Mọi trạng thái (yêu cầu vừa được người khác
+        xử lý vẫn mở được để hiện kết quả).
+      x-permission: claim:approve
+      parameters: [ { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Claim' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /moderation/claims/{claimId}/evidence/{index}:
     get:
       tags: [Moderation]
       summary: Link tạm (presigned, 5 phút) xem file minh chứng trong bucket riêng tư
+      description: |
+        *(đổi 2026-10-16: 302 → 200 JSON)* Access token chỉ nằm trong bộ nhớ và gửi bằng header (S1), nên `<img src>` trỏ
+        thẳng vào endpoint này không xác thực được, còn axios theo 302 thì JavaScript không đọc được `Location`. Client
+        gọi bằng axios, gán `url` vào ảnh; quá `expiresAt` thì gọi lại — mỗi lần gọi ký một link mới.
       x-permission: claim:approve
       parameters:
         - { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } }
         - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 } }
       responses:
-        '302': { description: Chuyển hướng tới URL tạm }
+        '200':
+          description: '`Cache-Control: no-store` — mỗi lần mở ký link mới'
+          content: { application/json: { schema: { $ref: '#/components/schemas/EvidenceLink' } } }
         '404': { $ref: '#/components/responses/NotFound' }
   /moderation/claims/{claimId}/decision:
     post:
       tags: [Moderation]
-      summary: Duyệt → gán owner + role OWNER, tự từ chối các yêu cầu khác cùng địa điểm (UC30)
+      summary: Duyệt → gán owner + role OWNER, tự từ chối các yêu cầu khác cùng địa điểm (UC30) — ghi activity_log (CLAIM_APPROVE / CLAIM_REJECT)
+      description: |
+        *(chốt 2026-10-16)* Chỉ áp dụng cho yêu cầu PENDING; không tự duyệt yêu cầu của mình.
+        **Duyệt**: khóa dòng địa điểm (hai duyệt đồng thời trên cùng địa điểm → chỉ một thành công, không bao giờ hai chủ —
+        U6); gán `places.owner_id`, thêm role OWNER nếu chưa có (có hiệu lực ngay, không cần đăng nhập lại); các yêu cầu
+        đang chờ khác của địa điểm → REJECTED kèm lý do tự động. **Review sẵn có của chủ mới** trên địa điểm → HIDDEN
+        (không ghi vi phạm) và tính lại điểm — chủ không chấm điểm địa điểm của mình.
+        **Từ chối**: `reason` bắt buộc; **không** ghi vi phạm (requirements §5.1); người dùng gửi lại được.
       x-permission: claim:approve
       parameters: [ { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } } ]
       requestBody:
@@ -1195,7 +1231,13 @@ paths:
             schema: { $ref: '#/components/schemas/ModerationDecision' }
       responses:
         '204': { description: OK }
-        '409': { description: Địa điểm đã có chủ / đã được xử lý }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `CLAIM_ALREADY_MODERATED` (không còn PENDING — kể cả bị tự từ chối vì yêu cầu khác vừa được duyệt),
+            `PLACE_ALREADY_OWNED`, `CONCURRENT_MODIFICATION` (`version` lệch), `SELF_ACTION_FORBIDDEN` (yêu cầu của mình)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
 
   # ───────────────────────────── Admin (UC31–UC33) — chỉ ADMIN ─────────────────────────────
   /admin/users:
@@ -1990,9 +2032,18 @@ components:
         claimant: { $ref: '#/components/schemas/UserSummary' }
         contactPhone: { type: string }
         note: { type: [string, 'null'] }
-        evidenceCount: { type: integer }
+        evidenceCount: { type: integer, description: 'Xem file thứ i qua `/moderation/claims/{id}/evidence/{i}`' }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        rejectReason: { type: [string, 'null'] }
+        otherPendingClaimCount: { type: integer, description: 'Số yêu cầu đang chờ khác cho cùng địa điểm — tự bị từ chối nếu duyệt yêu cầu này (2026-10-16)' }
         createdAt: { type: string, format: date-time }
         version: { type: integer }
+    EvidenceLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri, description: Link presigned tới object riêng tư — ai có link đọc được tới khi hết hạn }
+        expiresAt: { type: string, format: date-time, description: 'Không muộn hơn hạn thật của link (tính trước khi ký)' }
     ClaimPage:
       type: object
       properties:

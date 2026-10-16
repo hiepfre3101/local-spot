@@ -1,6 +1,8 @@
 package com.localspot.storage;
 
 import com.localspot.config.StorageProperties;
+import java.net.URI;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -9,6 +11,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /** {@link ObjectStorage} trên S3 API — cùng mã cho MinIO (dev) và R2 / S3 (deploy), chỉ khác cấu hình. */
 @Component
@@ -18,10 +21,12 @@ public class S3ObjectStorage implements ObjectStorage {
     private static final int DELETE_BATCH = 1000;
 
     private final S3Client s3;
+    private final S3Presigner presigner;
     private final String bucket;
 
-    public S3ObjectStorage(S3Client s3, StorageProperties properties) {
+    public S3ObjectStorage(S3Client s3, S3Presigner presigner, StorageProperties properties) {
         this.s3 = s3;
+        this.presigner = presigner;
         this.bucket = properties.bucket();
     }
 
@@ -56,6 +61,19 @@ public class S3ObjectStorage implements ObjectStorage {
             }
         } catch (SdkException e) {
             throw new StorageException("Không xóa được " + keys.size() + " object", e);
+        }
+    }
+
+    @Override
+    public URI presignedGetUrl(String key, Duration ttl) {
+        try {
+            return URI.create(presigner
+                    .presignGetObject(b -> b.signatureDuration(ttl)
+                            .getObjectRequest(r -> r.bucket(bucket).key(key)))
+                    .url()
+                    .toString());
+        } catch (SdkException e) {
+            throw new StorageException("Không ký được link cho object " + key, e);
         }
     }
 }

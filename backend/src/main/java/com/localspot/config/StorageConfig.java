@@ -12,8 +12,10 @@ import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
-/** S3 client dùng chung cho kho ảnh ({@link StorageProperties}). */
+/** S3 client dùng chung cho kho ảnh ({@link StorageProperties}) và bộ ký link tạm cho object riêng tư. */
 @Configuration(proxyBeanMethods = false)
 public class StorageConfig {
 
@@ -31,6 +33,25 @@ public class StorageConfig {
                 .httpClient(UrlConnectionHttpClient.builder()
                         .connectionTimeout(Duration.ofSeconds(3))
                         .socketTimeout(Duration.ofSeconds(30))
+                        .build());
+        if (properties.endpoint() != null && !properties.endpoint().isBlank()) {
+            builder.endpointOverride(URI.create(properties.endpoint()));
+        }
+        return builder.build();
+    }
+
+    /**
+     * Ký link tạm cho minh chứng yêu cầu sở hữu (UC30). Cùng endpoint / path-style với {@link #s3Client}: dev là
+     * {@code http://localhost:9000} — trình duyệt của kiểm duyệt viên mở được trực tiếp.
+     */
+    @Bean(destroyMethod = "close")
+    S3Presigner s3Presigner(StorageProperties properties) {
+        S3Presigner.Builder builder = S3Presigner.builder()
+                .region(Region.of(properties.region()))
+                .credentialsProvider(StaticCredentialsProvider.create(
+                        AwsBasicCredentials.create(properties.accessKey(), properties.secretKey())))
+                .serviceConfiguration(S3Configuration.builder()
+                        .pathStyleAccessEnabled(properties.pathStyleAccess())
                         .build());
         if (properties.endpoint() != null && !properties.endpoint().isBlank()) {
             builder.endpointOverride(URI.create(properties.endpoint()));

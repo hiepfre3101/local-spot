@@ -1,5 +1,7 @@
 package com.localspot.storage;
 
+import java.net.URI;
+import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +37,13 @@ public class InMemoryObjectStorage implements ObjectStorage {
     public void delete(Collection<String> keys) {
         checkAvailable();
         keys.forEach(objects::remove);
+    }
+
+    /** Link giả, đủ để test khẳng định key và thời hạn được dùng. */
+    @Override
+    public URI presignedGetUrl(String key, Duration ttl) {
+        checkAvailable();
+        return URI.create("https://storage.test/" + key + "?X-Amz-Expires=" + ttl.toSeconds());
     }
 
     public boolean contains(String key) {
