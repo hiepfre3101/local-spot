@@ -1002,6 +1002,10 @@ paths:
     put:
       tags: [Owner]
       summary: Chủ phản hồi review — tạo hoặc sửa, 1 phản hồi / review (FR-33, D6)
+      description: |
+        *(chốt 2026-10-16)* Chỉ chủ **hiện tại** của địa điểm chứa review; chỉ review đang hiện công khai (PUBLISHED trên
+        địa điểm APPROVED) — review khác → 404. `content` cắt khoảng trắng hai đầu. Chủ hiện tại sửa phản hồi của chủ trước
+        → phản hồi đứng tên chủ hiện tại. Phản hồi hiện ở `Review.ownerReply`.
       x-permission: review:reply-own-place
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
@@ -1016,13 +1020,20 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OwnerReply' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review không tồn tại / không đang hiện — `REVIEW_NOT_FOUND`' }
+        '422': { description: '`content` trống hoặc quá 2000 ký tự' }
     delete:
       tags: [Owner]
       summary: Chủ xóa phản hồi
+      description: |
+        *(chốt 2026-10-16)* Xóa hẳn (bảng không có xóa mềm). Idempotent — chưa có phản hồi vẫn 204. Xóa được cả khi review
+        đã bị ẩn sau đó.
       x-permission: review:reply-own-place
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       responses:
         '204': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review không tồn tại / đã xóa — `REVIEW_NOT_FOUND`' }
 
   # ───────────────────────────── Moderation (UC27–UC30) — MODERATOR, ADMIN ─────────────────────────────
   /moderation/queue:

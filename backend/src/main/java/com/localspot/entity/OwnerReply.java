@@ -52,6 +52,11 @@ public class OwnerReply extends AuditableEntity {
         return user;
     }
 
+    /** Chủ hiện tại sửa phản hồi của chủ trước → phản hồi đứng tên chủ hiện tại. */
+    public void setUser(User user) {
+        this.user = user;
+    }
+
     public String getContent() {
         return content;
     }
