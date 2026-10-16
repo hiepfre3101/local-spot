@@ -274,4 +274,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     /** Lịch sử tác giả (UC28 bước 2): mỗi dòng {@code [status, count]} của các review chưa xóa. */
     @Query("SELECT r.status, COUNT(r) FROM Review r WHERE r.user.id = :userId GROUP BY r.status")
     List<Object[]> countByStatusOfAuthor(@Param("userId") Long userId);
+
+    /** Review (chưa xóa) của người dùng cho địa điểm — ẩn review của chủ mới khi duyệt yêu cầu sở hữu (UC30). */
+    Optional<Review> findByPlaceIdAndUserId(Long placeId, Long userId);
 }
