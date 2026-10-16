@@ -56,8 +56,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       xác nhận; người dùng gửi lại được.
  * </ul>
  *
- * Mỗi quyết định ghi {@code activity_log} (FR-42). Thông báo cho người yêu cầu (và kiểm duyệt viên khi có yêu cầu mới)
- * gắn ở mục thông báo.
+ * Mỗi quyết định ghi {@code activity_log} (FR-42) và thông báo kết quả cho người yêu cầu — kể cả các yêu cầu bị tự từ
+ * chối.
  */
 @Service
 public class ClaimModerationService {
@@ -80,6 +80,7 @@ public class ClaimModerationService {
     private final ReviewMapper userMapper;
     private final ObjectStorage storage;
     private final ApplicationEventPublisher events;
+    private final NotificationService notifications;
     private final Clock clock;
 
     public ClaimModerationService(
@@ -92,6 +93,7 @@ public class ClaimModerationService {
             ReviewMapper userMapper,
             ObjectStorage storage,
             ApplicationEventPublisher events,
+            NotificationService notifications,
             Clock clock) {
         this.claims = claims;
         this.places = places;
@@ -102,6 +104,7 @@ public class ClaimModerationService {
         this.userMapper = userMapper;
         this.storage = storage;
         this.events = events;
+        this.notifications = notifications;
         this.clock = clock;
     }
 
@@ -210,6 +213,8 @@ public class ClaimModerationService {
         others.forEach(other -> markReviewed(other, ClaimStatus.REJECTED, AUTO_REJECT_REASON, moderatorId, now));
 
         Long hiddenReviewId = hideOwnerReview(placeId, owner.getId());
+        notifications.claimDecided(claim, true, null, hiddenReviewId);
+        others.forEach(other -> notifications.claimDecided(other, false, AUTO_REJECT_REASON, null));
         return new Approval(placeId, owner.getId(), others.size(), hiddenReviewId);
     }
 
@@ -226,6 +231,7 @@ public class ClaimModerationService {
         }
         PlaceClaim claim = pendingClaimFor(moderatorId, claimId, version);
         markReviewed(claim, ClaimStatus.REJECTED, reason.strip(), moderatorId, clock.instant());
+        notifications.claimDecided(claim, false, reason.strip(), null);
     }
 
     /** Review (chưa xóa) của chủ mới trên địa điểm → HIDDEN; trả id review đã ẩn, {@code null} nếu không có. */

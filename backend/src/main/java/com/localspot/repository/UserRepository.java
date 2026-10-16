@@ -104,4 +104,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Mọi tài khoản chưa xóa, tăng dần — job đêm đối soát điểm / huy hiệu. */
     @Query(value = "SELECT id FROM users WHERE deleted_at IS NULL ORDER BY id", nativeQuery = true)
     List<Long> findAllActiveIds();
+
+    /** Người dùng (chưa xóa) có permission qua một role nào đó — gửi thông báo cho đội kiểm duyệt (UC23 bước 5). */
+    @Query("SELECT DISTINCT u.id FROM User u JOIN u.roles r JOIN r.permissions p WHERE p.name = :permission")
+    List<Long> findIdsWithPermission(@Param("permission") String permission);
 }

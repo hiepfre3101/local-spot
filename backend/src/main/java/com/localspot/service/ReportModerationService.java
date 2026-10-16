@@ -51,8 +51,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>Hai kiểm duyệt viên cùng lúc: khóa các báo cáo đang mở → người sau 409 {@code REPORT_ALREADY_HANDLED}.
  * </ul>
  *
- * Mỗi quyết định ghi {@code activity_log} (FR-42) với loại / id của đối tượng bị báo cáo. Thông báo cho tác giả và người
- * báo cáo (UC29 bước 5) gắn vào đây ở mục thông báo.
+ * Mỗi quyết định ghi {@code activity_log} (FR-42) với loại / id của đối tượng bị báo cáo. Ẩn → thông báo cho người liên quan và người
+ * báo cáo (UC29 bước 5); bỏ qua không thông báo (chỉ các sự kiện trong UC — chốt 2026-10-16).
  */
 @Service
 public class ReportModerationService {
@@ -67,6 +67,7 @@ public class ReportModerationService {
     private final ReportRepository reports;
     private final ReportTargets targets;
     private final ViolationService violations;
+    private final NotificationService notifications;
     private final UserRepository users;
     private final CommunityMapper mapper;
     private final Clock clock;
@@ -75,12 +76,14 @@ public class ReportModerationService {
             ReportRepository reports,
             ReportTargets targets,
             ViolationService violations,
+            NotificationService notifications,
             UserRepository users,
             CommunityMapper mapper,
             Clock clock) {
         this.reports = reports;
         this.targets = targets;
         this.violations = violations;
+        this.notifications = notifications;
         this.users = users;
         this.mapper = mapper;
         this.clock = clock;
@@ -182,6 +185,8 @@ public class ReportModerationService {
         Optional<ReportTargets.Target> found = targets.find(request.targetType(), request.targetId());
         if (found.isEmpty()) {
             close(open, ReportStatus.RESOLVED, moderatorId);
+            notifications.reportActionTaken(
+                    request.targetType().name(), request.targetId(), null, null, false, List.of(), reportersOf(open));
             return new Outcome(open.size(), true, false);
         }
         ReportTargets.Target target = found.get();
@@ -199,6 +204,14 @@ public class ReportModerationService {
                     moderatorId);
         }
         close(open, ReportStatus.RESOLVED, moderatorId);
+        notifications.reportActionTaken(
+                target.type().name(),
+                target.id(),
+                target.preview(),
+                confirmed == null ? null : confirmed.name(),
+                violation,
+                targets.affectedUserIds(target),
+                reportersOf(open));
         return new Outcome(open.size(), false, violation);
     }
 
@@ -215,6 +228,10 @@ public class ReportModerationService {
         target.ifPresent(t -> requireNotInvolved(t, moderatorId));
         close(open, ReportStatus.DISMISSED, moderatorId);
         return new Outcome(open.size(), target.isEmpty(), false);
+    }
+
+    private static List<Long> reportersOf(List<Report> open) {
+        return open.stream().map(r -> r.getReporter().getId()).toList();
     }
 
     private List<Report> lockOpen(ReportDecisionRequest request) {

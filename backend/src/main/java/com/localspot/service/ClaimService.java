@@ -50,6 +50,7 @@ public class ClaimService {
     private final ImageInspector inspector;
     private final ObjectStorage storage;
     private final ApplicationEventPublisher events;
+    private final NotificationService notifications;
 
     public ClaimService(
             PlaceClaimRepository claims,
@@ -57,6 +58,7 @@ public class ClaimService {
             UserRepository users,
             ImageInspector inspector,
             ObjectStorage storage,
+            NotificationService notifications,
             ApplicationEventPublisher events) {
         this.claims = claims;
         this.places = places;
@@ -64,6 +66,7 @@ public class ClaimService {
         this.inspector = inspector;
         this.storage = storage;
         this.events = events;
+        this.notifications = notifications;
     }
 
     @Transactional
@@ -109,7 +112,9 @@ public class ClaimService {
             throw PhotoFiles.storageUnavailable();
         }
         events.publishEvent(new ClaimEvidenceStoredEvent(keys));
-        claims.save(new PlaceClaim(place, claimant, request.contactPhone().strip(), noteOf(request), keys));
+        PlaceClaim claim = claims.save(
+                new PlaceClaim(place, claimant, request.contactPhone().strip(), noteOf(request), keys));
+        notifications.claimSubmitted(claim); // đội kiểm duyệt (UC23 bước 5)
     }
 
     /** Cả lô kiểm tra trước khi ghi gì — một file hỏng thì cả yêu cầu bị từ chối, lỗi chỉ đúng {@code evidence[i]}. */

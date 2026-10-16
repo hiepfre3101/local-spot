@@ -27,7 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  *       khi chưa có phản hồi vẫn 204 (idempotent, như bỏ vote).
  * </ul>
  *
- * Thông báo cho tác giả review (FR-33) gắn ở mục thông báo.
+ * Phản hồi lần đầu thông báo cho tác giả review (FR-33).
  */
 @Service
 public class OwnerReplyService {
@@ -36,13 +36,19 @@ public class OwnerReplyService {
     private final ReviewRepository reviews;
     private final UserRepository users;
     private final ReviewMapper mapper;
+    private final NotificationService notifications;
 
     public OwnerReplyService(
-            OwnerReplyRepository replies, ReviewRepository reviews, UserRepository users, ReviewMapper mapper) {
+            OwnerReplyRepository replies,
+            ReviewRepository reviews,
+            UserRepository users,
+            ReviewMapper mapper,
+            NotificationService notifications) {
         this.replies = replies;
         this.reviews = reviews;
         this.users = users;
         this.mapper = mapper;
+        this.notifications = notifications;
     }
 
     @Transactional
@@ -56,6 +62,7 @@ public class OwnerReplyService {
         OwnerReply reply = replies.findByReviewId(reviewId).orElse(null);
         if (reply == null) {
             reply = new OwnerReply(review, owner, text);
+            notifications.ownerReplied(review, ownerId); // chỉ lần đầu — sửa phản hồi không gửi lại
         } else {
             reply.setContent(text);
             reply.setUser(owner);

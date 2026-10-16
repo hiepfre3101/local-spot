@@ -20,9 +20,11 @@ import com.localspot.repository.UserRepository;
 import java.time.Clock;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -125,6 +127,22 @@ class ReportTargets {
             return owner != null && owner.getId().equals(moderatorId);
         }
         return false;
+    }
+
+    /**
+     * Người nhận thông báo "nội dung của bạn đã bị xử lý" (UC29 bước 5): tác giả / người đề xuất / người bị báo cáo; ẩn địa
+     * điểm thì cả chủ — việc kinh doanh của họ biến khỏi trang công khai.
+     */
+    Set<Long> affectedUserIds(Target target) {
+        Set<Long> ids = new LinkedHashSet<>();
+        ids.add(target.author().getId());
+        if (target.type() == ReportTargetType.PLACE) {
+            User owner = places.getReferenceById(target.id()).getOwner();
+            if (owner != null) {
+                ids.add(owner.getId());
+            }
+        }
+        return ids;
     }
 
     /**

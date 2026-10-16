@@ -52,8 +52,8 @@ import org.springframework.transaction.annotation.Transactional;
  * </ul>
  *
  * Duyệt phát {@link ReviewChangedEvent} (tập PUBLISHED đổi → Bayesian, điểm đóng góp, cache trang chủ tự cập nhật); từ
- * chối thì không — review PENDING chưa từng được tính. Mỗi quyết định ghi {@code activity_log} (FR-42). Thông báo cho
- * tác giả / chủ địa điểm (UC28 bước 4, 3a) gắn vào đây ở mục thông báo.
+ * chối thì không — review PENDING chưa từng được tính. Mỗi quyết định ghi {@code activity_log} (FR-42). Tác giả nhận
+ * kết quả, chủ địa điểm nhận review mới khi được duyệt (UC28 bước 4, 3a).
  */
 @Service
 public class ReviewModerationService {
@@ -70,6 +70,7 @@ public class ReviewModerationService {
     private final PlaceSummaries summaries;
     private final ReviewProperties reviewProperties;
     private final ApplicationEventPublisher events;
+    private final NotificationService notifications;
     private final Clock clock;
 
     public ReviewModerationService(
@@ -82,6 +83,7 @@ public class ReviewModerationService {
             PlaceSummaries summaries,
             ReviewProperties reviewProperties,
             ApplicationEventPublisher events,
+            NotificationService notifications,
             Clock clock) {
         this.reviews = reviews;
         this.users = users;
@@ -92,6 +94,7 @@ public class ReviewModerationService {
         this.summaries = summaries;
         this.reviewProperties = reviewProperties;
         this.events = events;
+        this.notifications = notifications;
         this.clock = clock;
     }
 
@@ -197,6 +200,8 @@ public class ReviewModerationService {
         markModerated(review, moderatorId);
         events.publishEvent(new ReviewChangedEvent(
                 reviewId, review.getPlace().getId(), ReviewStatus.PENDING, ReviewStatus.PUBLISHED));
+        notifications.reviewModerated(review, true, null);
+        notifications.reviewPublished(review);
     }
 
     @Transactional
@@ -214,6 +219,7 @@ public class ReviewModerationService {
         review.setRejectReason(reason.strip());
         markModerated(review, moderatorId);
         violations.record(review.getUser(), ViolationSourceType.REVIEW_REJECTED, reviewId, moderatorId);
+        notifications.reviewModerated(review, false, reason.strip());
     }
 
     private Review pendingReviewFor(Long moderatorId, Long reviewId, Integer version) {
