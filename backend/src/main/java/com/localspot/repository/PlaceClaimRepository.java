@@ -44,6 +44,10 @@ public interface PlaceClaimRepository extends JpaRepository<PlaceClaim, Long> {
             """)
     List<PlaceClaim> findOtherPending(@Param("placeId") Long placeId, @Param("claimId") Long claimId);
 
+    /** Mỗi dòng {@code [claimId, placeName]} — tiêu đề trên hàng chờ gộp, một truy vấn cho cả trang. */
+    @Query("SELECT c.id, p.name FROM PlaceClaim c JOIN c.place p WHERE c.id IN :ids")
+    List<Object[]> findPlaceNamesByIdIn(@Param("ids") Collection<Long> ids);
+
     /** Mỗi dòng {@code [placeId, count]}: số yêu cầu đang chờ theo địa điểm — một truy vấn cho cả trang hàng chờ. */
     @Query("""
             SELECT c.place.id, COUNT(c) FROM PlaceClaim c

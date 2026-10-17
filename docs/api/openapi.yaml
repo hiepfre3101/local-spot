@@ -995,6 +995,11 @@ paths:
     get:
       tags: [Owner]
       summary: Thống kê địa điểm — lượt xem, check-in, phân bố sao (FR-34)
+      description: |
+        *(chốt 2026-10-17)* Chỉ chủ **hiện tại** (403 / 404 như sửa địa điểm); địa điểm đang bị ẩn vẫn xem được.
+        `[from, to]` tính cả hai đầu theo ngày giờ Việt Nam, mặc định 30 ngày đến hôm nay, tối đa 366 ngày.
+        Chuỗi theo ngày đủ mọi ngày (ngày trống = 0). `ratingDistribution`, `bayesianScore`, `reviewCount` là hiện trạng,
+        cùng số với trang chi tiết.
       x-permission: place:stats-own
       parameters:
         - { $ref: '#/components/parameters/PlaceId' }
@@ -1003,6 +1008,8 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceStats' } } } }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: '`PLACE_NOT_FOUND`' }
+        '422': { description: '`from` sau `to`, hoặc khoảng quá 366 ngày' }
   /reviews/{reviewId}/reply:
     put:
       tags: [Owner]
@@ -1047,8 +1054,13 @@ paths:
       summary: Hàng chờ gộp 4 loại việc, FIFO — cũ nhất trước, không đổi thứ tự
       description: |
         Chỉ gồm các loại người gọi có quyền (`place:approve`, `review:moderate`, `report:handle`, `claim:approve`).
-        Sắp xếp cố định `(submittedAt, type, id)` tăng dần; cursor mã hóa bộ ba này (keyset, không OFFSET).
+        Sắp xếp cố định `(submittedAt, type, id)` tăng dần (`type` theo thứ tự PLACE, REVIEW, REPORT, CLAIM; nhóm báo cáo
+        xếp theo báo cáo đầu tiên); cursor mã hóa bộ ba này (keyset, không OFFSET).
         Xử lý từng mục qua endpoint `decision` của loại tương ứng.
+
+        *(chốt 2026-10-17)* Mỗi loại dùng **đúng điều kiện** của hàng chờ riêng (`/moderation/places`, `/reviews`,
+        `/reports`, `/claims`) — review trên địa điểm đã ẩn không vào. `position` tính lại theo hàng chờ hiện tại: mục
+        phía trước được xử lý thì trang sau đánh số lùi lên. `type` là loại không có quyền → 403 (không trả rỗng).
       x-permission: 'any of: place:approve, review:moderate, report:handle, claim:approve'
       parameters:
         - { name: type, in: query, schema: { $ref: '#/components/schemas/ModerationItemType' }, description: Lọc theo loại; bỏ trống = tất cả }
@@ -1056,6 +1068,8 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationQueuePage' } } } }
+        '403': { description: 'Không có quyền kiểm duyệt nào, hoặc `type` là loại không có quyền — `FORBIDDEN`' }
+        '422': { description: '`INVALID_CURSOR`; `limit` ngoài 1–50' }
   /moderation/places:
     get:
       tags: [Moderation]
@@ -1405,16 +1419,31 @@ paths:
     get:
       tags: [Admin]
       summary: Thống kê — người dùng mới, review theo ngày, địa điểm hot (FR-41)
+      description: |
+        *(chốt 2026-10-17 — gộp openapi gốc với AdminDashboard)* `[from, to]` cả hai đầu, ngày giờ Việt Nam, mặc định
+        14 ngày đến hôm nay, tối đa 366 ngày; `previousTotals` là kỳ liền trước cùng số ngày. Đếm thẳng trên bảng gốc,
+        không cache. Không có xuất CSV (không có trong FR / UC).
+
+        - `newUsersByDay`, `reviewsByDay`, `totals`: lượng **hoạt động** — mọi tài khoản / review được gửi / báo cáo nhận,
+          kể cả bị xóa / ẩn / từ chối sau đó (số liệu quá khứ không đổi theo thời gian).
+        - `reviewsByCity`, `hotPlaces`: chỉ review **đang hiện** (PUBLISHED trên địa điểm APPROVED, chưa xóa) viết trong
+          khoảng. Hot = nhiều review như vậy nhất, cùng số thì điểm Bayesian cao hơn trước.
+        - `pendingCounts`: việc tồn hiện tại, cùng định nghĩa với `/moderation/queue`.
       x-permission: dashboard:view
       parameters:
         - { name: from, in: query, schema: { type: string, format: date } }
         - { name: to, in: query, schema: { type: string, format: date } }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: '`from` sau `to`, hoặc khoảng quá 366 ngày' }
   /admin/activity-log:
     get:
       tags: [Admin]
       summary: Nhật ký thao tác quản trị (FR-42)
+      description: |
+        *(chốt 2026-10-17)* Mới nhất trước (keyset theo id). `action` so khớp chính xác (vd. `REVIEW_REJECT`).
+        Người thao tác đã xóa tài khoản vẫn hiện (tên đã ẩn danh hóa). Không trả `ip_address`.
       x-permission: dashboard:view
       parameters:
         - { name: actorId, in: query, schema: { type: integer, format: int64 } }
@@ -1773,8 +1802,10 @@ components:
     PlaceStats:
       type: object
       properties:
-        viewsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
-        checkinsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        viewsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        checkinsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
         ratingDistribution: { type: object, additionalProperties: { type: integer } }
         bayesianScore: { type: number }
         reviewCount: { type: integer }
@@ -1991,17 +2022,21 @@ components:
       enum: [PLACE, REVIEW, REPORT, CLAIM]
     ModerationQueueItem:
       type: object
-      required: [position, type, id, title, submittedAt]
+      required: [position, type, id, submittedAt, flags]
       properties:
         position: { type: integer, description: Thứ tự xử lý (1 = cũ nhất) trong bộ lọc hiện tại }
         type: { $ref: '#/components/schemas/ModerationItemType' }
         id: { type: integer, format: int64, description: 'id của place / review / claim; với REPORT là id đối tượng bị báo cáo (nhóm theo targetType + targetId)' }
         reportTargetType: { $ref: '#/components/schemas/ReportTargetType' }
-        title: { type: string, description: Tên địa điểm / trích đoạn review / đối tượng bị báo cáo }
-        submittedBy: { type: string, description: Tên người gửi (báo cáo nhóm → người báo cáo đầu tiên) }
+        title:
+          type: [string, 'null']
+          description: |
+            PLACE, CLAIM: tên địa điểm · REVIEW: "tên địa điểm — trích đoạn" · REPORT: mô tả đối tượng như
+            `ReportGroup.targetPreview` (`null` khi đối tượng đã bị xóa)
+        submittedBy: { type: [string, 'null'], description: Tên người gửi (báo cáo nhóm → người báo cáo đầu tiên); `null` khi tài khoản đã xóa }
         submittedAt: { type: string, format: date-time, description: Thời điểm gửi — khóa sắp xếp FIFO }
-        flags: { type: array, items: { type: string, enum: [IP_FLAGGED, LOW_TRUST] } }
-        reportCount: { type: integer, description: Chỉ với REPORT }
+        flags: { type: array, items: { type: string, enum: [IP_FLAGGED, LOW_TRUST] }, description: 'Chỉ với REVIEW — lý do bị giữ lại (FR-23): cờ IP, trust tác giả dưới ngưỡng đăng ngay' }
+        reportCount: { type: [integer, 'null'], description: Chỉ với REPORT }
     ModerationQueuePage:
       type: object
       properties:
@@ -2097,19 +2132,48 @@ components:
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
         nextCursor: { type: [string, 'null'] }
+    DailyCount:
+      type: object
+      description: Một ngày (giờ Việt Nam); chuỗi luôn đủ mọi ngày trong khoảng, ngày trống = 0
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer }
+    DashboardTotals:
+      type: object
+      properties:
+        newUsers: { type: integer }
+        reviews: { type: integer, description: Review được gửi (mọi trạng thái) }
+        reports: { type: integer, description: Báo cáo nhận được (mọi trạng thái) }
     Dashboard:
       type: object
       properties:
-        newUsersByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
-        reviewsByDay: { type: array, items: { type: object, properties: { date: { type: string, format: date }, count: { type: integer } } } }
-        hotPlaces: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        generatedAt: { type: string, format: date-time }
+        totals: { $ref: '#/components/schemas/DashboardTotals' }
+        previousTotals: { $ref: '#/components/schemas/DashboardTotals', description: Kỳ liền trước cùng số ngày — để vẽ ▲▼ }
+        newUsersByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        reviewsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        reviewsByCity:
+          type: array
+          description: Tối đa 5 thành phố — "Khu vực nhiều đánh giá"
+          items: { type: object, properties: { city: { type: string }, reviewCount: { type: integer } } }
+        hotPlaces:
+          type: array
+          description: Tối đa 10
+          items:
+            type: object
+            properties:
+              place: { $ref: '#/components/schemas/PlaceSummary' }
+              newReviewCount: { type: integer, description: Review đang hiện viết trong khoảng — tiêu chí xếp hạng }
         pendingCounts:
           type: object
           properties:
             places: { type: integer }
             reviews: { type: integer }
-            reports: { type: integer }
+            reports: { type: integer, description: Số đối tượng có báo cáo mở — bằng số mục REPORT của hàng chờ }
             claims: { type: integer }
+            oldestSubmittedAt: { type: [string, 'null'], format: date-time, description: Việc tồn cũ nhất (mọi loại); `null` khi hàng chờ trống }
     ActivityLogEntry:
       type: object
       properties:

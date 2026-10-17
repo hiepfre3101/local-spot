@@ -285,8 +285,11 @@ public class PlaceService {
                         photos.gallery(place.getId(), seesUnreadyPhotos)));
     }
 
-    /** Đủ 5 mức sao (mức không có review = 0) để frontend vẽ biểu đồ không phải tự điền chỗ trống. */
-    private Map<Integer, Long> ratingDistribution(Long placeId) {
+    /**
+     * Đủ 5 mức sao (mức không có review = 0) để frontend vẽ biểu đồ không phải tự điền chỗ trống. Dùng chung với thống
+     * kê của chủ ({@link PlaceStatsService}) — hai màn luôn cùng số.
+     */
+    Map<Integer, Long> ratingDistribution(Long placeId) {
         Map<Integer, Long> distribution = emptyDistribution();
         for (Object[] row : reviews.countPublishedByRating(placeId)) {
             distribution.put(((Number) row[0]).intValue(), ((Number) row[1]).longValue());

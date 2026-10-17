@@ -3,14 +3,18 @@ package com.localspot.controller;
 import com.localspot.dto.request.PlaceUpdateRequest;
 import com.localspot.dto.response.PhotoResponse;
 import com.localspot.dto.response.PlaceDetailResponse;
+import com.localspot.dto.response.PlaceStatsResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.OwnershipPermissionEvaluator;
 import com.localspot.security.Permissions;
 import com.localspot.service.PlacePhotoService;
 import com.localspot.service.PlaceService;
+import com.localspot.service.PlaceStatsService;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -37,10 +42,13 @@ public class OwnerPlaceController {
 
     private final PlaceService placeService;
     private final PlacePhotoService photoService;
+    private final PlaceStatsService statsService;
 
-    public OwnerPlaceController(PlaceService placeService, PlacePhotoService photoService) {
+    public OwnerPlaceController(
+            PlaceService placeService, PlacePhotoService photoService, PlaceStatsService statsService) {
         this.placeService = placeService;
         this.photoService = photoService;
+        this.statsService = statsService;
     }
 
     @GetMapping
@@ -77,5 +85,16 @@ public class OwnerPlaceController {
             + Permissions.PLACE_UPDATE_OWN + "')")
     public void deletePhoto(@PathVariable Long placeId, @PathVariable Long photoId) {
         photoService.delete(placeId, photoId);
+    }
+
+    /** UC26 (FR-34): lượt xem, check-in theo ngày, phân bố sao — {@code from} / {@code to} mặc định 30 ngày đến hôm nay. */
+    @GetMapping("/{placeId}/stats")
+    @PreAuthorize("hasPermission(#placeId, '" + OwnershipPermissionEvaluator.PLACE + "', '"
+            + Permissions.PLACE_STATS_OWN + "')")
+    public PlaceStatsResponse stats(
+            @PathVariable Long placeId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return statsService.stats(placeId, from, to);
     }
 }
