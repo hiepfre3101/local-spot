@@ -60,6 +60,7 @@ public class ReviewService {
     private final ReviewViews views;
     private final ReviewPhotoService photos;
     private final ApplicationEventPublisher events;
+    private final NotificationService notifications;
     private final Clock clock;
 
     public ReviewService(
@@ -73,6 +74,7 @@ public class ReviewService {
             ReviewViews views,
             ReviewPhotoService photos,
             ApplicationEventPublisher events,
+            NotificationService notifications,
             Clock clock) {
         this.reviews = reviews;
         this.places = places;
@@ -84,6 +86,7 @@ public class ReviewService {
         this.views = views;
         this.photos = photos;
         this.events = events;
+        this.notifications = notifications;
         this.clock = clock;
     }
 
@@ -138,6 +141,7 @@ public class ReviewService {
         photos.store(review, userId, images); // ảnh xử lý nền (UC12 bước 9)
         if (status == ReviewStatus.PUBLISHED) {
             events.publishEvent(new ReviewChangedEvent(review.getId(), placeId, null, status));
+            notifications.reviewPublished(review); // chủ địa điểm (UC12 bước 8)
         }
         return views.of(review, userId);
     }

@@ -110,6 +110,10 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error")
                         .permitAll()
+                        // Bắt tay WebSocket thông báo (FR-27, chốt 2026-10-16): trình duyệt không gắn được header
+                        // Authorization vào handshake — xác thực ở khung STOMP CONNECT (StompAuthInterceptor)
+                        .requestMatchers(HttpMethod.GET, "/ws")
+                        .permitAll()
                         .anyRequest()
                         .authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtConverter))

@@ -19,7 +19,10 @@ info:
     - Phân quyền ghi trong `x-permission` của từng operation (khớp bảng `permissions`).
     - Nhóm đường dẫn theo vai trò: công khai / thành viên ở gốc, `/owner/*` chủ địa điểm, `/moderation/*` kiểm duyệt viên, `/admin/*` quản trị viên.
     - Chi tiết địa điểm tra theo `slug` (`/places/{slug}`, thân thiện SEO — plan §6); mọi thao tác ghi dùng `placeId`.
-    - Realtime: STOMP qua WebSocket `/ws`, kênh cá nhân `/user/queue/notifications` (FR-27).
+    - Realtime: STOMP qua WebSocket thuần `/ws` (không SockJS — chốt 2026-10-16), kênh cá nhân `/user/queue/notifications`
+      (FR-27). Gửi `Authorization: Bearer <accessToken>` trong khung **CONNECT** (trình duyệt không gắn được header vào
+      handshake); thiếu / sai token → ERROR rồi đóng phiên. Chỉ được SUBSCRIBE kênh cá nhân, không SEND. Mỗi khung là một
+      `Notification` vừa được ghi; mất kết nối thì đọc lại qua `GET /me/notifications`. Token chỉ kiểm lúc CONNECT.
 servers:
   - url: http://localhost:8080/api/v1
     description: Dev
@@ -258,6 +261,7 @@ paths:
     get:
       tags: [Me]
       summary: Thông báo (FR-27)
+      description: '*(chốt 2026-10-16)* Mới nhất trước (keyset theo id). Loại và `data` xem schema `Notification`.'
       parameters:
         - { $ref: '#/components/parameters/Cursor' }
         - { $ref: '#/components/parameters/Limit' }
@@ -278,6 +282,7 @@ paths:
     post:
       tags: [Me]
       summary: Đánh dấu đã đọc
+      description: 'Idempotent — đã đọc thì giữ thời điểm đọc cũ. Thông báo của người khác → 404 `NOTIFICATION_NOT_FOUND`.'
       parameters: [ { $ref: '#/components/parameters/NotificationId' } ]
       responses:
         '204': { description: OK }
@@ -1914,9 +1919,25 @@ components:
     # ── Notification ──
     Notification:
       type: object
+      description: |
+        *(chốt 2026-10-16 — chỉ các sự kiện trong UC)* `data` là ảnh chụp lúc gửi; mọi loại về địa điểm có `placeId`,
+        `placeName`, `placeSlug`.
+        | `type` | Người nhận | `data` thêm |
+        |---|---|---|
+        | `PLACE_APPROVED` / `PLACE_REJECTED` | người đề xuất | `reason` (từ chối) |
+        | `REVIEW_PUBLISHED` / `REVIEW_REJECTED` | tác giả (review từ hàng chờ) | `reviewId`, `reason` (từ chối) |
+        | `NEW_REVIEW_ON_MY_PLACE` | chủ địa điểm | `reviewId`, `rating`, `authorName` |
+        | `OWNER_REPLIED` | tác giả review (chỉ lần phản hồi đầu) | `reviewId` |
+        | `REPORT_ACTION_TAKEN` | tác giả / người đề xuất / chủ / người bị báo cáo | `targetType`, `targetId`, `preview`, `confirmedReason`, `violation` |
+        | `REPORT_RESOLVED` | người báo cáo (khi ẩn; bỏ qua không gửi) | `targetType`, `targetId`, `preview` |
+        | `CLAIM_SUBMITTED` | mọi kiểm duyệt viên trừ người gửi | `claimId` |
+        | `CLAIM_APPROVED` / `CLAIM_REJECTED` | người yêu cầu (gồm tự từ chối) | `claimId`, `reason`, `hiddenReviewId` (nếu có) |
       properties:
         id: { type: integer, format: int64 }
-        type: { type: string, examples: [REVIEW_PUBLISHED, REVIEW_REJECTED, PLACE_APPROVED, OWNER_REPLIED, NEW_REVIEW_ON_MY_PLACE] }
+        type:
+          type: string
+          enum: [PLACE_APPROVED, PLACE_REJECTED, REVIEW_PUBLISHED, REVIEW_REJECTED, NEW_REVIEW_ON_MY_PLACE, OWNER_REPLIED,
+                 REPORT_ACTION_TAKEN, REPORT_RESOLVED, CLAIM_SUBMITTED, CLAIM_APPROVED, CLAIM_REJECTED]
         data: { type: object, additionalProperties: true }
         readAt: { type: [string, 'null'], format: date-time }
         createdAt: { type: string, format: date-time }

@@ -33,8 +33,8 @@ import org.springframework.transaction.annotation.Transactional;
  *       {@code CONCURRENT_MODIFICATION}; client gửi kèm {@code version} đang thấy thì lệch cũng 409 ngay.
  * </ul>
  *
- * Mỗi quyết định ghi {@code activity_log} qua {@link AuditedAction} (FR-42). Thông báo cho người đề xuất (UC11 hậu điều
- * kiện) gắn vào đây ở mục thông báo. Duyệt thì đồng bộ index tìm kiếm sau commit (FR-35, {@link PlaceIndexChangedEvent});
+ * Mỗi quyết định ghi {@code activity_log} qua {@link AuditedAction} (FR-42). Người đề xuất nhận thông báo kết quả (UC11 hậu
+ * điều kiện). Duyệt thì đồng bộ index tìm kiếm sau commit (FR-35, {@link PlaceIndexChangedEvent});
  * từ chối thì không — địa điểm PENDING chưa từng có trong index.
  */
 @Service
@@ -45,6 +45,7 @@ public class PlaceModerationService {
     private final PlaceSummaries summaries;
     private final NearbyPlaceService nearby;
     private final ApplicationEventPublisher events;
+    private final NotificationService notifications;
     private final Clock clock;
 
     public PlaceModerationService(
@@ -53,12 +54,14 @@ public class PlaceModerationService {
             PlaceSummaries summaries,
             NearbyPlaceService nearby,
             ApplicationEventPublisher events,
+            NotificationService notifications,
             Clock clock) {
         this.places = places;
         this.users = users;
         this.summaries = summaries;
         this.nearby = nearby;
         this.events = events;
+        this.notifications = notifications;
         this.clock = clock;
     }
 
@@ -101,6 +104,7 @@ public class PlaceModerationService {
         markModerated(place, moderatorId);
         events.publishEvent(PlaceIndexChangedEvent.of(placeId));
         events.publishEvent(new ContributionChangedEvent(place.getCreatedBy().getId())); // +15 cho người đề xuất
+        notifications.placeModerated(place, true, null);
     }
 
     /** Lý do bắt buộc — người đề xuất thấy lý do trên trang địa điểm / trang cá nhân. */
@@ -118,6 +122,7 @@ public class PlaceModerationService {
         place.setStatus(PlaceStatus.REJECTED);
         place.setRejectReason(reason.strip());
         markModerated(place, moderatorId);
+        notifications.placeModerated(place, false, reason.strip());
     }
 
     private Place pendingPlaceFor(Long moderatorId, Long placeId, Integer version) {

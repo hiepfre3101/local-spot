@@ -102,5 +102,8 @@ public final class ErrorCode {
     /** 409: quyết định trên yêu cầu không còn PENDING — đã duyệt / từ chối / tự từ chối khi địa điểm có chủ (UC30). */
     public static final String CLAIM_ALREADY_MODERATED = "CLAIM_ALREADY_MODERATED";
 
+    /** 404: không có thông báo này, hoặc là của người khác (UC19). */
+    public static final String NOTIFICATION_NOT_FOUND = "NOTIFICATION_NOT_FOUND";
+
     private ErrorCode() {}
 }
