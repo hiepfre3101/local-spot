@@ -1164,3 +1164,28 @@ Chưa commit.
 **Tài liệu**: openapi (429 + luật giới hạn ở `POST /reviews/{id}/comments`), requirements (NFR-10, bảng giới hạn tần suất), plan §10 D (rate limit) + F (mục bình luận, vote, báo cáo).
 
 **Kiểm chứng**: backend `CommentFlowTests` 7 (thêm `twentyFirstCommentWithinTenMinutesIs429ButInvalidOnesDoNotCount`: gửi rỗng 422 không tính, 20 bình luận được, thứ 21 → 429 `TOO_MANY_REQUESTS` + `Retry-After`, tài khoản khác vẫn gửi được) + `RateLimitFlowTests` 7 xanh, Spotless + SpotBugs sạch. Frontend `vitest` **104 test** xanh (thêm 10 `ReviewInteractions.spec`: vote / bỏ vote theo backend, không hiện số 0; khách → đăng nhập kèm `redirect`; báo cáo phát đúng đối tượng; đánh giá của mình chỉ có Sửa, bản chờ duyệt có nhãn và không bình luận; luồng 2 cấp + dòng giữ chỗ + chỉ gốc có Trả lời + Xoá / Báo cáo đúng người; gửi gốc / trả lời đúng `parentId` và cắt khoảng trắng; 429 → "thử lại sau 4 phút"; xoá cần xác nhận; hộp thoại: thiếu lý do, "Thông tin sai" thiếu mô tả không gửi, gửi đúng dữ liệu, 409 đã báo cáo → thông báo nhẹ). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
+
+## 2026-10-17 22:35 (+07) — Checklist F: form đề xuất địa điểm (P05 — UC11, UC22)
+
+**Bối cảnh**: nhánh `feature/fe-propose-place` từ `feature/fe-review-interactions` (chưa gộp). Backend đề xuất (multipart, ảnh qua hàng đợi) và nghi trùng `/places/duplicates` (U7) có từ E1 / E4. Sitemap đã chốt "một trang có thanh tiến độ; cảnh báo trùng U7"; header và trang chủ đã chừa mục "Đề xuất địa điểm" chờ route `propose`.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Nháp tự lưu trong trình duyệt** (localStorage, theo tài khoản, không gồm ảnh): thiết kế có "Lưu nháp" nhưng backend không có trạng thái nháp — đề xuất tạo thẳng PENDING. Bị loại: bỏ nút (form dài, đóng tab là mất), nháp phía máy chủ (trạng thái DRAFT mới, đụng `places` là phần cốt lõi + hàng chờ duyệt, cần migration).
+- **Vị trí = ghim trên bản đồ hoặc "Vị trí của tôi"**, địa chỉ nhập bằng chữ — đúng UC11 bước 3 ("kéo marker hoặc dùng vị trí hiện tại"). Bị loại: thêm Nominatim (dịch vụ ngoài mới, có giới hạn tần suất, phải giải thích thêm trong báo cáo).
+
+**Quyết định kỹ thuật:**
+- **Trường theo luồng chính UC11**, không chỉ theo bản xem trước P05 (bản này thiếu giá / giờ / tiện ích mà UC11 bước 2 có): Thông tin (tên, danh mục, thẻ, mô tả) · Vị trí (địa chỉ, thành phố, ghim) · Chi tiết, tuỳ chọn (giá, điện thoại, web, giờ mở cửa, tiện ích) · Ảnh. Section tiêu đề trái + trường phải như AdminForm (README: "cùng bộ section" cho UC11 / UC24 / UC27).
+- **Validate đồng bộ backend** (`validation/place.ts`): độ dài, mẫu số điện thoại / web http(s) giống `PlaceCreateRequest`; thẻ tách theo dấu phẩy, gộp khoảng trắng, bỏ trùng không phân biệt hoa thường, ≤ 10 thẻ ≤ 50 ký tự. Luật `giá thấp ≤ giá cao` là luật cấp object của zod nên chỉ chạy khi từng trường đã hợp lệ — chấp nhận (backend kiểm lại, lỗi 422 gắn đúng ô `priceMax`). Lỗi `location.*` của backend → "đặt lại ghim"; `photos[i]` → "Ảnh thứ i+1".
+- **Giờ mở cửa**: mỗi ngày một khung (đóng cửa / mở–đóng), giờ đóng sớm hơn giờ mở = qua đêm như openapi. Đủ cho hầu hết quán; nhiều khung / ngày (nghỉ trưa) để chủ sửa sau (UC24) nếu cần — API đã hỗ trợ.
+- **`LocationPicker` riêng**, không dùng lại `PlaceMap` (bản đồ kết quả: gom cụm, ghim theo điểm): một ghim kéo được, bấm bản đồ để đặt, "Vị trí của tôi" dùng chung store `place`; toạ độ làm tròn 6 chữ số và hiện bằng chữ (không chỉ dựa vào bản đồ). Đổi từ ngoài (vị trí của tôi, khôi phục nháp) mới kéo khung nhìn tới ghim; bấm / kéo trên bản đồ thì không, tránh bản đồ nhảy khi đang thao tác.
+- **Nghi trùng (U7, UC11 6a)**: khi có tên ≥ 2 ký tự + ghim, chờ 600 ms rồi hỏi `/places/duplicates`; có ứng viên thì hiện danh sách (mở trang ứng viên ở tab mới, khoảng cách, "đề xuất của bạn đang chờ duyệt") và phải đánh dấu "Đây là địa điểm khác" mới gửi — đúng luồng thay thế 6a; backend chỉ cảnh báo nên đây là bước của giao diện. Đổi tên / ghim → hỏi lại và bỏ xác nhận cũ.
+- **Nháp** (`utils/draft.ts`): khóa theo id người dùng (hai tài khoản chung máy không thấy nháp của nhau), lưu sau 800 ms ngừng gõ; mọi lỗi storage (chế độ riêng tư, đầy) bị nuốt, form vẫn chạy. Khôi phục thì báo rõ "ảnh không được lưu" + nút "Bỏ nháp". Gửi thành công thì xoá nháp. "Lưu nháp" lưu ngay và báo thành công / không lưu được.
+- **Sau khi gửi**: "Đã gửi — chờ kiểm duyệt" + "Xem đề xuất" (trang chi tiết hiện đề xuất PENDING cho chính người đề xuất) + "Đề xuất địa điểm khác". Trang cá nhân (theo dõi đề xuất — câu hỏi 3 của P05) làm ở P06, dùng `/me/places` có sẵn.
+- `PhotoPicker` (P04) dùng lại nguyên vẹn: giới hạn 10 ảnh / request trùng với đề xuất.
+- Test chạy đồng hồ thật: đồng hồ giả của vitest làm lệch luồng lỗi 422 của vee-validate; Node 26 có `localStorage` riêng che bản của jsdom → test thay bằng kho trong bộ nhớ.
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử (đặc biệt ghim trên điện thoại, nháp khi mở lại tab). Trang cá nhân theo dõi đề xuất (P06). Nhiều khung giờ / ngày.
+
+**Tài liệu**: plan §10 F (mục form đề xuất).
+
+**Kiểm chứng**: frontend `vitest` **111 test** xanh (thêm 7 `ProposePlacePage.spec`: gửi đúng dữ liệu — thẻ tách + bỏ trùng, giờ theo ngày bật, tiện ích, trường trống bỏ đi, xoá nháp; thiếu trường bắt buộc báo đủ 5 lỗi, giá ngược báo khi các trường khác hợp lệ, không gọi API; nghi trùng hiện ứng viên + khoảng cách, chặn gửi tới khi xác nhận; nháp tự lưu → khôi phục khi vào lại → bỏ nháp xoá sạch; 422 gắn ô `website` + "đặt lại ghim"; `parseTags`, `toOpeningHours`). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
