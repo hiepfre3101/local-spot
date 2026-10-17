@@ -84,6 +84,11 @@
 }
 
 @layer base {
+  /* Header dính đầu trang cao 72px: nhảy tới neo / focus không bị header che */
+  html {
+    scroll-padding-top: 88px;
+  }
+
   body {
     @apply bg-surface font-sans text-body text-ink antialiased;
   }
