@@ -181,6 +181,30 @@ export interface HomeResponse {
   latest: PlaceSummary[]
   categories: CategoryNode[]
   featuredReview: HomeReview | null
+  /** Ảnh đang bật theo ô (UC34); ô không có → hình minh hoạ mặc định. */
+  banners: HomeBanner[]
+}
+
+/** Ô ảnh cố định trên trang chủ (UC34). */
+export type BannerSlot = 'HERO' | 'SIGNUP_BAND' | 'COMMUNITY'
+
+/** openapi `HomeBanner` — `altText` rỗng = ảnh trang trí. */
+export interface HomeBanner {
+  slot: BannerSlot
+  image: Photo
+  altText: string
+}
+
+/** openapi `Banner` — màn quản trị; ô chưa có ảnh: `id`, `image`, `version`… là `null`. */
+export interface Banner {
+  slot: BannerSlot
+  id: number | null
+  image: Photo | null
+  altText: string
+  active: boolean
+  version: number | null
+  updatedAt: string | null
+  updatedBy: UserSummary | null
 }
 
 export type ReviewStatus = 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'HIDDEN'

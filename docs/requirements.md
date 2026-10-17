@@ -114,6 +114,7 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | FR-40 | Kiểm duyệt viên | Duyệt yêu cầu sở hữu | Duyệt thì gán role `owner` cho người yêu cầu | S | §4 |
 | FR-41 | Quản trị viên | Dashboard thống kê | Người dùng mới, review theo ngày, địa điểm hot | S | §4 |
 | FR-42 | Hệ thống | Nhật ký thao tác quản trị | Ghi `activity_log` qua Spring AOP cho mọi thao tác admin/moderator | S | §5 `activity_log` |
+| FR-43 | Quản trị viên | Ảnh trang chủ *(thêm lại 2026-10-17 — Q4)* | Thay ảnh 3 ô cố định của trang chủ (nền hero, băng mời đăng ký, khối thành viên): tải ảnh, mô tả ảnh, bật / tắt, gỡ. Hero chỉ đổi ảnh; không lịch chạy, link, đếm lượt bấm | C | §5 `home_banners` |
 
 Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một danh sách gộp FIFO** (cũ nhất trước, không đổi được thứ tự; lọc được theo loại) — `GET /moderation/queue`. Chỉ là màn xem; duyệt / từ chối vẫn qua endpoint `decision` riêng của từng loại *(chốt 2026-09-29)*.
 
@@ -248,6 +249,6 @@ Ví dụ (ngưỡng 30):
 | Q1 ✅ | Phân tầng MoSCoW ở mục 3 có đúng ý không? Đặc biệt: check-in (FR-24) và báo cáo vi phạm (FR-25) để Must; bộ sưu tập, thông báo để Should | Như bảng | Lộ trình tuần 5–11 |
 | Q2 ✅ | Phân quyền `moderator` vs `admin`? | Moderator: duyệt địa điểm/review/claim, xử lý báo cáo, ẩn nội dung. Admin: thêm khóa tài khoản, gán role, danh mục, tiện ích, dashboard | Bảng `permissions` seed, `@PreAuthorize` |
 | Q3 ✅ | Tham số chống review ảo và trust score | Chốt toàn bộ như mục 5 và 5.1 (ngưỡng 30, trần 18/36, phạt 25/vi phạm hết hạn 30 ngày, chỉ tính vote từ người trust ≥ 30 chụp lúc vote) | Schema `users`, `review_votes`, FR-23, Chương 3 |
-| Q4 ✅ | Banner có trong plan §4 nhưng không có bảng ở §5 | **Đã cắt** khỏi phạm vi, bỏ FR-43 và dòng banner trong plan §4 | ERD |
+| Q4 ✅ | Banner có trong plan §4 nhưng không có bảng ở §5 | ~~Đã cắt khỏi phạm vi, bỏ FR-43~~ → **mở lại 2026-10-17 (supervisor), phạm vi tối thiểu**: FR-43 / UC34 — 3 ô ảnh cố định trên trang chủ, hero chỉ đổi ảnh (tiêu đề + ô tìm kiếm giữ nguyên, phủ lớp tối đều để giữ tương phản); permission mới `banner:manage` chỉ cho ADMIN. Không làm danh sách banner tự do (lịch chạy, link, thứ tự) | ERD (`home_banners`, V5), Chương 3 |
 | Q5 ✅ | Độ sâu bình luận phân cấp? | 2 cấp — đủ cho hội thoại, tránh truy vấn đệ quy | Schema `comments` |
 | Q6 ✅ | Các con số NFR | Như bảng | Chương 5 kiểm thử |

@@ -2,6 +2,7 @@ package com.localspot.listener;
 
 import com.localspot.config.CacheConfig;
 import com.localspot.event.CatalogChangedEvent;
+import com.localspot.event.HomeBannersChangedEvent;
 import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.event.ReviewChangedEvent;
 import org.slf4j.Logger;
@@ -38,6 +39,12 @@ public class HomeCacheInvalidator {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onReviewChanged(ReviewChangedEvent event) {
+        invalidate();
+    }
+
+    /** Ảnh trang chủ đổi (UC34). */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onBannersChanged(HomeBannersChangedEvent event) {
         invalidate();
     }
 
