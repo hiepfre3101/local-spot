@@ -609,6 +609,18 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
   /reviews/{reviewId}:
+    get:
+      tags: [Reviews]
+      summary: Một review — nạp màn sửa (P04, UC13)
+      description: |
+        *(thêm 2026-10-17 — màn sửa cần nạp đúng review, chưa có endpoint đọc một review)* Cần đăng nhập. Tác giả thấy
+        review của mình ở mọi trạng thái (kèm `rejectReason`); người khác chỉ thấy review đang hiện công khai (PUBLISHED
+        trên địa điểm APPROVED), như vote / bình luận. Review đã xóa / không thấy → 404 `REVIEW_NOT_FOUND`.
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '401': { description: Chưa đăng nhập }
+        '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Reviews]
       summary: Sửa review của mình (FR-18) — tác giả trust < 30 thì review về PENDING

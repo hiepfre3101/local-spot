@@ -88,6 +88,12 @@ public class ReviewController {
                 .body(reviewService.create(user.id(), placeId, review, photos, ClientInfos.from(http)));
     }
 
+    /** Một review — tác giả: mọi trạng thái (màn sửa P04); người khác: chỉ review đang hiện (404 nếu không). */
+    @GetMapping("/reviews/{reviewId}")
+    public ReviewResponse get(@PathVariable Long reviewId, Authentication authentication) {
+        return reviewService.get(reviewId, Viewers.from(authentication).userId());
+    }
+
     /** Thêm ảnh vào review của mình (chốt 2026-10-09) — 201 kèm ảnh vừa nhận, PROCESSING. */
     @PostMapping(path = "/reviews/{reviewId}/photos", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasPermission(#reviewId, '" + OwnershipPermissionEvaluator.REVIEW + "', '"

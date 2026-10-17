@@ -125,6 +125,45 @@ class ReviewFlowTests {
     }
 
     @Test
+    void authorReadsOwnReviewInAnyStatusOthersOnlyVisibleOnes() throws Exception {
+        Account author = account(Trust.NEW_VERIFIED);
+        Account other = account(Trust.TRUSTED);
+        long placeId = approvedPlace();
+        long pending = idOf(create(author, placeId, 3, CONTENT, today(), "198.51.100.40")
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andReturn());
+
+        // Màn sửa (P04): tác giả nạp được review đang chờ của mình; người khác coi như không tồn tại
+        perform(author, get("/api/v1/reviews/" + pending))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(pending))
+                .andExpect(jsonPath("$.placeId").value(placeId))
+                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.rating").value(3))
+                .andExpect(jsonPath("$.version").isNumber());
+        perform(other, get("/api/v1/reviews/" + pending))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("REVIEW_NOT_FOUND"));
+
+        jdbc.update(
+                "UPDATE reviews SET status = 'REJECTED', reject_reason = 'Nội dung quảng cáo.' WHERE id = ?", pending);
+        perform(author, get("/api/v1/reviews/" + pending))
+                .andExpect(jsonPath("$.status").value("REJECTED"))
+                .andExpect(jsonPath("$.rejectReason").value("Nội dung quảng cáo."));
+
+        long published = idOf(create(other, approvedPlace(), 5, CONTENT, today(), "198.51.100.41")
+                .andExpect(jsonPath("$.status").value("PUBLISHED"))
+                .andReturn());
+        perform(author, get("/api/v1/reviews/" + published))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rejectReason").isEmpty());
+
+        perform(other, delete("/api/v1/reviews/" + published)).andExpect(status().isNoContent());
+        perform(other, get("/api/v1/reviews/" + published)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/v1/reviews/" + pending)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void onePerPlaceEvenAfterDeleting() throws Exception {
         Account author = account(Trust.TRUSTED);
         long placeId = approvedPlace();
