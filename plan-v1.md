@@ -419,7 +419,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll — bộ lọc trên URL; "Quanh tôi" chỉ lọc danh mục + bán kính (chốt 2026-10-12)
 - [x] Bản đồ Leaflet, marker cluster, "gần tôi" — ghim mang điểm, gom cụm, "Tìm trong vùng này"; lớp nền MapTiler / OSM Đức; chỉ đường trong ứng dụng (OSRM)
 - [x] Trang chi tiết địa điểm: gallery, giờ mở cửa, tiện ích, review — bản đọc (thao tác ghi ở các mục sau); bỏ khối "Ảnh check-in" (check-in không có ảnh)
-- [ ] Form viết review: chấm sao, upload nhiều ảnh, crop
+- [ ] Form viết review: chấm sao, upload nhiều ảnh, crop — **đã code 2026-10-17, chờ supervisor chạy thử**: P04 `/places/:slug/review` (viết + sửa / xoá UC13 cùng trang, `myReviewId` quyết định chế độ); `.ls-rate` 5 radio + chữ mức; ngày đến (API bắt buộc, thiết kế thiếu — mặc định hôm nay giờ VN); ảnh ≤ 10, chuyển JPEG ở trình duyệt khi không phải JPEG / PNG ≤ 5 MB, cắt tùy chọn bằng vue-advanced-cropper; kết quả theo `status` ("Đã đăng" / "Đang chờ duyệt"). **Bỏ bước thẻ** (supervisor chốt 2026-10-17: chưa có API thành viên gắn thẻ địa điểm có sẵn — UC22 ở P05). Thêm `GET /reviews/{id}` cho màn sửa
 - [ ] Bình luận, vote, báo cáo
 - [ ] Form đề xuất địa điểm mới (chọn tọa độ trên bản đồ)
 - [ ] Trang cá nhân: review, ảnh, bộ sưu tập, huy hiệu

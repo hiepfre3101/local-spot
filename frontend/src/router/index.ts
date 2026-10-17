@@ -32,6 +32,14 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Địa điểm' },
       },
       {
+        // P04 — đã có đánh giá thì chế độ sửa (1 đánh giá / người / địa điểm, D2)
+        path: 'places/:slug/review',
+        name: 'write-review',
+        component: () => import('@/pages/WriteReviewPage.vue'),
+        props: true,
+        meta: { title: 'Viết đánh giá', requiresAuth: true },
+      },
+      {
         path: 'settings/password',
         name: 'settings-password',
         component: () => import('@/pages/settings/PasswordSettingsPage.vue'),

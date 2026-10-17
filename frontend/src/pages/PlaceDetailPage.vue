@@ -15,6 +15,7 @@ import LsBadge from '@/components/ui/LsBadge.vue'
 import LsButton from '@/components/ui/LsButton.vue'
 import LsCarousel from '@/components/ui/LsCarousel.vue'
 import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useFilterStore } from '@/stores/filter'
 import { formatNumber, formatPriceRange, tagLabel } from '@/utils/format'
 import { openState, weekSchedule } from '@/utils/openingHours'
@@ -25,7 +26,10 @@ import { scoreText } from '@/utils/rating'
  * Rating, danh mục, thẻ → Giới thiệu (+ đánh giá nổi bật) | bản đồ nhỏ, địa chỉ, giờ, liên hệ, tiện ích → địa điểm tương
  * tự → tất cả đánh giá → gần đây.
  *
- * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), Viết đánh giá (P04), Lưu
+ * Viết / sửa đánh giá (P04): "Viết đánh giá" khi chưa có, "Sửa đánh giá của bạn" khi đã có (`myReviewId`); chủ địa điểm
+ * không thấy nút (không tự đánh giá — UC12).
+ *
+ * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), Lưu
  * (UC18), báo cáo (UC17), yêu cầu sở hữu (UC23), vote / bình luận. Khối "Ảnh check-in" bỏ: check-in không có ảnh trong
  * mô hình dữ liệu (U5) — ảnh review đã hiện trong từng đánh giá.
  */
@@ -142,9 +146,15 @@ const nearby = useQuery({
 
 /** Chỉ đường trong ứng dụng (hộp thoại bản đồ lớn), không chuyển sang trang ngoài — chốt 2026-10-13. */
 const directions = useTemplateRef<InstanceType<typeof DirectionsDialog>>('directions')
-const canWriteReview = computed(
-  () => router.hasRoute('write-review') && place.value?.myReviewId === null,
-)
+const auth = useAuthStore()
+/** `null` = không hiện nút: chủ địa điểm, địa điểm chưa duyệt. Khách bấm thì guard đưa qua đăng nhập. */
+const reviewAction = computed<'write' | 'edit' | null>(() => {
+  const p = place.value
+  if (!p || !router.hasRoute('write-review')) return null
+  if (p.myReviewId !== null) return 'edit'
+  if (p.status !== 'APPROVED' || auth.user?.ownedPlaceIds.includes(p.id)) return null
+  return 'write'
+})
 </script>
 
 <template>
@@ -247,9 +257,11 @@ const canWriteReview = computed(
           <li v-for="tag in place.tags" :key="tag">{{ tagLabel(tag) }}</li>
         </ul>
       </div>
-      <div v-if="canWriteReview" class="flex gap-2">
-        <LsButton variant="accent" :to="{ name: 'write-review', params: { slug: place.slug } }"
-          >Viết đánh giá</LsButton
+      <div v-if="reviewAction" class="flex gap-2">
+        <LsButton
+          :variant="reviewAction === 'write' ? 'accent' : 'ghost'"
+          :to="{ name: 'write-review', params: { slug: place.slug } }"
+          >{{ reviewAction === 'write' ? 'Viết đánh giá' : 'Sửa đánh giá của bạn' }}</LsButton
         >
       </div>
     </header>

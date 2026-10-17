@@ -278,6 +278,19 @@ public class ReviewService {
         return new CursorPage<>(views.of(page, viewerId), next);
     }
 
+    /**
+     * {@code GET /reviews/{id}} — màn sửa review (UC13, P04) cần nạp đúng review của mình. Tác giả thấy review của mình ở
+     * mọi trạng thái (kèm lý do từ chối); người khác chỉ thấy review đang hiện, như vote / bình luận. Đã xóa → 404.
+     */
+    @Transactional(readOnly = true)
+    public ReviewResponse get(Long reviewId, Long viewerId) {
+        Review review = reviews.findWithAuthorById(reviewId)
+                .filter(r -> r.getUser().getId().equals(viewerId))
+                .or(() -> reviews.findVisibleById(reviewId))
+                .orElseThrow(ReviewService::reviewNotFound);
+        return views.of(review, viewerId);
+    }
+
     /** {@code GET /me/reviews}: mọi trạng thái, kèm lý do từ chối. */
     @Transactional(readOnly = true)
     public CursorPage<ReviewResponse> writtenBy(Long userId, String cursor, Integer limit) {

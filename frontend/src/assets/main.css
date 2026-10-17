@@ -3,6 +3,7 @@
 @import './components.css';
 @import './public.css';
 @import './toast.css';
+@import './review.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
