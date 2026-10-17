@@ -5,7 +5,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
-import type { PlaceDetail, Review } from '@/types/api'
+import { useAuthStore } from '@/stores/auth'
+import type { MeResponse, PlaceDetail, Review } from '@/types/api'
 
 import PlaceDetailPage from '../PlaceDetailPage.vue'
 
@@ -81,7 +82,7 @@ function review(id: number, rating: number, helpfulCount: number): Review {
   }
 }
 
-async function mountAt(slug: string) {
+async function mountAt(slug: string, options: { writeReviewRoute?: boolean } = {}) {
   const Empty = { render: () => null }
   const router = createRouter({
     history: createMemoryHistory(),
@@ -89,6 +90,9 @@ async function mountAt(slug: string) {
       { path: '/', name: 'home', component: Empty },
       { path: '/search', name: 'search', component: Empty },
       { path: '/places/:slug', name: 'place', component: PlaceDetailPage, props: true },
+      ...(options.writeReviewRoute
+        ? [{ path: '/places/:slug/review', name: 'write-review', component: Empty }]
+        : []),
     ],
   })
   await router.push(`/places/${slug}`)
@@ -143,12 +147,29 @@ describe('PlaceDetailPage (P03)', () => {
     expect(wrapper.get('button[aria-label^="5 sao"]').attributes('aria-pressed')).toBe('true')
   })
 
-  it('không có nút dẫn tới màn chưa làm (viết đánh giá, check-in, lưu)', async () => {
+  it('không có nút dẫn tới màn chưa làm (check-in, lưu)', async () => {
     const wrapper = await mountAt('pho-thin-ha-noi')
     const labels = wrapper.findAll('a, button').map((el) => el.text())
-    expect(labels).not.toContain('Viết đánh giá')
     expect(labels).not.toContain('Check-in')
     expect(labels).not.toContain('Lưu')
+  })
+
+  it('nút đánh giá: viết khi chưa có, sửa khi đã có, chủ địa điểm không có', async () => {
+    const reviewLink = (labels: string[]) =>
+      labels.filter((l) => l === 'Viết đánh giá' || l === 'Sửa đánh giá của bạn')
+    const labelsOf = async () =>
+      (await mountAt('pho-thin-ha-noi', { writeReviewRoute: true }))
+        .findAll('a')
+        .map((el) => el.text())
+
+    expect(reviewLink(await labelsOf())).toEqual(['Viết đánh giá'])
+
+    detail.mockResolvedValue({ ...PLACE, myReviewId: 77 })
+    expect(reviewLink(await labelsOf())).toEqual(['Sửa đánh giá của bạn'])
+
+    detail.mockResolvedValue(PLACE)
+    useAuthStore().$patch({ user: { id: 9, ownedPlaceIds: [5] } as unknown as MeResponse })
+    expect(reviewLink(await labelsOf())).toEqual([])
   })
 
   it('404 → trang không tìm thấy', async () => {

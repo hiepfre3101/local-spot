@@ -23,7 +23,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/` | Trang chủ (HomePage) | UC07, UC08, UC09 | — | Ô tìm + danh mục → `/search`; "Tìm quanh tôi" → `/search?near=me` |
 | `/search` | Tìm kiếm & bản đồ (P02) | UC08, UC09 | — | Query: `q`, `category` (slug), `minRating`, `price` (ngân sách VND → `priceMax`), `amenities` (slug, phẩy), `near` (`me` hoặc `lat,lng` — "Tìm trong vùng này"), `radius` (mét, chỉ khi có `near` — thêm 2026-10-12), `sort`. Danh sách + bản đồ cạnh nhau. Có `near` → chỉ lọc danh mục + bán kính (UC09, chốt 2026-10-12) |
 | `/places/:slug` | Chi tiết địa điểm (P03) | UC10, UC13–UC17, UC18, UC22, UC25 | — | Check-in mở hộp thoại P12 (không phải route). Chủ địa điểm thấy nút Phản hồi |
-| `/places/:slug/review` | Viết / sửa đánh giá (P04) | UC12, UC13, UC22 | `auth` | Đã có đánh giá → chế độ sửa (1 đánh giá / người / địa điểm, D2) |
+| `/places/:slug/review` | Viết / sửa đánh giá (P04) | UC12, UC13 | `auth` | Đã có đánh giá → chế độ sửa (1 đánh giá / người / địa điểm, D2). Không có bước gắn thẻ (chốt 2026-10-17 — UC22 ở P05) |
 | `/propose` | Đề xuất địa điểm (P05) | UC11, UC22 | `auth` | Một trang có thanh tiến độ; cảnh báo trùng U7 |
 | `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period` (WEEK / MONTH / ALL), `city` (= "region", chốt 2026-10-12) |
 | `/users/:id` | Trang cá nhân (P06) | UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|checkins\|badges`. Chính mình → nút "Chỉnh sửa hồ sơ". Tab `checkins` chỉ hiện trên trang của chính mình (`GET /me/check-ins` — chốt 2026-10-12) |
