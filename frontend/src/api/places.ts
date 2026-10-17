@@ -1,5 +1,30 @@
 import { http } from './http'
-import type { CursorPage, PlaceDetail, PlaceSummary, Review, SearchPage } from '@/types/api'
+import type {
+  CursorPage,
+  GeoPoint,
+  OpeningHour,
+  PlaceDetail,
+  PlaceSummary,
+  Review,
+  SearchPage,
+} from '@/types/api'
+
+/** openapi `PlaceCreateRequest` — phần `place` (JSON) của đề xuất (UC11). */
+export interface PlaceProposal {
+  name: string
+  categoryId: number
+  description?: string
+  address: string
+  city: string
+  location: GeoPoint
+  priceMin?: number
+  priceMax?: number
+  phone?: string
+  website?: string
+  openingHours: OpeningHour[]
+  amenityIds: number[]
+  tags: string[]
+}
 
 /** Bộ lọc chung của `GET /places` và `GET /search` (FR-10). Trường rỗng = không lọc. */
 export interface PlaceFilter {
@@ -92,5 +117,25 @@ export const placesApi = {
         },
       })
       .then((r) => r.data)
+  },
+
+  /**
+   * Nghi trùng trước khi đề xuất (U7): tên gần giống trong 50 m — địa điểm đã duyệt + đề xuất chờ của chính mình. Chỉ
+   * cảnh báo, không chặn.
+   */
+  duplicates(name: string, location: GeoPoint): Promise<PlaceSummary[]> {
+    return http
+      .get<PlaceSummary[]>('/places/duplicates', {
+        params: { name, lat: location.lat, lng: location.lng },
+      })
+      .then((r) => r.data)
+  },
+
+  /** Đề xuất → PENDING (UC11): multipart, phần `place` là JSON, `photos` tùy chọn (≤ 10, JPEG / PNG). */
+  propose(place: PlaceProposal, photos: { blob: Blob; fileName: string }[]): Promise<PlaceDetail> {
+    const form = new FormData()
+    form.append('place', new Blob([JSON.stringify(place)], { type: 'application/json' }))
+    photos.forEach((p) => form.append('photos', p.blob, p.fileName))
+    return http.post<PlaceDetail>('/places', form).then((r) => r.data)
   },
 }
