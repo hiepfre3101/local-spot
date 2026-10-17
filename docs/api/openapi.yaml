@@ -731,7 +731,8 @@ paths:
       description: >-
         Thứ tự kiểm tra: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → nội dung không rỗng sau khi bỏ khoảng trắng hai
         đầu, ≤ 2000 ký tự (422) → review đang hiện (404) → `parentId` là bình luận gốc đang hiện của cùng review (422
-        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`).
+        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`) → ≤ 20 bình luận / 10 phút / tài khoản (429
+        `TOO_MANY_REQUESTS` + `Retry-After`; chỉ tính lần đã qua mọi kiểm tra; Redis sập thì cho qua — chốt 2026-10-17).
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
         required: true
@@ -744,6 +745,7 @@ paths:
         '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
         '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /comments/{commentId}:
     delete:
       tags: [Comments]
