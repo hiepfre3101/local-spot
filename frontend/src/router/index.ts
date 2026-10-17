@@ -40,6 +40,13 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Viết đánh giá', requiresAuth: true },
       },
       {
+        // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
+        path: 'propose',
+        name: 'propose',
+        component: () => import('@/pages/ProposePlacePage.vue'),
+        meta: { title: 'Đề xuất địa điểm', requiresAuth: true },
+      },
+      {
         path: 'settings/password',
         name: 'settings-password',
         component: () => import('@/pages/settings/PasswordSettingsPage.vue'),
@@ -111,6 +118,13 @@ export const routes: RouteRecordRaw[] = [
         name: 'admin-users',
         component: () => import('@/pages/admin/AdminUsersPage.vue'),
         meta: { title: 'Người dùng & vai trò', anyPermission: [Permission.USER_VIEW] },
+      },
+      {
+        // UC34 — ảnh trang chủ (thêm 2026-10-17, mở lại Q4)
+        path: 'banners',
+        name: 'admin-banners',
+        component: () => import('@/pages/admin/AdminBannersPage.vue'),
+        meta: { title: 'Ảnh trang chủ', anyPermission: [Permission.BANNER_MANAGE] },
       },
     ],
   },

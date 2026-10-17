@@ -56,6 +56,7 @@ Tác vụ hệ thống (tính rating Bayesian FR-22, ghi nhật ký quản trị
 | UC31 | Quản lý người dùng & vai trò | Quản trị viên | FR-38 | |
 | UC32 | Quản lý danh mục & tiện ích | Quản trị viên | FR-39 | |
 | UC33 | Xem dashboard thống kê | Quản trị viên | FR-41 | |
+| UC34 | Quản lý ảnh trang chủ *(thêm 2026-10-17 — Q4)* | Quản trị viên | FR-43 | |
 
 **Tiêu chí chọn 10 use case đặc tả chi tiết**: bao phủ đủ 5 tác nhân và cả 4 điểm khác biệt cốt lõi — chống review ảo (UC12, UC28, UC16), Bayesian (UC12, UC28), tìm kiếm tiếng Việt (UC08), truy vấn không gian (UC09, UC16) — cộng luồng xác thực (UC01, UC03) mà hội đồng hay hỏi.
 

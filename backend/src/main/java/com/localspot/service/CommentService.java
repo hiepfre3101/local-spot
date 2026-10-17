@@ -13,6 +13,8 @@ import com.localspot.mapper.CommentMapper;
 import com.localspot.repository.CommentRepository;
 import com.localspot.repository.ReviewRepository;
 import com.localspot.repository.UserRepository;
+import com.localspot.security.RateLimitPolicy;
+import com.localspot.security.RateLimiter;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -43,6 +45,7 @@ public class CommentService {
     private final ReviewRepository reviews;
     private final UserRepository users;
     private final CommentMapper mapper;
+    private final RateLimiter rateLimiter;
     private final Clock clock;
 
     public CommentService(
@@ -50,11 +53,13 @@ public class CommentService {
             ReviewRepository reviews,
             UserRepository users,
             CommentMapper mapper,
+            RateLimiter rateLimiter,
             Clock clock) {
         this.comments = comments;
         this.reviews = reviews;
         this.users = users;
         this.mapper = mapper;
+        this.rateLimiter = rateLimiter;
         this.clock = clock;
     }
 
@@ -125,6 +130,8 @@ public class CommentService {
         }
         Review review = reviews.findVisibleById(reviewId).orElseThrow(ReviewService::reviewNotFound);
         Comment parent = request.parentId() == null ? null : checkParent(request.parentId(), reviewId);
+        // Sau mọi kiểm tra: gõ sai / review đã ẩn không tiêu suất; vượt ngưỡng → 429 + Retry-After
+        rateLimiter.acquire(RateLimitPolicy.COMMENT, userId.toString());
 
         Comment comment = comments.saveAndFlush(new Comment(review, author, parent, content)); // có createdAt
         return mapper.toResponse(comment, parent == null ? List.of() : null);

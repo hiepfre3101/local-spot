@@ -485,9 +485,10 @@ watch(
 
       <!-- Bản đồ -->
       <div class="relative order-1 lg:order-2">
-        <div class="sticky top-4">
+        <!-- Dưới header dính đầu trang (72px) + 16px -->
+        <div class="sticky top-[88px]">
           <PlaceMap
-            class="h-[320px] rounded-lg lg:h-[calc(100vh-48px)] lg:max-h-[760px]"
+            class="h-[320px] rounded-lg lg:h-[calc(100vh-104px)] lg:max-h-[760px]"
             :places="results.items.value"
             :active-id="activePlaceId"
             :user-location="state.near === 'me' ? location : null"

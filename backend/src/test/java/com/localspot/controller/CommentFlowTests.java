@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -199,6 +200,26 @@ class CommentFlowTests {
                 .andExpect(jsonPath("$.items[0].content").isEmpty())
                 .andExpect(jsonPath("$.items[0].replies.length()").value(1))
                 .andExpect(jsonPath("$.items[0].replies[0].id").value(reply));
+    }
+
+    @Test
+    void twentyFirstCommentWithinTenMinutesIs429ButInvalidOnesDoNotCount() throws Exception {
+        Account member = account(true);
+        long reviewId = review(approvedPlace(), account(true), "PUBLISHED");
+
+        // Gõ sai không tiêu suất (chỉ tính lần đã qua mọi kiểm tra)
+        comment(member, reviewId, "   ", null).andExpect(status().isUnprocessableContent());
+        for (int i = 1; i <= 20; i++) {
+            comment(member, reviewId, "Bình luận số " + i + ".", null).andExpect(status().isCreated());
+        }
+        comment(member, reviewId, "Bình luận thứ 21.", null)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"))
+                .andExpect(header().exists(HttpHeaders.RETRY_AFTER));
+
+        // Giới hạn theo tài khoản — người khác vẫn bình luận được
+        comment(account(true), reviewId, "Tài khoản khác không bị ảnh hưởng.", null)
+                .andExpect(status().isCreated());
     }
 
     @Test

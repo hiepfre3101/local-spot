@@ -60,6 +60,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/admin/moderation/claims/:id` | Duyệt yêu cầu sở hữu | UC30 | `perm:claim:approve` |
 | `/admin/users` | Người dùng & vai trò (P10) | UC31 | `perm:user:view` (nút gán vai trò / khoá theo `user:assign-role`, `user:lock`) |
 | `/admin/catalog` | Danh mục & tiện ích (P11) | UC32 | `perm:category:manage`, `perm:amenity:manage` |
+| `/admin/banners` | Ảnh trang chủ — 3 ô cố định *(thêm 2026-10-17)* | UC34 | `perm:banner:manage` |
 
 Danh sách riêng từng loại (lọc theo loại) là `/admin/queue?type=PLACE|REVIEW|REPORT|CLAIM` — không tách route.
 
