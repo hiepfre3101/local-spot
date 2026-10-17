@@ -67,11 +67,11 @@ public class StatsQueries {
         String sql = """
                 SELECT p.city, COUNT(*) AS cnt
                 FROM reviews r JOIN places p ON p.id = r.place_id
-                WHERE %s AND r.created_at >= :start AND r.created_at < :end
+                WHERE {VISIBLE_REVIEW} AND r.created_at >= :start AND r.created_at < :end
                 GROUP BY p.city
                 ORDER BY cnt DESC, p.city
                 LIMIT :limit
-                """.formatted(VISIBLE_REVIEW);
+                """.replace("{VISIBLE_REVIEW}", VISIBLE_REVIEW);
         return jdbc.query(
                 sql,
                 range(start, end).addValue("limit", limit),
@@ -87,11 +87,11 @@ public class StatsQueries {
         String sql = """
                 SELECT p.id, COUNT(*) AS cnt
                 FROM reviews r JOIN places p ON p.id = r.place_id
-                WHERE %s AND r.created_at >= :start AND r.created_at < :end
+                WHERE {VISIBLE_REVIEW} AND r.created_at >= :start AND r.created_at < :end
                 GROUP BY p.id, p.bayesian_score
                 ORDER BY cnt DESC, p.bayesian_score DESC, p.id
                 LIMIT :limit
-                """.formatted(VISIBLE_REVIEW);
+                """.replace("{VISIBLE_REVIEW}", VISIBLE_REVIEW);
         return jdbc.query(
                 sql,
                 range(start, end).addValue("limit", limit),
