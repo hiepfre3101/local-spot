@@ -5,15 +5,19 @@ import { computed, defineAsyncComponent, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { placesApi, type ReviewSort } from '@/api/places'
+import { reviewsApi } from '@/api/reviews'
 import LsRating from '@/components/place/LsRating.vue'
 import PlacePhoto from '@/components/place/PlacePhoto.vue'
 import DirectionsDialog from '@/components/place/DirectionsDialog.vue'
+import ReportDialog from '@/components/place/ReportDialog.vue'
+import type { ReportTarget } from '@/components/place/reportTarget'
 import ReviewItem from '@/components/place/ReviewItem.vue'
 import SpotCard from '@/components/place/SpotCard.vue'
 import LsAvatar from '@/components/ui/LsAvatar.vue'
 import LsBadge from '@/components/ui/LsBadge.vue'
 import LsButton from '@/components/ui/LsButton.vue'
 import LsCarousel from '@/components/ui/LsCarousel.vue'
+import { useRequireLogin } from '@/composables/useRequireLogin'
 import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFilterStore } from '@/stores/filter'
@@ -29,9 +33,12 @@ import { scoreText } from '@/utils/rating'
  * Viết / sửa đánh giá (P04): "Viết đánh giá" khi chưa có, "Sửa đánh giá của bạn" khi đã có (`myReviewId`); chủ địa điểm
  * không thấy nút (không tự đánh giá — UC12).
  *
- * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), Lưu
- * (UC18), báo cáo (UC17), yêu cầu sở hữu (UC23), vote / bình luận. Khối "Ảnh check-in" bỏ: check-in không có ảnh trong
- * mô hình dữ liệu (U5) — ảnh review đã hiện trong từng đánh giá.
+ * Tương tác (2026-10-17): vote / bình luận / báo cáo đánh giá trong ReviewItem; "Báo cáo" địa điểm ở đầu trang; một
+ * hộp thoại báo cáo dùng chung (UC14, UC15, UC17). Đánh giá chờ duyệt / bị từ chối của chính mình ghim đầu danh sách.
+ *
+ * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), Lưu (UC18), yêu cầu sở
+ * hữu (UC23). Khối "Ảnh check-in" bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong
+ * từng đánh giá.
  */
 const props = defineProps<{ slug: string }>()
 
@@ -105,6 +112,31 @@ const reviews = useInfiniteQuery({
   placeholderData: keepPreviousData,
 })
 const reviewItems = computed(() => reviews.data.value?.pages.flatMap((p) => p.items) ?? [])
+/**
+ * Đánh giá của chính tôi khi chưa đăng (chờ duyệt / bị từ chối): danh sách công khai chỉ có PUBLISHED nên nạp riêng,
+ * hiện ở đầu danh sách (ReviewItem README). Đã đăng thì nó nằm sẵn trong danh sách.
+ */
+const myReview = useQuery({
+  queryKey: computed(() => ['review', place.value?.myReviewId ?? null]),
+  queryFn: () => reviewsApi.get(place.value!.myReviewId!),
+  enabled: computed(() => (place.value?.myReviewId ?? null) !== null),
+  retry: false,
+})
+const myUnpublished = computed(() => {
+  const r = myReview.data.value
+  return r && (r.status === 'PENDING' || r.status === 'REJECTED') ? r : null
+})
+
+// ─── Báo cáo (UC17): một hộp thoại cho địa điểm / đánh giá / bình luận ─────
+const reportDialog = useTemplateRef<InstanceType<typeof ReportDialog>>('reportDialog')
+const requireLogin = useRequireLogin()
+function openReport(target: ReportTarget): void {
+  reportDialog.value?.open(target)
+}
+function reportPlace(): void {
+  if (!requireLogin() || !place.value) return
+  openReport({ type: 'PLACE', id: place.value.id, label: place.value.name })
+}
 const distribution = computed(() => {
   const d = place.value?.ratingDistribution
   const total = place.value?.reviewCount ?? 0
@@ -257,12 +289,14 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
           <li v-for="tag in place.tags" :key="tag">{{ tagLabel(tag) }}</li>
         </ul>
       </div>
-      <div v-if="reviewAction" class="flex gap-2">
+      <div class="flex flex-wrap gap-2">
         <LsButton
+          v-if="reviewAction"
           :variant="reviewAction === 'write' ? 'accent' : 'ghost'"
           :to="{ name: 'write-review', params: { slug: place.slug } }"
           >{{ reviewAction === 'write' ? 'Viết đánh giá' : 'Sửa đánh giá của bạn' }}</LsButton
         >
+        <LsButton variant="ghost" @click="reportPlace">Báo cáo</LsButton>
       </div>
     </header>
 
@@ -512,7 +546,19 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
           >
             Không có đánh giá {{ ratingFilter }} sao.
           </p>
-          <ReviewItem v-for="review in reviewItems" :key="review.id" :review="review" />
+          <ReviewItem
+            v-if="myUnpublished"
+            :review="myUnpublished"
+            :place-slug="place.slug"
+            @report="openReport"
+          />
+          <ReviewItem
+            v-for="review in reviewItems"
+            :key="review.id"
+            :review="review"
+            :place-slug="place.slug"
+            @report="openReport"
+          />
           <div v-if="reviews.hasNextPage.value" class="flex justify-center pt-6">
             <LsButton
               variant="ghost"
@@ -537,6 +583,7 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
         <SpotCard v-for="p in nearby.data.value" :key="p.id" :place="p" />
       </LsCarousel>
     </div>
+    <ReportDialog ref="reportDialog" />
   </article>
 </template>
 

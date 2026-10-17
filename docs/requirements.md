@@ -135,7 +135,7 @@ Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một da
 | NFR-07 | Bảo mật | RBAC + `@PreAuthorize` / `PermissionEvaluator` trên mọi endpoint ghi | Test phân quyền cho từng role |
 | NFR-08 | Bảo mật | Chống XSS, SQL injection (JPA tham số hóa), mass assignment (chỉ bind qua DTO), CSRF không áp dụng do dùng JWT header | Checklist §10.G |
 | NFR-09 | Bảo mật | Upload: chỉ JPEG/PNG, kiểm tra MIME thật (chữ ký file) + phần mở rộng, ≤ 5 MB và ≤ 40 MP/ảnh, ≤ 10 ảnh/request, ≤ 30 ảnh/địa điểm, gỡ EXIF (chốt 2026-10-06) | Test upload file sai định dạng / quá cỡ |
-| NFR-10 | Bảo mật | Rate limit cho đăng nhập, đăng ký, quên mật khẩu, viết review | Test vượt ngưỡng trả 429 |
+| NFR-10 | Bảo mật | Rate limit cho đăng nhập, đăng ký, quên mật khẩu, viết review, bình luận | Test vượt ngưỡng trả 429 |
 | NFR-11 | Quyền riêng tư | Không công khai email; gỡ tọa độ GPS trong EXIF ảnh; xóa mềm dữ liệu người dùng | Review code + test |
 | NFR-12 | Toàn vẹn dữ liệu | Các ràng buộc ở plan-v1.md §5 "Ràng buộc quan trọng" được đảm bảo ở tầng CSDL, không chỉ ở tầng ứng dụng | Migration + test vi phạm ràng buộc |
 | NFR-13 | Tin cậy | Tác vụ nền (ảnh, mail, rating) có retry và dead-letter queue; lỗi tác vụ nền không làm hỏng request chính | Test consumer lỗi |
@@ -173,7 +173,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Mật khẩu | ≥ 8 ký tự, có chữ và số | Đã chốt (U1) |
 | Hạn link xác thực email / đặt lại mật khẩu | 24 h / 30 phút | Đã chốt (U1) |
 | Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |
-| Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản. Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04) |
+| Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản; bình luận 20 / 10 phút / tài khoản (chỉ tính lần đã qua kiểm tra — thêm 2026-10-17). Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04, bình luận 2026-10-17) |
 | Review từ dải IP bị cảnh báo | Bắt buộc vào hàng chờ + gắn cờ "nghi ngờ IP" | Đã chốt (U3) |
 | Dải IP của luật cảnh báo | IPv4 /24; IPv6 /64 (một thuê bao / hộ thường nhận nguyên /64); IPv4 dạng IPv6 coi là IPv4. Đếm cả review đã xóa | Đã chốt (2026-10-08) |
 | Sửa review theo trạng thái | `HIDDEN` không sửa được (409); `REJECTED` sửa = gửi lại → luôn `PENDING`; `PUBLISHED` / `PENDING`: trust < 30 → `PENDING`, ngược lại giữ nguyên | Đã chốt (2026-10-08) |
