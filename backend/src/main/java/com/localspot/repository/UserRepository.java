@@ -108,4 +108,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Người dùng (chưa xóa) có permission qua một role nào đó — gửi thông báo cho đội kiểm duyệt (UC23 bước 5). */
     @Query("SELECT DISTINCT u.id FROM User u JOIN u.roles r JOIN r.permissions p WHERE p.name = :permission")
     List<Long> findIdsWithPermission(@Param("permission") String permission);
+
+    /**
+     * Mỗi dòng {@code [id, displayName, avatarUrl]}, <b>kể cả tài khoản đã xóa</b> (bỏ qua {@code @SQLRestriction}) —
+     * nhật ký quản trị phải còn tên người thao tác dù tài khoản đó bị xóa sau này (tên đã ẩn danh hóa theo D7).
+     */
+    @Query(value = "SELECT id, display_name, avatar_url FROM users WHERE id IN (:ids)", nativeQuery = true)
+    List<Object[]> findSummaryRowsIncludingDeleted(@Param("ids") Collection<Long> ids);
 }
