@@ -148,7 +148,8 @@ Kèm Application Event/Listener cho các tác vụ phụ: `ReviewCreatedEvent` (
 ### Quản trị viên / Kiểm duyệt viên
 - Duyệt / từ chối địa điểm và yêu cầu sở hữu.
 - Xử lý hàng đợi báo cáo, ẩn nội dung, khóa tài khoản.
-- Quản lý danh mục, tiện ích. *(Banner đã cắt khỏi phạm vi — 2026-09-27, xem docs/requirements.md Q4.)*
+- Quản lý danh mục, tiện ích.
+- Quản lý ảnh trang chủ — 3 ô cố định *(cắt 2026-09-27, mở lại phạm vi tối thiểu 2026-10-17 — docs/requirements.md Q4, FR-43, UC34)*.
 - Dashboard thống kê: người dùng mới, review theo ngày, địa điểm hot.
 
 ---
@@ -408,6 +409,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [x] Phản hồi của chủ quán — `PUT` / `DELETE /reviews/{id}/reply` (UC25, FR-33): `@PreAuthorize` `review:reply-own-place` (chủ **hiện tại** — `OwnershipPermissionEvaluator` có sẵn từ D6); chỉ review đang hiện công khai (404 như vote / bình luận); một PUT tạo hoặc sửa, khóa dòng review chống trùng `UNIQUE(review_id)`; chủ mới sửa phản hồi của chủ cũ → đứng tên chủ mới; xóa hẳn, idempotent, gỡ được cả khi review đã bị ẩn. Hiện ở `Review.ownerReply` (nạp theo lô từ E6). Thông báo cho tác giả review ở mục thông báo. Chốt 2026-10-16
 - [x] Thông báo (bảng `notifications` + Spring WebSocket/STOMP) — `NotificationService` ghi **trong transaction** của thao tác gây ra (rollback → không có thông báo), đẩy sau commit (`NotificationPushListener` → `/user/queue/notifications`); `data` là ảnh chụp. 11 loại, đúng các sự kiện trong UC (supervisor chốt 2026-10-16): kết quả duyệt địa điểm / review / yêu cầu sở hữu (gồm tự từ chối), review mới cho chủ, chủ phản hồi lần đầu, ẩn sau báo cáo (người liên quan + người báo cáo; bỏ qua không gửi), yêu cầu sở hữu mới cho mọi kiểm duyệt viên. STOMP qua WebSocket thuần `/ws`, token trong khung CONNECT (`StompAuthInterceptor`, dùng lại JwtDecoder + converter của REST), chỉ SUBSCRIBE kênh cá nhân, không SEND; handshake `/ws` permitAll trong `SecurityConfig`. `GET /me/notifications` (mới nhất trước, `unreadOnly`), `unread-count`, đánh dấu đã đọc (idempotent, của người khác 404), đọc tất cả. Chốt 2026-10-16
 - [x] API quản trị và thống kê — `GET /moderation/queue` (hàng chờ gộp PLACE / REVIEW / REPORT / CLAIM: một `UNION ALL` dùng đúng điều kiện của bốn hàng chờ riêng, chỉ ghép loại người gọi có quyền, `type` không có quyền → 403; FIFO `(submittedAt, type, id)`, keyset trên bộ ba, `position` đếm lại theo hàng chờ hiện tại; tiêu đề dùng chung `ReportTargets`, cờ `IP_FLAGGED` / `LOW_TRUST` chỉ cho review); `GET /admin/dashboard` (UC33 — **gộp openapi gốc với AdminDashboard**, supervisor chốt 2026-10-17: người dùng mới / review gửi theo ngày giờ VN, tổng + kỳ trước cùng độ dài, 5 thành phố + 10 địa điểm hot theo **review đang hiện mới viết** trong khoảng, việc tồn + mục cũ nhất cùng định nghĩa hàng chờ gộp; mặc định 14 ngày, tối đa 366; không cache; **không xuất CSV**); `GET /admin/activity-log` (mới nhất trước, lọc `actorId` / `action`, người thao tác đã xóa vẫn hiện, không trả IP); `GET /owner/places/{id}/stats` (UC26 — lượt xem / check-in theo ngày, phân bố sao dùng chung trang chi tiết; mặc định 30 ngày). Đếm thẳng trên bảng gốc (`StatsQueries`, `ModerationQueueQueries`). Chốt 2026-10-17
+- [x] Ảnh trang chủ (FR-43, UC34 — mở lại Q4, supervisor chốt 2026-10-17) — `V5__home_banners.sql` (bảng + permission `banner:manage` cho ADMIN); `/admin/banners` (danh sách 3 ô, `PUT …/{slot}/image` multipart, `PATCH` mô tả / bật tắt có `version`, `DELETE` gỡ); xử lý ảnh **ngay trong request** (dùng chung `ImageInspector` + `ImageResizer`, 3 bản bỏ EXIF ở `banners/` đọc công khai, ảnh gốc không lưu), ảnh mới dọn khi rollback, ảnh cũ xóa sau commit; `GET /home` thêm `banners` (cache xóa sau commit); activity_log BANNER_IMAGE_REPLACE / BANNER_UPDATE / BANNER_REMOVE. Frontend làm cùng (mục F)
 - [x] Nhật ký thao tác quản trị (FR-42): `@AuditedAction` + Spring AOP aspect ghi `activity_log` — làm cùng mục đầu tiên có thao tác duyệt (CRUD địa điểm + luồng duyệt); gắn lại cho các endpoint ghi `/admin/users` của D5. Ghi trong cùng transaction với thao tác (`TransactionConfig` đặt thứ tự advice); đã gắn `PLACE_APPROVE` / `PLACE_REJECT`, `USER_LOCK` / `USER_UNLOCK` / `USER_ASSIGN_ROLES` (`GET` không ghi). API đọc `/admin/activity-log` đã làm ở "API quản trị và thống kê" (2026-10-17)
 
 ### F. Frontend
@@ -425,6 +427,7 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 - [ ] Trang cá nhân: review, ảnh, bộ sưu tập, huy hiệu
 - [ ] Trang chủ quán: cập nhật thông tin, phản hồi, thống kê
 - [ ] Trang quản trị: duyệt, báo cáo, người dùng, dashboard
+- [ ] Ảnh trang chủ (UC34) — **đã code 2026-10-17, chờ supervisor chạy thử**: `/admin/banners` 3 khối (xem trước đúng tỷ lệ, thay ảnh = chọn → cắt theo khung gợi ý → tải, mô tả ảnh, bật / tắt, gỡ có xác nhận); HomePage thay hình minh hoạ bằng ảnh (`BannerPicture`, `srcset` 3 cỡ), hero phủ lớp tối đều 65% `on-accent` (không gradient) giữ chữ ≥ 4,5:1
 - [ ] Skeleton loading, empty state, error state
 - [ ] Responsive mobile
 - [ ] Kiểm tra accessibility cơ bản (contrast, focus, alt)

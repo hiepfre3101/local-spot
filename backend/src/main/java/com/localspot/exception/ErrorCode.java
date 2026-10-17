@@ -49,6 +49,8 @@ public final class ErrorCode {
 
     public static final String CATEGORY_NOT_FOUND = "CATEGORY_NOT_FOUND";
     public static final String AMENITY_NOT_FOUND = "AMENITY_NOT_FOUND";
+    /** Ô ảnh trang chủ chưa có ảnh — sửa mô tả / bật tắt / gỡ cần có ảnh trước (UC34). */
+    public static final String BANNER_NOT_FOUND = "BANNER_NOT_FOUND";
     /** Không tồn tại, hoặc riêng tư / của người khác — không tiết lộ bộ sưu tập riêng tư có tồn tại (chốt 2026-10-12). */
     public static final String COLLECTION_NOT_FOUND = "COLLECTION_NOT_FOUND";
     /** 409 theo trường {@code slug}: slug danh mục / tiện ích đã có. */

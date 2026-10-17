@@ -3,7 +3,7 @@ package com.localspot.security;
 import java.util.Set;
 
 /**
- * Tên permission (authority dạng {@code resource:action}) — đúng 17 giá trị seed ở {@code V2__seed_rbac.sql} và
+ * Tên permission (authority dạng {@code resource:action}) — đúng 18 giá trị seed ở {@code V2__seed_rbac.sql} (+ {@code banner:manage} ở V5) và
  * {@code x-permission} trong openapi. {@code PermissionCatalogTests} khẳng định ba nơi khớp nhau.
  *
  * <p>Dùng trong {@code @PreAuthorize} bằng cách nối hằng số — gõ sai tên là lỗi biên dịch, thay vì một chuỗi
@@ -39,6 +39,8 @@ public final class Permissions {
     public static final String CATEGORY_MANAGE = "category:manage";
     public static final String AMENITY_MANAGE = "amenity:manage";
     public static final String DASHBOARD_VIEW = "dashboard:view";
+    /** Ảnh trang chủ (UC34 — thêm 2026-10-17, V5). */
+    public static final String BANNER_MANAGE = "banner:manage";
 
     public static final Set<String> ALL = Set.of(
             REVIEW_CREATE,
@@ -57,7 +59,8 @@ public final class Permissions {
             USER_ASSIGN_ROLE,
             CATEGORY_MANAGE,
             AMENITY_MANAGE,
-            DASHBOARD_VIEW);
+            DASHBOARD_VIEW,
+            BANNER_MANAGE);
 
     private Permissions() {}
 }

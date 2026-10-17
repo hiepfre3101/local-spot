@@ -72,6 +72,13 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     group: 'Quản trị',
     icon: 'M3 3h8l10 10-8 8L3 11z',
   },
+  {
+    label: 'Ảnh trang chủ',
+    routeName: 'admin-banners',
+    permissions: [Permission.BANNER_MANAGE],
+    group: 'Quản trị',
+    icon: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6',
+  },
 ]
 
 export function visibleAdminNav(

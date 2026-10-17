@@ -8,6 +8,12 @@ export const MAX_EDGE = 4096
 const JPEG_QUALITY = 0.88
 const ACCEPTED = new Set(['image/jpeg', 'image/png'])
 
+/** Tỷ lệ cắt gợi ý theo khung hiển thị (ảnh trang chủ — UC34): `aspect` = rộng / cao. */
+export interface CropPreset {
+  label: string
+  aspect: number
+}
+
 export class ImageDecodeError extends Error {
   constructor(fileName: string) {
     super(`Không đọc được ảnh "${fileName}". Hãy chọn ảnh JPG hoặc PNG.`)
