@@ -402,7 +402,8 @@ paths:
         mới nhất (`sort=NEWEST`). `featuredReview`: review đang hiện (PUBLISHED trên địa điểm APPROVED) từ 4 sao, nhiều lượt
         hữu ích nhất trong 30 ngày gần đây (không có thì mọi thời điểm), chỉ trả đoạn trích ≤ 180 ký tự; `null` khi chưa có.
         Không có trường theo người xem → cache Redis dùng chung (TTL 10 phút), xóa sau commit khi duyệt / sửa địa điểm,
-        điểm đổi, tập review đang hiện đổi, sửa danh mục. Vote và ảnh xử lý xong không xóa cache (trễ tối đa một TTL).
+        điểm đổi, tập review đang hiện đổi, sửa danh mục, đổi ảnh trang chủ (`banners` — UC34). Vote và ảnh xử lý xong
+        không xóa cache (trễ tối đa một TTL).
       security: []
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/HomeResponse' } } } }
@@ -730,7 +731,8 @@ paths:
       description: >-
         Thứ tự kiểm tra: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → nội dung không rỗng sau khi bỏ khoảng trắng hai
         đầu, ≤ 2000 ký tự (422) → review đang hiện (404) → `parentId` là bình luận gốc đang hiện của cùng review (422
-        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`).
+        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`) → ≤ 20 bình luận / 10 phút / tài khoản (429
+        `TOO_MANY_REQUESTS` + `Retry-After`; chỉ tính lần đã qua mọi kiểm tra; Redis sập thì cho qua — chốt 2026-10-17).
       parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
       requestBody:
         required: true
@@ -743,6 +745,7 @@ paths:
         '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
         '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
   /comments/{commentId}:
     delete:
       tags: [Comments]
@@ -1464,6 +1467,77 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ActivityLogPage' } } } }
+  /admin/banners:
+    get:
+      tags: [Admin]
+      summary: Ảnh trang chủ — đủ 3 ô cố định (UC34, FR-43)
+      description: |
+        *(thêm 2026-10-17 — mở lại Q4, phạm vi tối thiểu)* Ô cố định theo bố cục HomePage: `HERO` (nền hero — chỉ đổi ảnh,
+        tiêu đề + ô tìm kiếm giữ nguyên), `SIGNUP_BAND` (băng mời đăng ký), `COMMUNITY` (khối thành viên). Không có lịch
+        chạy, link hay đếm lượt bấm. Ô chưa có ảnh vẫn trả về (`image: null`) — trang chủ dùng hình minh hoạ mặc định.
+      x-permission: banner:manage
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Banner' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/banners/{slot}/image:
+    put:
+      tags: [Admin]
+      summary: Thay ảnh một ô (tạo nếu chưa có — mặc định bật)
+      description: |
+        Xử lý ngay trong request (không qua hàng đợi): kiểm tra như ảnh địa điểm (JPEG / PNG, chữ ký file + đuôi, ≤ 5 MB,
+        ≤ 40 MP), sinh 3 bản JPEG bỏ EXIF ở `banners/…` (đọc công khai); ảnh gốc không lưu. Ảnh cũ xóa sau commit; lưu
+        thất bại thì ảnh mới bị dọn. `altText` bỏ trống = giữ mô tả cũ. Xóa cache `GET /home` sau commit; ghi
+        `activity_log` `BANNER_IMAGE_REPLACE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+                altText: { type: string, maxLength: 200, description: Mô tả ảnh; rỗng = ảnh trang trí }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Banner' } } } }
+        '400': { description: '`slot` không phải ô hợp lệ' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: 'Trường `image`: thiếu / sai định dạng / quá cỡ (`INVALID_IMAGE`); `altText` > 200 ký tự' }
+        '503': { description: 'Kho ảnh lỗi — `SERVICE_UNAVAILABLE`, không lưu gì' }
+  /admin/banners/{slot}:
+    patch:
+      tags: [Admin]
+      summary: Sửa mô tả / bật tắt ảnh một ô (không đổi ảnh)
+      description: Tắt thì trang chủ về hình minh hoạ, ảnh vẫn giữ. Ghi `activity_log` `BANNER_UPDATE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                altText: { type: string, maxLength: 200 }
+                active: { type: boolean }
+                version: { type: integer }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Banner' } } } }
+        '404': { description: 'Ô chưa có ảnh — `BANNER_NOT_FOUND`' }
+        '409': { description: '`version` lệch — `CONCURRENT_MODIFICATION`' }
+        '422': { description: '`altText` > 200 ký tự' }
+    delete:
+      tags: [Admin]
+      summary: Gỡ ảnh — ô về hình minh hoạ mặc định
+      description: Object trên kho xóa sau commit. Ghi `activity_log` `BANNER_REMOVE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      responses:
+        '204': { description: Đã gỡ }
+        '404': { description: 'Ô chưa có ảnh — `BANNER_NOT_FOUND`' }
 
 components:
   securitySchemes:
@@ -1478,6 +1552,7 @@ components:
 
   parameters:
     Cursor: { name: cursor, in: query, schema: { type: string }, description: Cursor mờ (opaque) từ `nextCursor` }
+    BannerSlot: { name: slot, in: path, required: true, schema: { $ref: '#/components/schemas/BannerSlot' } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
     PlaceId: { name: placeId, in: path, required: true, schema: { type: integer, format: int64 } }
     ReviewId: { name: reviewId, in: path, required: true, schema: { type: integer, format: int64 } }
@@ -1794,6 +1869,31 @@ components:
         latest: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
         categories: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
         featuredReview: { oneOf: [ { $ref: '#/components/schemas/HomeReview' }, { type: 'null' } ] }
+        banners:
+          type: array
+          description: '*(UC34)* Ảnh đang bật theo ô; ô không có trong mảng → hình minh hoạ mặc định'
+          items: { $ref: '#/components/schemas/HomeBanner' }
+    BannerSlot:
+      type: string
+      enum: [HERO, SIGNUP_BAND, COMMUNITY]
+    HomeBanner:
+      type: object
+      properties:
+        slot: { $ref: '#/components/schemas/BannerSlot' }
+        image: { $ref: '#/components/schemas/Photo' }
+        altText: { type: string, description: Rỗng = ảnh trang trí }
+    Banner:
+      type: object
+      description: Một ô ảnh trang chủ ở màn quản trị — ô chưa có ảnh thì `id`, `image`, `version`, `updatedAt`, `updatedBy` là null
+      properties:
+        slot: { $ref: '#/components/schemas/BannerSlot' }
+        id: { type: [integer, 'null'], format: int64 }
+        image: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+        altText: { type: string }
+        active: { type: boolean }
+        version: { type: [integer, 'null'] }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        updatedBy: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
     HomeReview:
       type: object
       description: Đánh giá nổi bật trên trang chủ (ReviewCard) — đoạn trích, không phải toàn văn (2026-10-12)

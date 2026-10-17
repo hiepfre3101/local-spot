@@ -15,7 +15,8 @@ import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
  * Dev: tạo bucket và policy đọc công khai khi khởi động, để {@code docker compose up -d} xong là upload được ngay. Deploy
  * tạo bucket bằng tay / hạ tầng (R2 bật public qua custom domain) — tắt bằng {@code localspot.storage.create-bucket}.
  *
- * <p>Chỉ {@code places/*} và {@code reviews/*} (ảnh đã xử lý, không EXIF) được đọc công khai; ảnh gốc ở
+ * <p>Chỉ {@code places/*}, {@code reviews/*} và {@code banners/*} (ảnh trang chủ — UC34) — ảnh đã xử lý, không EXIF —
+ * được đọc công khai; ảnh gốc ở
  * {@code incoming/*} còn EXIF (có thể có GPS — NFR-11) nên giữ riêng tư.
  */
 @Component
@@ -31,7 +32,8 @@ public class StorageBucketInitializer implements ApplicationRunner {
                 "Effect": "Allow",
                 "Principal": {"AWS": ["*"]},
                 "Action": ["s3:GetObject"],
-                "Resource": ["arn:aws:s3:::{bucket}/places/*", "arn:aws:s3:::{bucket}/reviews/*"]
+                "Resource": ["arn:aws:s3:::{bucket}/places/*", "arn:aws:s3:::{bucket}/reviews/*",
+                             "arn:aws:s3:::{bucket}/banners/*"]
               }]
             }
             """;

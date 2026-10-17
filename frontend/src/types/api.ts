@@ -181,6 +181,30 @@ export interface HomeResponse {
   latest: PlaceSummary[]
   categories: CategoryNode[]
   featuredReview: HomeReview | null
+  /** Ảnh đang bật theo ô (UC34); ô không có → hình minh hoạ mặc định. */
+  banners: HomeBanner[]
+}
+
+/** Ô ảnh cố định trên trang chủ (UC34). */
+export type BannerSlot = 'HERO' | 'SIGNUP_BAND' | 'COMMUNITY'
+
+/** openapi `HomeBanner` — `altText` rỗng = ảnh trang trí. */
+export interface HomeBanner {
+  slot: BannerSlot
+  image: Photo
+  altText: string
+}
+
+/** openapi `Banner` — màn quản trị; ô chưa có ảnh: `id`, `image`, `version`… là `null`. */
+export interface Banner {
+  slot: BannerSlot
+  id: number | null
+  image: Photo | null
+  altText: string
+  active: boolean
+  version: number | null
+  updatedAt: string | null
+  updatedBy: UserSummary | null
 }
 
 export type ReviewStatus = 'PENDING' | 'PUBLISHED' | 'REJECTED' | 'HIDDEN'
@@ -213,3 +237,26 @@ export interface Review {
   updatedAt: string
   version: number
 }
+
+/** openapi `VoteResult` — trạng thái sau khi vote / bỏ vote (idempotent). */
+export interface VoteResult {
+  helpfulCount: number
+  votedByMe: boolean
+}
+
+/**
+ * openapi `Comment` — 2 cấp. Gốc đã xoá / bị ẩn nhưng còn trả lời → placeholder `deleted` (không `author` /
+ * `content`). `replies` chỉ có ở gốc (trả lời: `null`).
+ */
+export interface Comment {
+  id: number
+  author: UserSummary | null
+  content: string | null
+  parentId: number | null
+  deleted: boolean
+  replies: Comment[] | null
+  createdAt: string
+}
+
+export type ReportTargetType = 'PLACE' | 'REVIEW' | 'COMMENT' | 'USER'
+export type ReportReason = 'SPAM' | 'FAKE' | 'OFFENSIVE' | 'WRONG_INFO' | 'OTHER'

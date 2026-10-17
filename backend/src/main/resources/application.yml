@@ -152,3 +152,4 @@ localspot:
       forgot-password-email: { limit: 3, window: 1h }
       forgot-password-ip: { limit: 20, window: 1h }
       resend-verification: { limit: 3, window: 1h } # theo tài khoản
+      comment: { limit: 20, window: 10m } # theo tài khoản — chống spam bình luận (chốt 2026-10-17)

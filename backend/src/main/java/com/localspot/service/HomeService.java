@@ -44,6 +44,7 @@ public class HomeService {
 
     private final PlaceService places;
     private final CatalogService catalog;
+    private final BannerService banners;
     private final ReviewRepository reviews;
     private final ReviewMapper reviewMapper;
     private final Clock clock;
@@ -51,11 +52,13 @@ public class HomeService {
     public HomeService(
             PlaceService places,
             CatalogService catalog,
+            BannerService banners,
             ReviewRepository reviews,
             ReviewMapper reviewMapper,
             Clock clock) {
         this.places = places;
         this.catalog = catalog;
+        this.banners = banners;
         this.reviews = reviews;
         this.reviewMapper = reviewMapper;
         this.clock = clock;
@@ -71,7 +74,7 @@ public class HomeService {
                         .toList();
         List<PlaceSummaryResponse> latest =
                 places.list(NO_FILTER, PlaceSort.NEWEST, null, LATEST_SIZE).items();
-        return new HomeResponse(featured, latest, catalog.categoryTree(), featuredReview());
+        return new HomeResponse(featured, latest, catalog.categoryTree(), featuredReview(), banners.active());
     }
 
     /** Trong cửa sổ 30 ngày trước; chưa có review nào đủ điều kiện trong cửa sổ thì lấy mọi thời điểm. */

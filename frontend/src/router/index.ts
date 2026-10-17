@@ -112,6 +112,13 @@ export const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/admin/AdminUsersPage.vue'),
         meta: { title: 'Người dùng & vai trò', anyPermission: [Permission.USER_VIEW] },
       },
+      {
+        // UC34 — ảnh trang chủ (thêm 2026-10-17, mở lại Q4)
+        path: 'banners',
+        name: 'admin-banners',
+        component: () => import('@/pages/admin/AdminBannersPage.vue'),
+        meta: { title: 'Ảnh trang chủ', anyPermission: [Permission.BANNER_MANAGE] },
+      },
     ],
   },
   {

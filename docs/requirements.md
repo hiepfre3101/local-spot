@@ -114,6 +114,7 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | FR-40 | Kiểm duyệt viên | Duyệt yêu cầu sở hữu | Duyệt thì gán role `owner` cho người yêu cầu | S | §4 |
 | FR-41 | Quản trị viên | Dashboard thống kê | Người dùng mới, review theo ngày, địa điểm hot | S | §4 |
 | FR-42 | Hệ thống | Nhật ký thao tác quản trị | Ghi `activity_log` qua Spring AOP cho mọi thao tác admin/moderator | S | §5 `activity_log` |
+| FR-43 | Quản trị viên | Ảnh trang chủ *(thêm lại 2026-10-17 — Q4)* | Thay ảnh 3 ô cố định của trang chủ (nền hero, băng mời đăng ký, khối thành viên): tải ảnh, mô tả ảnh, bật / tắt, gỡ. Hero chỉ đổi ảnh; không lịch chạy, link, đếm lượt bấm | C | §5 `home_banners` |
 
 Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một danh sách gộp FIFO** (cũ nhất trước, không đổi được thứ tự; lọc được theo loại) — `GET /moderation/queue`. Chỉ là màn xem; duyệt / từ chối vẫn qua endpoint `decision` riêng của từng loại *(chốt 2026-09-29)*.
 
@@ -134,7 +135,7 @@ Hàng chờ của FR-35, FR-36, FR-37, FR-40 được xem chung trong **một da
 | NFR-07 | Bảo mật | RBAC + `@PreAuthorize` / `PermissionEvaluator` trên mọi endpoint ghi | Test phân quyền cho từng role |
 | NFR-08 | Bảo mật | Chống XSS, SQL injection (JPA tham số hóa), mass assignment (chỉ bind qua DTO), CSRF không áp dụng do dùng JWT header | Checklist §10.G |
 | NFR-09 | Bảo mật | Upload: chỉ JPEG/PNG, kiểm tra MIME thật (chữ ký file) + phần mở rộng, ≤ 5 MB và ≤ 40 MP/ảnh, ≤ 10 ảnh/request, ≤ 30 ảnh/địa điểm, gỡ EXIF (chốt 2026-10-06) | Test upload file sai định dạng / quá cỡ |
-| NFR-10 | Bảo mật | Rate limit cho đăng nhập, đăng ký, quên mật khẩu, viết review | Test vượt ngưỡng trả 429 |
+| NFR-10 | Bảo mật | Rate limit cho đăng nhập, đăng ký, quên mật khẩu, viết review, bình luận | Test vượt ngưỡng trả 429 |
 | NFR-11 | Quyền riêng tư | Không công khai email; gỡ tọa độ GPS trong EXIF ảnh; xóa mềm dữ liệu người dùng | Review code + test |
 | NFR-12 | Toàn vẹn dữ liệu | Các ràng buộc ở plan-v1.md §5 "Ràng buộc quan trọng" được đảm bảo ở tầng CSDL, không chỉ ở tầng ứng dụng | Migration + test vi phạm ràng buộc |
 | NFR-13 | Tin cậy | Tác vụ nền (ảnh, mail, rating) có retry và dead-letter queue; lỗi tác vụ nền không làm hỏng request chính | Test consumer lỗi |
@@ -172,7 +173,7 @@ Các giá trị này sẽ nằm trong `application.yml` (cấu hình được), 
 | Mật khẩu | ≥ 8 ký tự, có chữ và số | Đã chốt (U1) |
 | Hạn link xác thực email / đặt lại mật khẩu | 24 h / 30 phút | Đã chốt (U1) |
 | Giới hạn đăng nhập sai | 5 lần / 15 phút theo (email, IP); refresh token bị dùng lại → thu hồi toàn bộ | Đã chốt (U2) |
-| Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản. Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04) |
+| Giới hạn tần suất khác (NFR-10) | Đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác thực 3 / giờ / tài khoản; bình luận 20 / 10 phút / tài khoản (chỉ tính lần đã qua kiểm tra — thêm 2026-10-17). Cửa sổ trượt trên Redis; Redis sập → cho qua + log ERROR | Đã chốt (2026-10-04, bình luận 2026-10-17) |
 | Review từ dải IP bị cảnh báo | Bắt buộc vào hàng chờ + gắn cờ "nghi ngờ IP" | Đã chốt (U3) |
 | Dải IP của luật cảnh báo | IPv4 /24; IPv6 /64 (một thuê bao / hộ thường nhận nguyên /64); IPv4 dạng IPv6 coi là IPv4. Đếm cả review đã xóa | Đã chốt (2026-10-08) |
 | Sửa review theo trạng thái | `HIDDEN` không sửa được (409); `REJECTED` sửa = gửi lại → luôn `PENDING`; `PUBLISHED` / `PENDING`: trust < 30 → `PENDING`, ngược lại giữ nguyên | Đã chốt (2026-10-08) |
@@ -248,6 +249,6 @@ Ví dụ (ngưỡng 30):
 | Q1 ✅ | Phân tầng MoSCoW ở mục 3 có đúng ý không? Đặc biệt: check-in (FR-24) và báo cáo vi phạm (FR-25) để Must; bộ sưu tập, thông báo để Should | Như bảng | Lộ trình tuần 5–11 |
 | Q2 ✅ | Phân quyền `moderator` vs `admin`? | Moderator: duyệt địa điểm/review/claim, xử lý báo cáo, ẩn nội dung. Admin: thêm khóa tài khoản, gán role, danh mục, tiện ích, dashboard | Bảng `permissions` seed, `@PreAuthorize` |
 | Q3 ✅ | Tham số chống review ảo và trust score | Chốt toàn bộ như mục 5 và 5.1 (ngưỡng 30, trần 18/36, phạt 25/vi phạm hết hạn 30 ngày, chỉ tính vote từ người trust ≥ 30 chụp lúc vote) | Schema `users`, `review_votes`, FR-23, Chương 3 |
-| Q4 ✅ | Banner có trong plan §4 nhưng không có bảng ở §5 | **Đã cắt** khỏi phạm vi, bỏ FR-43 và dòng banner trong plan §4 | ERD |
+| Q4 ✅ | Banner có trong plan §4 nhưng không có bảng ở §5 | ~~Đã cắt khỏi phạm vi, bỏ FR-43~~ → **mở lại 2026-10-17 (supervisor), phạm vi tối thiểu**: FR-43 / UC34 — 3 ô ảnh cố định trên trang chủ, hero chỉ đổi ảnh (tiêu đề + ô tìm kiếm giữ nguyên, phủ lớp tối đều để giữ tương phản); permission mới `banner:manage` chỉ cho ADMIN. Không làm danh sách banner tự do (lịch chạy, link, thứ tự) | ERD (`home_banners`, V5), Chương 3 |
 | Q5 ✅ | Độ sâu bình luận phân cấp? | 2 cấp — đủ cho hội thoại, tránh truy vấn đệ quy | Schema `comments` |
 | Q6 ✅ | Các con số NFR | Như bảng | Chương 5 kiểm thử |
