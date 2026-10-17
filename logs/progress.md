@@ -1165,7 +1165,7 @@ Chưa commit.
 
 **Kiểm chứng**: backend `CommentFlowTests` 7 (thêm `twentyFirstCommentWithinTenMinutesIs429ButInvalidOnesDoNotCount`: gửi rỗng 422 không tính, 20 bình luận được, thứ 21 → 429 `TOO_MANY_REQUESTS` + `Retry-After`, tài khoản khác vẫn gửi được) + `RateLimitFlowTests` 7 xanh, Spotless + SpotBugs sạch. Frontend `vitest` **104 test** xanh (thêm 10 `ReviewInteractions.spec`: vote / bỏ vote theo backend, không hiện số 0; khách → đăng nhập kèm `redirect`; báo cáo phát đúng đối tượng; đánh giá của mình chỉ có Sửa, bản chờ duyệt có nhãn và không bình luận; luồng 2 cấp + dòng giữ chỗ + chỉ gốc có Trả lời + Xoá / Báo cáo đúng người; gửi gốc / trả lời đúng `parentId` và cắt khoảng trắng; 429 → "thử lại sau 4 phút"; xoá cần xác nhận; hộp thoại: thiếu lý do, "Thông tin sai" thiếu mô tả không gửi, gửi đúng dữ liệu, 409 đã báo cáo → thông báo nhẹ). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
 
-## 2026-10-17 22:35 (+07) — Checklist F: form đề xuất địa điểm (P05 — UC11, UC22)
+## 2026-10-17 22:33 (+07) — Checklist F: form đề xuất địa điểm (P05 — UC11, UC22)
 
 **Bối cảnh**: nhánh `feature/fe-propose-place` từ `feature/fe-review-interactions` (chưa gộp). Backend đề xuất (multipart, ảnh qua hàng đợi) và nghi trùng `/places/duplicates` (U7) có từ E1 / E4. Sitemap đã chốt "một trang có thanh tiến độ; cảnh báo trùng U7"; header và trang chủ đã chừa mục "Đề xuất địa điểm" chờ route `propose`.
 
