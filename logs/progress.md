@@ -1143,3 +1143,24 @@ Chưa commit.
 
 **Sự cố môi trường**: lần verify đầu chạy cùng backend dev + 6 container trong WSL → VM WSL ~6 GB, máy còn ~2,8 GB, WSL treo ~25 phút. Supervisor đồng ý `wsl --shutdown` (volume giữ nguyên), chạy lại verify một mình → xanh như trên. Bài học: không chạy `./mvnw verify` song song với backend dev trên máy 16 GB.
 
+
+## 2026-10-17 22:21 (+07) — Checklist F: vote, bình luận, báo cáo trên trang chi tiết (UC14, UC15, UC17) + giới hạn bình luận
+
+**Bối cảnh**: nhánh `feature/fe-review-interactions` từ `feature/admin-banners` (chưa gộp — cùng sửa plan / file này). Backend vote / bình luận / báo cáo có từ E (2026-10-11, 2026-10-14). ReviewItem đang là bản chỉ đọc; README thành phần mô tả hàng thao tác Hữu ích / Bình luận / Báo cáo, bản của mình thay bằng Sửa / Xoá, bản chờ duyệt ghim đầu danh sách.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Thêm giới hạn bình luận bằng Redis** (trước đây bình luận không giới hạn — câu hỏi từ khi trả lời "bình luận được bao nhiêu lần"): 20 / 10 phút / tài khoản qua `RateLimiter` sẵn có (không thêm thư viện). Bị loại: không giới hạn (chỉ dựa vào báo cáo), thêm trần theo ngày đếm trong CSDL (nhiều mã + test hơn mức cần).
+
+**Quyết định kỹ thuật:**
+- **Giới hạn kiểm sau mọi kiểm tra** (email, nội dung, review đang hiện, `parentId`): gõ sai / review vừa bị ẩn không tiêu suất của người dùng; lần bị từ chối không tính (hành vi sẵn có của script Lua). Redis sập → cho qua như các luật khác (bình luận còn báo cáo + kiểm duyệt). Khác giới hạn 5 review / 24 h (đếm trong CSDL vì là cơ chế chống review ảo cốt lõi, phải có hiệu lực cả khi Redis sập).
+- **Vote lấy số từ backend**, không tự cộng trừ: `PUT` / `DELETE` idempotent trả `helpfulCount` + `votedByMe`, nên bấm nhanh hai lần hay mở hai tab vẫn đúng. Khoá nút trong lúc chờ. Không hiện số 0 (README).
+- **Bình luận mở ngay dưới đánh giá**, không sang trang khác; khách đọc được (API công khai), thao tác ghi → đăng nhập rồi quay lại đúng trang (`useRequireLogin` dùng chung). Sau khi gửi / xoá thì nạp lại luồng (giữ đúng thứ tự gốc cũ trước của backend) và báo ReviewItem tăng / giảm số bình luận, không tải lại cả danh sách đánh giá. Chỉ gốc có "Trả lời" (2 cấp — Q5); gốc đã xoá còn trả lời → "Bình luận đã bị xoá" và không trả lời được (backend yêu cầu gốc đang hiện).
+- **Một hộp thoại báo cáo dùng chung** cho địa điểm / đánh giá / bình luận (ReviewItem và luồng bình luận chỉ phát sự kiện, trang chi tiết mở hộp thoại), thay vì mỗi mục một hộp thoại. Lý do theo enum backend; "Thông tin sai" / "Khác" bắt buộc mô tả (chốt 2026-10-14) kiểm ngay trên form. Đã báo cáo (409 `REPORT_ALREADY_EXISTS`, U10) → thông báo nhẹ và đóng, không coi là lỗi. Báo cáo **người dùng** để ở trang cá nhân (P06) — trang chi tiết không có chỗ hợp lý.
+- **Đánh giá của mình**: "Sửa" (P04 — xoá cũng ở đó) thay cho Hữu ích / Báo cáo; vẫn đọc / trả lời bình luận. **Bản chờ duyệt / bị từ chối** của mình nạp riêng bằng `GET /reviews/{id}` (danh sách công khai chỉ có PUBLISHED), ghim đầu danh sách, nền chìm, nhãn "● Đang chờ duyệt — chỉ bạn thấy" / "✕ Bị từ chối: lý do", chỉ có Sửa, như README.
+- **"Báo cáo" địa điểm** đặt ở đầu P03 cạnh nút đánh giá — kênh duy nhất báo tên / vị trí sai (O5, O8).
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử. Báo cáo người dùng (P06). Thông báo realtime khi có bình luận mới không thuộc UC (đã chốt 2026-10-16).
+
+**Tài liệu**: openapi (429 + luật giới hạn ở `POST /reviews/{id}/comments`), requirements (NFR-10, bảng giới hạn tần suất), plan §10 D (rate limit) + F (mục bình luận, vote, báo cáo).
+
+**Kiểm chứng**: backend `CommentFlowTests` 7 (thêm `twentyFirstCommentWithinTenMinutesIs429ButInvalidOnesDoNotCount`: gửi rỗng 422 không tính, 20 bình luận được, thứ 21 → 429 `TOO_MANY_REQUESTS` + `Retry-After`, tài khoản khác vẫn gửi được) + `RateLimitFlowTests` 7 xanh, Spotless + SpotBugs sạch. Frontend `vitest` **104 test** xanh (thêm 10 `ReviewInteractions.spec`: vote / bỏ vote theo backend, không hiện số 0; khách → đăng nhập kèm `redirect`; báo cáo phát đúng đối tượng; đánh giá của mình chỉ có Sửa, bản chờ duyệt có nhãn và không bình luận; luồng 2 cấp + dòng giữ chỗ + chỉ gốc có Trả lời + Xoá / Báo cáo đúng người; gửi gốc / trả lời đúng `parentId` và cắt khoảng trắng; 429 → "thử lại sau 4 phút"; xoá cần xác nhận; hộp thoại: thiếu lý do, "Thông tin sai" thiếu mô tả không gửi, gửi đúng dữ liệu, 409 đã báo cáo → thông báo nhẹ). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.

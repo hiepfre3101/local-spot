@@ -237,3 +237,26 @@ export interface Review {
   updatedAt: string
   version: number
 }
+
+/** openapi `VoteResult` — trạng thái sau khi vote / bỏ vote (idempotent). */
+export interface VoteResult {
+  helpfulCount: number
+  votedByMe: boolean
+}
+
+/**
+ * openapi `Comment` — 2 cấp. Gốc đã xoá / bị ẩn nhưng còn trả lời → placeholder `deleted` (không `author` /
+ * `content`). `replies` chỉ có ở gốc (trả lời: `null`).
+ */
+export interface Comment {
+  id: number
+  author: UserSummary | null
+  content: string | null
+  parentId: number | null
+  deleted: boolean
+  replies: Comment[] | null
+  createdAt: string
+}
+
+export type ReportTargetType = 'PLACE' | 'REVIEW' | 'COMMENT' | 'USER'
+export type ReportReason = 'SPAM' | 'FAKE' | 'OFFENSIVE' | 'WRONG_INFO' | 'OTHER'

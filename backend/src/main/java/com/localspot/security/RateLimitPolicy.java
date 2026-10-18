@@ -15,5 +15,10 @@ public enum RateLimitPolicy {
     /** Quên mật khẩu theo IP — chặn dò hàng loạt email từ một nguồn. */
     FORGOT_PASSWORD_IP,
     /** Gửi lại mail xác thực theo tài khoản (UC01 7a). */
-    RESEND_VERIFICATION
+    RESEND_VERIFICATION,
+    /**
+     * Bình luận / trả lời theo tài khoản (UC15 — supervisor chốt 2026-10-17): chặn spam bình luận. Chỉ tính lần gửi đã
+     * qua mọi kiểm tra; Redis sập thì cho qua như các luật khác — bình luận còn báo cáo (UC17) và kiểm duyệt.
+     */
+    COMMENT
 }
