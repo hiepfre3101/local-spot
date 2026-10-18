@@ -2,6 +2,7 @@ package com.localspot.service;
 
 import com.localspot.dto.response.OwnerReplyResponse;
 import com.localspot.dto.response.PhotoResponse;
+import com.localspot.dto.response.PlaceRef;
 import com.localspot.dto.response.ReviewResponse;
 import com.localspot.entity.OwnerReply;
 import com.localspot.entity.Review;
@@ -9,6 +10,7 @@ import com.localspot.mapper.ReviewMapper;
 import com.localspot.repository.CheckInRepository;
 import com.localspot.repository.CommentRepository;
 import com.localspot.repository.OwnerReplyRepository;
+import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.ReviewVoteRepository;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -34,6 +36,7 @@ public class ReviewViews {
     private final OwnerReplyRepository ownerReplies;
     private final ReviewPhotoService photos;
     private final CheckInRepository checkIns;
+    private final PlaceRepository places;
 
     public ReviewViews(
             ReviewMapper mapper,
@@ -41,13 +44,15 @@ public class ReviewViews {
             CommentRepository comments,
             OwnerReplyRepository ownerReplies,
             ReviewPhotoService photos,
-            CheckInRepository checkIns) {
+            CheckInRepository checkIns,
+            PlaceRepository places) {
         this.mapper = mapper;
         this.votes = votes;
         this.comments = comments;
         this.ownerReplies = ownerReplies;
         this.photos = photos;
         this.checkIns = checkIns;
+        this.places = places;
     }
 
     /** {@code viewerId = null}: khách. */
@@ -65,9 +70,17 @@ public class ReviewViews {
         Map<Long, OwnerReply> replies = ownerReplies.findWithAuthorByReviewIdIn(ids).stream()
                 .collect(Collectors.toMap(reply -> reply.getReview().getId(), Function.identity()));
         Map<Long, List<PhotoResponse>> photosByReview = photos.photosOf(reviews, viewerId);
+        // getPlace().getId() đọc khóa ngoại trên proxy — không nạp từng địa điểm; tên + slug lấy bằng một truy vấn
+        Map<Long, PlaceRef> placeRefs = new HashMap<>();
+        for (Object[] row : places.findRefRowsByIdIn(
+                reviews.stream().map(r -> r.getPlace().getId()).distinct().toList())) {
+            long placeId = ((Number) row[0]).longValue();
+            placeRefs.put(placeId, new PlaceRef(placeId, (String) row[1], (String) row[2]));
+        }
         return reviews.stream()
                 .map(review -> toResponse(
                         review,
+                        placeRefs.get(review.getPlace().getId()),
                         viewerId,
                         photosByReview.getOrDefault(review.getId(), List.of()),
                         voted.contains(review.getId()),
@@ -83,6 +96,7 @@ public class ReviewViews {
 
     private ReviewResponse toResponse(
             Review review,
+            PlaceRef place,
             Long viewerId,
             List<PhotoResponse> photoList,
             boolean votedByMe,
@@ -94,6 +108,7 @@ public class ReviewViews {
         return new ReviewResponse(
                 review.getId(),
                 review.getPlace().getId(),
+                place,
                 mapper.toUserSummary(review.getUser()),
                 review.getRating(),
                 review.getContent(),

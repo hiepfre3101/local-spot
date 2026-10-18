@@ -1942,6 +1942,7 @@ components:
       properties:
         id: { type: integer, format: int64 }
         placeId: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceRef', description: '*(thêm 2026-10-18)* Tên + slug — danh sách ngoài trang địa điểm (trang cá nhân P06) hiện và dẫn tới địa điểm' }
         author: { $ref: '#/components/schemas/UserSummary' }
         rating: { type: integer }
         content: { type: string }

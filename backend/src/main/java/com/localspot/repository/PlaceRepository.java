@@ -65,6 +65,13 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
 
     /** {@code GET /owner/places}: số địa điểm một chủ sở hữu nhỏ → trả hết, không phân trang. */
     /** Nạp địa điểm theo danh sách id từ truy vấn không gian (thứ tự do service sắp lại theo khoảng cách). */
+    /**
+     * Mỗi dòng {@code [id, slug, name]} — tham chiếu gọn cho danh sách review (một truy vấn cho cả trang). Native để lấy
+     * cả địa điểm đã xóa mềm: review vẫn cần biết mình thuộc địa điểm nào.
+     */
+    @Query(value = "SELECT id, slug, name FROM places WHERE id IN (:ids)", nativeQuery = true)
+    List<Object[]> findRefRowsByIdIn(@Param("ids") Collection<Long> ids);
+
     @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.id IN :ids")
     List<Place> findWithCategoryByIdIn(@Param("ids") Collection<Long> ids);
 
