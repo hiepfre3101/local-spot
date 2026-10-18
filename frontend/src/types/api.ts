@@ -217,6 +217,38 @@ export interface OwnerReply {
   updatedAt: string
 }
 
+/** Một ngày (giờ Việt Nam) — chuỗi luôn đủ mọi ngày trong khoảng, ngày trống = 0. */
+export interface DailyCount {
+  date: string
+  count: number
+}
+
+/**
+ * openapi `PlaceStats` (UC26). Chuỗi theo ngày trong `[from, to]`; `ratingDistribution`, `bayesianScore`,
+ * `reviewCount` là hiện trạng (không theo khoảng).
+ */
+export interface PlaceStats {
+  from: string
+  to: string
+  viewsByDay: DailyCount[]
+  checkinsByDay: DailyCount[]
+  ratingDistribution: Record<string, number>
+  bayesianScore: number
+  reviewCount: number
+}
+
+export type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+/** openapi `MyClaim` — yêu cầu sở hữu nhìn từ người gửi (`GET /me/claims`). */
+export interface MyClaim {
+  id: number
+  place: PlaceRef
+  status: ClaimStatus
+  rejectReason: string | null
+  createdAt: string
+  reviewedAt: string | null
+}
+
 /** openapi `Review`. `authorCheckedIn`: tác giả check-in vào ngày viết hoặc trước đó (nhãn "✓ Đã check-in"). */
 export interface Review {
   id: number

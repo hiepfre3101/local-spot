@@ -83,6 +83,15 @@ onBeforeUnmount(() => {
           </RouterLink>
         </li>
         <li>
+          <!-- P09: chủ quản lý địa điểm; thành viên gửi / theo dõi yêu cầu xác nhận sở hữu (UC23) -->
+          <RouterLink
+            class="block rounded-xs px-3 py-2 hover:bg-surface-sunk"
+            :to="{ name: 'owner' }"
+          >
+            Địa điểm của tôi
+          </RouterLink>
+        </li>
+        <li>
           <RouterLink
             class="block rounded-xs px-3 py-2 hover:bg-surface-sunk"
             :to="{ name: 'settings-password' }"

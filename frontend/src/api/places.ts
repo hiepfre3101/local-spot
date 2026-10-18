@@ -105,13 +105,21 @@ export const placesApi = {
   /** Review PUBLISHED của địa điểm, keyset theo thứ tự đã chọn. */
   reviews(
     placeId: number,
-    options: { sort: ReviewSort; rating?: number; cursor?: string | null; limit?: number },
+    options: {
+      sort: ReviewSort
+      rating?: number
+      /** Chỉ review chưa có phản hồi của chủ (P09 "Cần phản hồi"). */
+      unreplied?: boolean
+      cursor?: string | null
+      limit?: number
+    },
   ): Promise<CursorPage<Review>> {
     return http
       .get<CursorPage<Review>>(`/places/${placeId}/reviews`, {
         params: {
           sort: options.sort,
           rating: options.rating,
+          unreplied: options.unreplied || undefined,
           cursor: options.cursor ?? undefined,
           limit: options.limit ?? 10,
         },

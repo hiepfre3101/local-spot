@@ -128,6 +128,7 @@ async function mountAt(slug: string, options: { writeReviewRoute?: boolean } = {
       { path: '/search', name: 'search', component: Empty },
       { path: '/login', name: 'login', component: Empty },
       { path: '/users/:id', name: 'profile', component: Empty },
+      { path: '/owner', name: 'owner', component: Empty },
       { path: '/places/:slug', name: 'place', component: PlaceDetailPage, props: true },
       ...(options.writeReviewRoute
         ? [{ path: '/places/:slug/review', name: 'write-review', component: Empty }]
@@ -184,6 +185,17 @@ describe('PlaceDetailPage (P03)', () => {
     await flushPromises()
     expect(reviews).toHaveBeenCalledWith(5, expect.objectContaining({ sort: 'HELPFUL', rating: 5 }))
     expect(wrapper.get('button[aria-label^="5 sao"]').attributes('aria-pressed')).toBe('true')
+  })
+
+  it('yêu cầu sở hữu: chỉ khi claimable, mở /owner với địa điểm chọn sẵn', async () => {
+    let wrapper = await mountAt('pho-thin-ha-noi')
+    const link = wrapper.findAll('a').find((a) => a.text() === 'Yêu cầu xác nhận sở hữu')!
+    expect(link.attributes('href')).toBe('/owner?place=pho-thin-ha-noi')
+    wrapper.unmount()
+
+    detail.mockResolvedValue({ ...PLACE, claimable: false })
+    wrapper = await mountAt('pho-thin-ha-noi')
+    expect(wrapper.text()).not.toContain('Yêu cầu xác nhận sở hữu')
   })
 
   it('không có nút dẫn tới màn chưa làm (check-in)', async () => {

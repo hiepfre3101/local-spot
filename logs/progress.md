@@ -1236,3 +1236,28 @@ Chưa commit.
 **Tài liệu**: openapi (`/me/collections` tham số `placeId`, `CollectionSummary.containsPlace`), plan §10 F (mục bộ sưu tập).
 
 **Kiểm chứng**: backend `CollectionFlowTests` thêm `myCollectionsMarkWhichOnesAlreadyHoldAPlace` (đánh dấu đúng bộ, không lẫn bộ người khác cùng địa điểm, không hỏi → trống, tab trang cá nhân → trống); `./mvnw verify` đầy đủ **354 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **132 test** xanh (thêm `CollectionPage.spec` 6: chủ — thông tin / link chia sẻ / công cụ / nhãn bị ẩn; bỏ địa điểm + sửa ghi chú; xoá phải xác nhận rồi về trang cá nhân; link chia sẻ chỉ đọc kể cả chủ; bộ người khác chỉ đọc; 404. `PlaceDetailPage.spec` +3: khách → đăng nhập; "✓ Đã lưu" + tick / bỏ tick gọi API; "+ Lưu", địa điểm chưa duyệt không có nút. `ProfilePage.spec` +1 và cập nhật; `routes.spec` +1 cho URL thật `/collections/7`, `/c/<slug>`). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.
+
+## 2026-10-18 17:35 (+07) — Checklist F: trang chủ quán (P09 — UC23, UC24, UC25, UC26)
+
+**Bối cảnh**: nhánh `feature/owner-page` tách từ `feature/fe-collections` (chưa gộp). Backend chủ địa điểm có từ E (`/owner/places`, PATCH, ảnh, `stats`, phản hồi review, gửi yêu cầu sở hữu); sitemap đã chốt `/owner` + `/owner/places/:id?tab=stats|info|reviews`, giao diện công khai, một chủ nhiều địa điểm, cập nhật áp dụng ngay (O5).
+
+**Supervisor chốt (qua câu hỏi):**
+- **Bộ lọc "chưa phản hồi" ở backend**: `GET /places/{id}/reviews?unreplied=true`. Bị loại: lọc ở frontend (một trang có thể trống dù trang sau còn review chưa trả lời — sai với phân trang keyset); không lọc (chủ phải dò cả danh sách).
+- **Chọn địa điểm khi yêu cầu sở hữu**: liên kết trên P03 (chọn sẵn) + ô tìm địa điểm ở `/owner`. Bị loại: chỉ từ P03.
+- **Thêm `GET /me/claims`** để người gửi theo dõi trạng thái và lý do từ chối. Bị loại: chỉ dựa vào thông báo (mất dấu nếu bỏ lỡ thông báo, không biết đang chờ gì).
+- Mục "Cài đặt — Hồ sơ" bị đánh [x] trong plan là **nhầm** → trả về [ ], làm sau.
+
+**Quyết định kỹ thuật:**
+- `unreplied`: `NOT EXISTS (owner_replies)` trong cả hai truy vấn keyset (NEWEST, HELPFUL) — giữ cursor đúng. **Không giới hạn cho chủ**: phản hồi vốn công khai trên từng review, bộ lọc không lộ thêm gì; giữ endpoint công khai, không thêm nhánh quyền. Bảng phản hồi xóa hẳn nên xóa phản hồi → review lại vào danh sách (có test).
+- `/me/claims`: keyset theo id, mới nhất trước; **không trả** điện thoại, minh chứng, người duyệt (người gửi đã biết, tên kiểm duyệt viên không lộ). Gồm cả địa điểm đã bị ẩn sau đó (lịch sử của chính người dùng).
+- **Thống kê**: một lần gọi `stats` cho 2 kỳ liên tiếp rồi tách → KPI có "so với kỳ trước" như AdminDashboard; ngày theo giờ VN tính ở trình duyệt (`Intl`, `Asia/Ho_Chi_Minh`). KPI chỉ dùng số API có: lượt xem, check-in (theo kỳ), điểm Bayesian, tổng đánh giá — bản mẫu có "lượt lưu", "đánh giá mới" không có trong API nên bỏ (không bịa số). **Biểu đồ SVG tự vẽ** (cột `sea`, rê chuột `olive`) — không thêm thư viện biểu đồ ngoài stack; kèm bảng số liệu ẩn cho trình đọc màn hình.
+- **Thông tin (UC24)**: cùng bố cục section với P05; gửi `version` → 409 báo tải lại. API không xoá được giá (`null` = giữ nguyên) nên form chặn xoá giá đã có và nói rõ. Tên / vị trí / danh mục không sửa (backend không nhận) — hướng dẫn báo cáo WRONG_INFO. Ảnh thêm / xoá gọi API ngay; xoá ảnh đã đăng phải xác nhận (không hoàn tác). `PhotoPicker` thêm `max` / `label` để dùng lại (30 ảnh địa điểm, 1–5 ảnh minh chứng).
+- **Phản hồi (UC25)**: trả lời / sửa / xoá (xác nhận) tại chỗ, đếm ký tự còn lại; trả lời xong mục vẫn ở trên màn để thấy kết quả. Lọc "Cần phản hồi" / "Tất cả" là nút `aria-pressed` (không dùng `aria-pressed` trên liên kết).
+- **`/owner`**: nạp lại `/me` khi vào trang — yêu cầu vừa được duyệt cấp OWNER phía máy chủ ngay, quyền trong phiên phải theo. Chưa có quyền chủ thì không gọi `/owner/places` (403). Form theo API: bản mẫu có "Vai trò của bạn" và PDF ≤ 10 MB — API không có trường vai trò, chỉ nhận ảnh ≤ 5 MB (chốt 2026-10-16). Lỗi 409 hiện câu theo mã (`CLAIM_ALREADY_PENDING`, `PLACE_ALREADY_OWNED`, `EMAIL_NOT_VERIFIED`).
+- Lối vào: menu tài khoản "Địa điểm của tôi" (mọi thành viên — cũng là nơi gửi yêu cầu); P03 hiện "Yêu cầu xác nhận sở hữu" khi `claimable`. Bản mẫu có nút "Cập nhật thông tin" ở đầu trang — dùng tab Thông tin (một lối vào).
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử. Số "chưa phản hồi" trên nhãn tab (bản mẫu "6 chưa phản hồi") — API không có số đếm.
+
+**Tài liệu**: openapi (`unreplied`, `/me/claims`, `MyClaim`), plan §10 F (mục trang chủ quán; trả mục UC06 về [ ]).
+
+**Kiểm chứng**: backend thêm `OwnerReplyFlowTests.unrepliedFilterListsOnlyReviewsWithoutOwnerReply` (lọc đúng, phân trang, HELPFUL, mặc định không lọc, xoá phản hồi → vào lại) và `ClaimFlowTests.claimantFollowsOwnClaimsNewestFirstWithRejectReason` (mới nhất trước, phân trang, lý do từ chối, không lẫn người khác, không lộ điện thoại, khách 401); `ClaimFlowTests` + `OwnerReplyFlowTests` + `ReviewFlowTests` 31 test xanh; `./mvnw verify` đầy đủ **356 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **150 test** xanh (thêm `OwnerHomePage.spec` 6, `OwnerPlacePage.spec` 5, `stats.spec` 5, P03 +1 liên kết yêu cầu sở hữu, `routes.spec` +1). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.

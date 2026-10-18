@@ -66,6 +66,21 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Bộ sưu tập' },
       },
       {
+        // P09 — chưa sở hữu gì → form yêu cầu sở hữu (UC23); `?place=<slug>` chọn sẵn địa điểm (nút trên P03)
+        path: 'owner',
+        name: 'owner',
+        component: () => import('@/pages/owner/OwnerHomePage.vue'),
+        meta: { title: 'Địa điểm của tôi', requiresAuth: true },
+      },
+      {
+        // P09 — tab ?tab=stats|info|reviews (UC24–UC26)
+        path: 'owner/places/:id(\\d+)',
+        name: 'owner-place',
+        component: () => import('@/pages/owner/OwnerPlacePage.vue'),
+        props: (route) => ({ id: Number(route.params.id) }),
+        meta: { title: 'Quản lý địa điểm', anyPermission: [Permission.PLACE_UPDATE_OWN] },
+      },
+      {
         // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
         path: 'propose',
         name: 'propose',

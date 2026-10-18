@@ -30,6 +30,14 @@ describe('bảng route', () => {
     expect(resolve('/search?q=pho').name).toBe('search')
   })
 
+  it('chủ địa điểm: /owner (kèm ?place) và /owner/places/:id (số) kèm ?tab', () => {
+    expect(resolve('/owner?place=pho-thin-ha-noi').name).toBe('owner')
+    const managed = resolve('/owner/places/5?tab=reviews')
+    expect(managed.name).toBe('owner-place')
+    expect(managed.params.id).toBe('5')
+    expect(resolve('/owner/places/abc').name).toBe('not-found')
+  })
+
   it('bộ sưu tập: /collections/:id (số) và link chia sẻ /c/:shareSlug', () => {
     expect(resolve('/collections/7').name).toBe('collection')
     expect(resolve('/collections/abc').name).toBe('not-found')
