@@ -40,8 +40,10 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Viết đánh giá', requiresAuth: true },
       },
       {
-        // P06 — tab qua ?tab= (sitemap); id không phải số → trang không tìm thấy
-        path: 'users/:id(\d+)',
+        // P06 — tab qua ?tab= (sitemap); id không phải số → trang không tìm thấy.
+        // Phải là `\\d` trong chuỗi JS: viết `\d` thì JS bỏ dấu `\`, mẫu thành `(d+)` và URL thật /users/16 (nút Quay
+        // lại, F5) rơi vào trang 404 — điều hướng bằng tên không kiểm mẫu nên không lộ ra.
+        path: 'users/:id(\\d+)',
         name: 'profile',
         component: () => import('@/pages/ProfilePage.vue'),
         props: (route) => ({ id: Number(route.params.id) }),
