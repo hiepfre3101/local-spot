@@ -1,6 +1,7 @@
 package com.localspot.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -77,6 +78,33 @@ class OwnerReplyFlowTests {
                 .andExpect(jsonPath("$.items[0].ownerReply.id").value(replyId))
                 .andExpect(
                         jsonPath("$.items[0].ownerReply.content").value("Cảm ơn bạn, lần sau quán tặng trà đá nhé."));
+    }
+
+    @Test
+    void unrepliedFilterListsOnlyReviewsWithoutOwnerReply() throws Exception {
+        Account owner = account("OWNER");
+        long placeId = place("APPROVED", owner);
+        long answered = review(placeId, account(), "PUBLISHED");
+        long waitingOld = review(placeId, account(), "PUBLISHED");
+        long waitingNew = review(placeId, account(), "PUBLISHED");
+        perform(owner, reply(answered, "Cảm ơn bạn đã ghé quán!")).andExpect(status().isOk());
+
+        String path = "/api/v1/places/" + placeId + "/reviews";
+        mvc.perform(get(path).param("unreplied", "true").param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(waitingNew))
+                .andExpect(jsonPath("$.nextCursor").isString());
+        mvc.perform(get(path).param("unreplied", "true"))
+                .andExpect(jsonPath("$.items[*].id", contains((int) waitingNew, (int) waitingOld)));
+        mvc.perform(get(path).param("unreplied", "true").param("sort", "HELPFUL"))
+                .andExpect(jsonPath("$.items.length()").value(2));
+        // Mặc định không lọc
+        mvc.perform(get(path)).andExpect(jsonPath("$.items.length()").value(3));
+        // Xoá phản hồi → lại vào danh sách cần phản hồi
+        perform(owner, delete(replyPath(answered))).andExpect(status().isNoContent());
+        mvc.perform(get(path).param("unreplied", "true"))
+                .andExpect(jsonPath("$.items.length()").value(3));
     }
 
     @Test

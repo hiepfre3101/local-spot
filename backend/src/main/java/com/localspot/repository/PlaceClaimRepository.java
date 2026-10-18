@@ -23,6 +23,14 @@ public interface PlaceClaimRepository extends JpaRepository<PlaceClaim, Long> {
             """)
     List<PlaceClaim> findPendingOldestFirst(@Param("afterId") Long afterId, Limit limit);
 
+    /** {@code GET /me/claims}: yêu cầu của một người, mới nhất trước, kèm địa điểm (tên + slug cho liên kết). */
+    @Query("""
+            SELECT c FROM PlaceClaim c JOIN FETCH c.place
+            WHERE c.user.id = :userId AND (:afterId IS NULL OR c.id < :afterId)
+            ORDER BY c.id DESC
+            """)
+    List<PlaceClaim> findByClaimant(@Param("userId") Long userId, @Param("afterId") Long afterId, Limit limit);
+
     /** Màn duyệt một yêu cầu: mọi trạng thái, kèm địa điểm + danh mục và người yêu cầu. */
     @Query("""
             SELECT c FROM PlaceClaim c JOIN FETCH c.place p JOIN FETCH p.category JOIN FETCH c.user

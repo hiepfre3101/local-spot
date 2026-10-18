@@ -79,17 +79,22 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     // ─── Danh sách (FR-14) — keyset, kèm tác giả ─────────────────────────────
 
-    /** Review PUBLISHED của địa điểm, mới nhất trước ({@code id} tăng theo thời điểm tạo). */
+    /**
+     * Review PUBLISHED của địa điểm, mới nhất trước ({@code id} tăng theo thời điểm tạo). {@code unreplied}: chỉ review
+     * chưa có phản hồi của chủ (P09 "Cần phản hồi").
+     */
     @Query("""
             SELECT r FROM Review r JOIN FETCH r.user
             WHERE r.place.id = :placeId AND r.status = com.localspot.entity.ReviewStatus.PUBLISHED
               AND (:rating IS NULL OR r.rating = :rating)
+              AND (:unreplied = FALSE OR NOT EXISTS (SELECT 1 FROM OwnerReply o WHERE o.review = r))
               AND (:afterId IS NULL OR r.id < :afterId)
             ORDER BY r.id DESC
             """)
     List<Review> findPublishedNewest(
             @Param("placeId") Long placeId,
             @Param("rating") Integer rating,
+            @Param("unreplied") boolean unreplied,
             @Param("afterId") Long afterId,
             Limit limit);
 
@@ -98,6 +103,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             SELECT r FROM Review r JOIN FETCH r.user
             WHERE r.place.id = :placeId AND r.status = com.localspot.entity.ReviewStatus.PUBLISHED
               AND (:rating IS NULL OR r.rating = :rating)
+              AND (:unreplied = FALSE OR NOT EXISTS (SELECT 1 FROM OwnerReply o WHERE o.review = r))
               AND (:afterId IS NULL OR r.helpfulCount < :afterHelpful
                    OR (r.helpfulCount = :afterHelpful AND r.id < :afterId))
             ORDER BY r.helpfulCount DESC, r.id DESC
@@ -105,6 +111,7 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     List<Review> findPublishedMostHelpful(
             @Param("placeId") Long placeId,
             @Param("rating") Integer rating,
+            @Param("unreplied") boolean unreplied,
             @Param("afterHelpful") Integer afterHelpful,
             @Param("afterId") Long afterId,
             Limit limit);

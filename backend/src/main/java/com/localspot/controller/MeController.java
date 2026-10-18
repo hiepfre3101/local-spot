@@ -5,12 +5,14 @@ import com.localspot.dto.response.CheckInResponse;
 import com.localspot.dto.response.CollectionSummaryResponse;
 import com.localspot.dto.response.CursorPage;
 import com.localspot.dto.response.MeResponse;
+import com.localspot.dto.response.MyClaimResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.dto.response.ReviewResponse;
 import com.localspot.security.AuthenticatedUser;
 import com.localspot.security.RefreshTokenCookies;
 import com.localspot.service.AccountService;
 import com.localspot.service.CheckInService;
+import com.localspot.service.ClaimService;
 import com.localspot.service.CollectionService;
 import com.localspot.service.PlaceService;
 import com.localspot.service.ProfileService;
@@ -39,6 +41,7 @@ public class MeController {
     private final ReviewService reviewService;
     private final CheckInService checkInService;
     private final CollectionService collectionService;
+    private final ClaimService claimService;
     private final RefreshTokenCookies cookies;
 
     public MeController(
@@ -48,6 +51,7 @@ public class MeController {
             ReviewService reviewService,
             CheckInService checkInService,
             CollectionService collectionService,
+            ClaimService claimService,
             RefreshTokenCookies cookies) {
         this.profileService = profileService;
         this.accountService = accountService;
@@ -55,6 +59,7 @@ public class MeController {
         this.reviewService = reviewService;
         this.checkInService = checkInService;
         this.collectionService = collectionService;
+        this.claimService = claimService;
         this.cookies = cookies;
     }
 
@@ -101,6 +106,18 @@ public class MeController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
         return checkInService.mine(user.id(), cursor, limit);
+    }
+
+    /**
+     * Yêu cầu xác nhận sở hữu của tôi, mới nhất trước (P09 — thêm 2026-10-18): theo dõi kết quả duyệt, gửi lại khi bị
+     * từ chối.
+     */
+    @GetMapping("/claims")
+    public CursorPage<MyClaimResponse> myClaims(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit) {
+        return claimService.mine(user.id(), cursor, limit);
     }
 
     /**

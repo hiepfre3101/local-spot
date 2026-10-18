@@ -60,6 +60,7 @@ public class ReviewController {
                     @Min(value = 1, message = RATING_RANGE)
                     @Max(value = 5, message = RATING_RANGE)
                     Integer rating,
+            @RequestParam(defaultValue = "false") boolean unreplied,
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit,
             Authentication authentication) {
@@ -67,6 +68,7 @@ public class ReviewController {
                 placeId,
                 sort,
                 rating,
+                unreplied,
                 cursor,
                 limit,
                 Viewers.from(authentication).userId());

@@ -249,23 +249,28 @@ public class ReviewService {
         HELPFUL
     }
 
-    /** Review PUBLISHED của địa điểm đã duyệt; địa điểm chưa duyệt / không tồn tại → 404 như trang chi tiết. */
+    /**
+     * Review PUBLISHED của địa điểm đã duyệt; địa điểm chưa duyệt / không tồn tại → 404 như trang chi tiết.
+     * {@code unreplied}: chỉ review chưa có phản hồi của chủ — cột "Cần phản hồi" của P09 (thêm 2026-10-18). Không giới
+     * hạn cho chủ: phản hồi vốn hiện công khai trên từng review, bộ lọc không lộ thêm gì.
+     */
     @Transactional(readOnly = true)
     public CursorPage<ReviewResponse> listForPlace(
-            Long placeId, Sort sort, Integer rating, String cursor, Integer limit, Long viewerId) {
+            Long placeId, Sort sort, Integer rating, boolean unreplied, String cursor, Integer limit, Long viewerId) {
         int pageSize = KeysetCursor.limit(limit);
         places.findById(placeId)
                 .filter(p -> p.getStatus() == PlaceStatus.APPROVED)
                 .orElseThrow(PlaceService::placeNotFound);
         if (sort == Sort.NEWEST) {
-            List<Review> rows =
-                    reviews.findPublishedNewest(placeId, rating, KeysetCursor.decode(cursor), Limit.of(pageSize + 1));
+            List<Review> rows = reviews.findPublishedNewest(
+                    placeId, rating, unreplied, KeysetCursor.decode(cursor), Limit.of(pageSize + 1));
             return KeysetPages.byId(rows, pageSize, Review::getId, page -> views.of(page, viewerId));
         }
         ReviewListCursor.Helpful after = ReviewListCursor.decode(cursor);
         List<Review> rows = reviews.findPublishedMostHelpful(
                 placeId,
                 rating,
+                unreplied,
                 after == null ? null : after.helpfulCount(),
                 after == null ? null : after.id(),
                 Limit.of(pageSize + 1));

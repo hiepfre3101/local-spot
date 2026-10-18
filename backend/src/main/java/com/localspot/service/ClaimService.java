@@ -1,6 +1,9 @@
 package com.localspot.service;
 
 import com.localspot.dto.request.ClaimCreateRequest;
+import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.MyClaimResponse;
+import com.localspot.dto.response.PlaceRef;
 import com.localspot.entity.ClaimStatus;
 import com.localspot.entity.Place;
 import com.localspot.entity.PlaceClaim;
@@ -21,6 +24,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Limit;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -115,6 +119,32 @@ public class ClaimService {
         PlaceClaim claim = claims.save(
                 new PlaceClaim(place, claimant, request.contactPhone().strip(), noteOf(request), keys));
         notifications.claimSubmitted(claim); // đội kiểm duyệt (UC23 bước 5)
+    }
+
+    /**
+     * {@code GET /me/claims} (P09 — thêm 2026-10-18): người gửi theo dõi yêu cầu của mình (đang chờ / được duyệt / bị từ
+     * chối kèm lý do) và gửi lại khi bị từ chối. Kể cả địa điểm đã bị ẩn sau đó — lịch sử của chính người dùng.
+     */
+    @Transactional(readOnly = true)
+    public CursorPage<MyClaimResponse> mine(Long userId, String cursor, Integer limit) {
+        int pageSize = KeysetCursor.limit(limit);
+        List<PlaceClaim> rows = claims.findByClaimant(userId, KeysetCursor.decode(cursor), Limit.of(pageSize + 1));
+        return KeysetPages.byId(
+                rows,
+                pageSize,
+                PlaceClaim::getId,
+                page -> page.stream()
+                        .map(c -> new MyClaimResponse(
+                                c.getId(),
+                                new PlaceRef(
+                                        c.getPlace().getId(),
+                                        c.getPlace().getSlug(),
+                                        c.getPlace().getName()),
+                                c.getStatus(),
+                                c.getRejectReason(),
+                                c.getCreatedAt(),
+                                c.getReviewedAt()))
+                        .toList());
     }
 
     /** Cả lô kiểm tra trước khi ghi gì — một file hỏng thì cả yêu cầu bị từ chối, lỗi chỉ đúng {@code evidence[i]}. */
