@@ -40,6 +40,14 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Viết đánh giá', requiresAuth: true },
       },
       {
+        // P06 — tab qua ?tab= (sitemap); id không phải số → trang không tìm thấy
+        path: 'users/:id(\d+)',
+        name: 'profile',
+        component: () => import('@/pages/ProfilePage.vue'),
+        props: (route) => ({ id: Number(route.params.id) }),
+        meta: { title: 'Trang cá nhân' },
+      },
+      {
         // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
         path: 'propose',
         name: 'propose',

@@ -53,6 +53,7 @@ function review(overrides: Partial<Review> = {}): Review {
   return {
     id: 7,
     placeId: 5,
+    place: { id: 5, slug: 'pho-thin-ha-noi', name: 'Phở Thìn' },
     author: { id: 100, displayName: 'Tuấn Lê', avatarUrl: null },
     rating: 4,
     content: 'Nước dùng trong, thịt bò mềm.',

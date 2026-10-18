@@ -1,0 +1,112 @@
+/*
+ * P06 Trang cá nhân. `.ls-tabs`, `.ls-stats`, `.ls-medal` port từ docs/design-system/components/bundle.css. Thêm so với
+ * bản gốc: tab là RouterLink (`aria-current`, không chỉ `aria-selected`), ô số liệu bấm được (mở danh sách theo dõi),
+ * thanh tab cuộn ngang trên điện thoại thay vì xuống dòng.
+ */
+@layer components {
+  /* Tabs: tab đang mở = gạch chân ink + chữ đậm (không chỉ bằng màu) */
+  .ls-tabs {
+    display: flex;
+    gap: var(--space-8);
+    border-bottom: 1px solid var(--line);
+    margin-bottom: var(--space-6);
+    overflow-x: auto;
+  }
+  .ls-tabs a {
+    flex: none;
+    padding: var(--space-3) 0;
+    margin-bottom: -1px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    font: 500 15px/22px var(--font-sans);
+    border-bottom: 2px solid transparent;
+  }
+  .ls-tabs a[aria-current='page'] {
+    color: var(--ink);
+    font-weight: 700;
+    border-bottom-color: var(--ink);
+  }
+  .ls-tabs .n {
+    margin-left: var(--space-1);
+    font-weight: 400;
+    color: var(--ink-muted);
+  }
+
+  /* Dải số liệu chia bằng đường kẻ */
+  .ls-stats {
+    display: flex;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .ls-stats > * {
+    padding: var(--space-3) var(--space-6);
+    border: 0;
+    background: none;
+    color: var(--ink);
+    text-align: left;
+  }
+  .ls-stats > :first-child {
+    padding-left: 0;
+  }
+  .ls-stats > * + * {
+    border-left: 1px solid var(--line);
+  }
+  .ls-stats button {
+    cursor: pointer;
+  }
+  .ls-stats button:hover span {
+    text-decoration: underline;
+  }
+  .ls-stats b {
+    display: block;
+    font: 700 22px/28px var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .ls-stats span {
+    font: 400 13px/18px var(--font-sans);
+    color: var(--ink-muted);
+  }
+
+  /* Huy hiệu (UC21) — huy chương tròn, chữ luôn đi kèm */
+  .ls-medal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+    width: 112px;
+    text-align: center;
+    font: 600 13px/18px var(--font-sans);
+  }
+  .ls-medal .m {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-pill);
+  }
+  .ls-medal .m svg {
+    width: 28px;
+    height: 28px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+  }
+  .ls-medal small {
+    font-weight: 400;
+    color: var(--ink-muted);
+  }
+  /* Chỉ cặp màu nền / chữ mà design system đã định nghĩa — giữ tương phản ở cả hai theme */
+  .ls-medal--sun .m {
+    background: var(--sun);
+    color: var(--on-accent);
+  }
+  .ls-medal--coral .m {
+    background: var(--coral);
+    color: var(--on-accent);
+  }
+  .ls-medal--olive .m {
+    background: var(--olive);
+    color: var(--on-olive);
+  }
+}

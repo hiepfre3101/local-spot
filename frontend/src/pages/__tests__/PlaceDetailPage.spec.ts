@@ -64,6 +64,7 @@ function review(id: number, rating: number, helpfulCount: number): Review {
   return {
     id,
     placeId: 5,
+    place: { id: 5, slug: 'pho-thin-ha-noi', name: 'Phở Thìn' },
     author: { id: 100 + id, displayName: `Người ${id}`, avatarUrl: null },
     rating,
     content: `Nội dung đánh giá số ${id} đủ dài.`,

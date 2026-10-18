@@ -82,6 +82,7 @@ function myReview(overrides: Partial<Review> = {}): Review {
   return {
     id: 77,
     placeId: 5,
+    place: { id: 5, slug: 'pho-thin-ha-noi', name: 'Phở Thìn' },
     author: { id: 42, displayName: 'Minh Anh', avatarUrl: null },
     rating: 4,
     content: CONTENT,

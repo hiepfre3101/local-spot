@@ -91,7 +91,13 @@ function report(): void {
     <LsAvatar :name="review.author.displayName" :src="review.author.avatarUrl" />
     <div class="min-w-0">
       <div class="ls-ritem__head">
-        <span class="ls-ritem__name">{{ review.author.displayName }}</span>
+        <RouterLink
+          v-if="router.hasRoute('profile')"
+          class="ls-ritem__name text-ink"
+          :to="{ name: 'profile', params: { id: review.author.id } }"
+          >{{ review.author.displayName }}</RouterLink
+        >
+        <span v-else class="ls-ritem__name">{{ review.author.displayName }}</span>
       </div>
       <p v-if="review.status === 'PENDING'" class="m-0 mt-1 text-caption font-semibold">
         ● Đang chờ duyệt — chỉ bạn thấy

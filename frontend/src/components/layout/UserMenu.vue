@@ -77,6 +77,14 @@ onBeforeUnmount(() => {
         <li>
           <RouterLink
             class="block rounded-xs px-3 py-2 hover:bg-surface-sunk"
+            :to="{ name: 'profile', params: { id: auth.user.id } }"
+          >
+            Trang cá nhân
+          </RouterLink>
+        </li>
+        <li>
+          <RouterLink
+            class="block rounded-xs px-3 py-2 hover:bg-surface-sunk"
             :to="{ name: 'settings-password' }"
           >
             Đổi mật khẩu
