@@ -33,7 +33,7 @@ class SchemaMigrationTests {
     private JdbcTemplate jdbc;
 
     @Test
-    void createsAll32TablesFromDesignDocument() {
+    void createsAll33TablesFromDesignDocument() {
         List<String> tables = jdbc.queryForList("""
                 SELECT table_name FROM information_schema.tables
                 WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
@@ -73,7 +73,8 @@ class SchemaMigrationTests {
                         "user_badges",
                         "reports",
                         "notifications",
-                        "activity_log");
+                        "activity_log",
+                        "home_banners");
     }
 
     @Test
@@ -218,8 +219,9 @@ class SchemaMigrationTests {
                         "user:assign-role",
                         "category:manage",
                         "amenity:manage",
-                        "dashboard:view")
-                .hasSize(10);
+                        "dashboard:view",
+                        "banner:manage") // V5 — ảnh trang chủ (UC34)
+                .hasSize(11);
     }
 
     @Test

@@ -4,12 +4,13 @@ import { Cropper } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 
 import LsButton from '@/components/ui/LsButton.vue'
-import { MAX_EDGE, canvasToJpeg, jpegName } from '@/utils/images'
+import { MAX_EDGE, canvasToJpeg, jpegName, type CropPreset } from '@/utils/images'
 
 /**
  * Cắt ảnh trước khi tải lên (FR-19 — "crop phía client", thư viện vue-advanced-cropper theo plan §2). Không bắt buộc:
  * người dùng mở khi muốn. Kết quả xuất JPEG, cạnh dài ≤ {@link MAX_EDGE} — cùng giới hạn với ảnh không cắt. Gọi
- * `crop(file)`: trả ảnh đã cắt, hoặc `null` khi đóng mà không áp dụng.
+ * `crop(file)`: trả ảnh đã cắt, hoặc `null` khi đóng mà không áp dụng. `preset` (ảnh trang chủ — UC34) thêm tỷ lệ
+ * khớp khung hiển thị và chọn sẵn tỷ lệ đó.
  */
 const dialog = useTemplateRef<HTMLDialogElement>('dialog')
 const cropper = useTemplateRef<InstanceType<typeof Cropper>>('cropper')
@@ -19,17 +20,21 @@ const aspect = ref<number | undefined>(undefined)
 const applying = ref(false)
 let settle: ((file: File | null) => void) | null = null
 
-const ASPECTS: { label: string; value: number | undefined }[] = [
+const BASE_ASPECTS: { label: string; value: number | undefined }[] = [
   { label: 'Tự do', value: undefined },
   { label: '4:3', value: 4 / 3 },
   { label: 'Vuông', value: 1 },
 ]
+const aspects = ref(BASE_ASPECTS)
 
-function crop(file: File): Promise<File | null> {
+function crop(file: File, preset?: CropPreset): Promise<File | null> {
   release()
   source.value = URL.createObjectURL(file)
   fileName.value = file.name
-  aspect.value = undefined
+  aspects.value = preset
+    ? [{ label: preset.label, value: preset.aspect }, ...BASE_ASPECTS]
+    : BASE_ASPECTS
+  aspect.value = preset?.aspect
   dialog.value?.showModal()
   return new Promise((resolve) => {
     settle = resolve
@@ -98,7 +103,7 @@ onBeforeUnmount(release)
     <div class="flex flex-wrap items-center justify-between gap-3 p-4">
       <div class="flex flex-wrap gap-2" role="group" aria-label="Tỷ lệ khung">
         <button
-          v-for="option in ASPECTS"
+          v-for="option in aspects"
           :key="option.label"
           type="button"
           class="ls-fchip"

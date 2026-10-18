@@ -29,8 +29,8 @@
 | Tài khoản & phân quyền | `users`, `roles`, `permissions`, `role_permissions`, `user_roles`, `refresh_tokens`, `user_tokens`, `user_violations` | 8 |
 | Địa điểm | `categories`, `places`, `place_photos`, `opening_hours`, `amenities`, `place_amenity`, `tags`, `taggables`, `place_views`, `place_claims` | 10 |
 | Đánh giá & tương tác | `reviews`, `review_photos`, `review_votes`, `comments`, `owner_replies`, `check_ins` | 6 |
-| Cộng đồng & vận hành | `collections`, `collection_place`, `follows`, `badges`, `user_badges`, `reports`, `notifications`, `activity_log` | 8 |
-| **Tổng** | | **32** |
+| Cộng đồng & vận hành | `collections`, `collection_place`, `follows`, `badges`, `user_badges`, `reports`, `notifications`, `activity_log`, `home_banners` *(V5)* | 9 |
+| **Tổng** | | **33** |
 
 So với plan §5: thêm `refresh_tokens` (S1), `user_tokens` (FR-02, FR-05), `user_violations` (trust score §5.1); bỏ `banners` (Q4).
 
@@ -353,6 +353,20 @@ Tiêu chí trao huy hiệu viết trong code (không lưu JSON luật) — FR-29
 
 Ghi qua Spring AOP `@Aspect` quanh các phương thức service có annotation `@AuditedAction` (plan §5 chọn AOP thay Hibernate Envers).
 
+#### `home_banners` (FR-43, UC34 — thêm 2026-10-17, V5)
+| Cột | Kiểu | Ràng buộc | Ý nghĩa |
+|---|---|---|---|
+| id | BIGINT UNSIGNED | PK | Số để ghi `activity_log.target_id` |
+| slot | VARCHAR(20) | UNIQUE, NN, CHECK | `HERO`, `SIGNUP_BAND`, `COMMUNITY` — ô cố định của HomePage |
+| storage_key | VARCHAR(200) | NN | `banners/{uuid}` — 3 bản JPEG theo `PhotoSize`, bỏ EXIF; ảnh gốc không lưu |
+| alt_text | VARCHAR(200) | NN, mặc định `''` | Rỗng = ảnh trang trí |
+| is_active | BOOLEAN | NN, mặc định TRUE | Tắt → trang chủ dùng hình minh hoạ, ảnh vẫn giữ |
+| updated_by | BIGINT UNSIGNED | FK users, NN | |
+| version | INT | NN | Khóa lạc quan khi sửa mô tả / bật tắt |
+| created_at, updated_at | DATETIME(6) | NN | |
+
+Chưa có dòng = ô dùng hình minh hoạ mặc định. Không xóa mềm: gỡ ảnh xóa dòng + object trên kho sau commit (cấu hình hiển thị, không phải nội dung người dùng).
+
 ### 3.5 Triển khai migration (2026-09-30)
 
 Schema trên được cài bằng Flyway ở `backend/src/main/resources/db/migration/`:
@@ -363,6 +377,7 @@ Schema trên được cài bằng Flyway ở `backend/src/main/resources/db/migr
 | `V2__seed_rbac.sql` | 4 role, 17 permission (khớp `x-permission` của openapi), gán theo Q2; OWNER ⊇ USER, ADMIN ⊇ MODERATOR |
 | `V3__seed_catalog.sql` | 3 danh mục gốc + 13 danh mục con, 14 tiện ích — cần ở mọi môi trường vì đề xuất địa điểm bắt buộc chọn danh mục |
 | `V4__seed_badges.sql` | 8 huy hiệu (O3, 2026-10-12) — mọi môi trường; tiêu chí trong code `BadgeRule` |
+| `V5__home_banners.sql` | Bảng `home_banners` + permission `banner:manage` cho ADMIN (UC34, 2026-10-17) — chỉ thêm, không đổi quyền đã có |
 
 Chi tiết bổ sung khi viết migration (không đổi thiết kế ở trên):
 - **Hành vi khóa ngoại**: mặc định `RESTRICT` — bảng nghiệp vụ xóa mềm nên xóa cứng là lỗi, RESTRICT chặn mất dữ liệu. `ON DELETE CASCADE` chỉ ở bảng nối thuần, phía có thể xóa cứng: `role_permissions`, `user_roles.role_id`, `place_amenity`, `opening_hours`, `place_views`, `collection_place`.

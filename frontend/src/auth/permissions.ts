@@ -15,6 +15,8 @@ export const Permission = {
   CATEGORY_MANAGE: 'category:manage',
   AMENITY_MANAGE: 'amenity:manage',
   DASHBOARD_VIEW: 'dashboard:view',
+  /** Ảnh trang chủ (UC34 — thêm 2026-10-17). */
+  BANNER_MANAGE: 'banner:manage',
 } as const
 
 export type PermissionName = (typeof Permission)[keyof typeof Permission]
@@ -29,6 +31,7 @@ export const STAFF_PERMISSIONS: readonly PermissionName[] = [
   Permission.CATEGORY_MANAGE,
   Permission.AMENITY_MANAGE,
   Permission.DASHBOARD_VIEW,
+  Permission.BANNER_MANAGE,
 ]
 
 export const ROLE_LABELS: Record<RoleName, string> = {

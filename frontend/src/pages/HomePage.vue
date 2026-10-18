@@ -6,11 +6,12 @@ import { RouterLink, useRouter } from 'vue-router'
 import { catalogApi } from '@/api/catalog'
 import HomeReviewCard from '@/components/place/HomeReviewCard.vue'
 import SpotCard from '@/components/place/SpotCard.vue'
-import FlatPicture from '@/components/ui/FlatPicture.vue'
+import BannerPicture from '@/components/ui/BannerPicture.vue'
 import LsButton from '@/components/ui/LsButton.vue'
 import { catalogKeys } from '@/composables/catalogQueries'
 import { useAuthStore } from '@/stores/auth'
 import { useFilterStore } from '@/stores/filter'
+import type { BannerSlot, HomeBanner } from '@/types/api'
 import { MAX_QUERY_LENGTH } from '@/utils/searchQuery'
 
 /**
@@ -31,6 +32,10 @@ const category = ref('')
 const featured = computed(() => home.data.value?.featured ?? [])
 const latest = computed(() => home.data.value?.latest ?? [])
 const categories = computed(() => home.data.value?.categories ?? [])
+/** Ảnh quản trị viên đặt cho từng ô (UC34) — không có thì hình minh hoạ như trước. */
+function bannerOf(slot: BannerSlot): HomeBanner | null {
+  return home.data.value?.banners?.find((b) => b.slot === slot) ?? null
+}
 /** Hai thẻ đầu đi cùng ReviewCard ở hàng tuyên ngôn; phần còn lại vào lưới "Đang được yêu thích". */
 const rowSpots = computed(() => featured.value.slice(0, 2))
 const moreFeatured = computed(() => featured.value.slice(2, 6))
@@ -54,7 +59,13 @@ function nearMe(): void {
       class="relative flex min-h-[520px] flex-col justify-between overflow-hidden rounded-lg p-6 md:h-[560px] md:p-10"
       aria-labelledby="home-title"
     >
-      <FlatPicture class="absolute inset-0" />
+      <BannerPicture
+        class="absolute inset-0"
+        :banner="bannerOf('HERO')"
+        scrim
+        eager
+        sizes="(min-width: 1280px) 1200px, 100vw"
+      />
       <div class="relative">
         <h1 id="home-title" class="m-0">
           <span class="sr-only">LocalSpot</span>
@@ -245,7 +256,11 @@ function nearMe(): void {
           </template>
         </div>
       </div>
-      <FlatPicture class="min-h-[220px] rounded-md" />
+      <BannerPicture
+        class="min-h-[220px] rounded-md"
+        :banner="bannerOf('SIGNUP_BAND')"
+        sizes="(min-width: 768px) 480px, 100vw"
+      />
     </section>
 
     <!-- Chức năng thành viên -->
@@ -253,7 +268,11 @@ function nearMe(): void {
       <div>
         <span class="ls-kick mb-4 block">05 — Thành viên làm được gì</span>
         <h2 class="disp">KHÔNG CHỈ LÀ TRANG ĐÁNH GIÁ — MÀ LÀ MỘT CỘNG ĐỒNG.</h2>
-        <FlatPicture class="mt-8 h-[220px] rounded-md" />
+        <BannerPicture
+          class="mt-8 h-[220px] rounded-md"
+          :banner="bannerOf('COMMUNITY')"
+          sizes="(min-width: 768px) 600px, 100vw"
+        />
       </div>
       <div class="grid content-end gap-3 sm:grid-cols-2">
         <div class="ls-feature">
