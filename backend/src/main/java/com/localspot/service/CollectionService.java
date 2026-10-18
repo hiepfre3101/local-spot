@@ -23,8 +23,10 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -166,9 +168,15 @@ public class CollectionService {
                 collections.findPublicBySlug(shareSlug).orElseThrow(CollectionService::collectionNotFound), false);
     }
 
+    /**
+     * {@code placeId} (tùy chọn): đánh dấu bộ đã có địa điểm đó — hộp "Lưu" trên P03 biết tick sẵn bộ nào. Một truy vấn
+     * thay vì tải chi tiết từng bộ (≤ 50).
+     */
     @Transactional(readOnly = true)
-    public List<CollectionSummaryResponse> mine(Long userId) {
-        return summariesOf(collections.findByOwner(userId, false), true);
+    public List<CollectionSummaryResponse> mine(Long userId, Long placeId) {
+        Set<Long> containing =
+                placeId == null ? null : new HashSet<>(items.findCollectionIdsContaining(userId, placeId));
+        return summariesOf(collections.findByOwner(userId, false), true, containing);
     }
 
     /** Tab bộ sưu tập trên trang cá nhân (P06): chỉ bộ công khai, kể cả khi chủ tự xem — như người khác thấy. */
@@ -177,7 +185,7 @@ public class CollectionService {
         if (!users.existsById(userId)) {
             throw userNotFound();
         }
-        return summariesOf(collections.findByOwner(userId, true), false);
+        return summariesOf(collections.findByOwner(userId, true), false, null);
     }
 
     // ─── Dựng response ──────────────────────────────────────────────────────
@@ -207,7 +215,9 @@ public class CollectionService {
                 itemList);
     }
 
-    private List<CollectionSummaryResponse> summariesOf(List<PlaceCollection> list, boolean ownerView) {
+    /** {@code containing} {@code null} = không hỏi về địa điểm nào ({@code containsPlace} để trống). */
+    private List<CollectionSummaryResponse> summariesOf(
+            List<PlaceCollection> list, boolean ownerView, Set<Long> containing) {
         if (list.isEmpty()) {
             return List.of();
         }
@@ -227,7 +237,8 @@ public class CollectionService {
                         c.isPublicCollection(),
                         c.getShareSlug(),
                         counts.getOrDefault(c.getId(), 0L),
-                        coverOf(covers, coverPlaceIds.get(c.getId()))))
+                        coverOf(covers, coverPlaceIds.get(c.getId())),
+                        containing == null ? null : containing.contains(c.getId())))
                 .toList();
     }
 
