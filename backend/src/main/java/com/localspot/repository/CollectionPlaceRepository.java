@@ -20,6 +20,13 @@ public interface CollectionPlaceRepository extends JpaRepository<CollectionPlace
             """)
     List<CollectionPlace> findItems(@Param("collectionId") Long collectionId);
 
+    /** Bộ nào của người này đã có địa điểm (kể cả địa điểm đã bị ẩn — chủ thấy mọi dòng của mình). */
+    @Query("""
+            SELECT cp.collection.id FROM CollectionPlace cp
+            WHERE cp.collection.user.id = :userId AND cp.place.id = :placeId
+            """)
+    List<Long> findCollectionIdsContaining(@Param("userId") Long userId, @Param("placeId") Long placeId);
+
     /** Idempotent — trả số dòng đã xóa (0 / 1). */
     @Modifying
     @Query(

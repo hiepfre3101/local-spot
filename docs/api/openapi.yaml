@@ -251,6 +251,9 @@ paths:
     get:
       tags: [Me, Collections]
       summary: Bộ sưu tập của tôi — công khai lẫn riêng tư, mới tạo trước (≤ 50, không phân trang)
+      description: '*(thêm 2026-10-18)* `placeId` → mỗi bộ kèm `containsPlace` (hộp "Lưu" trên P03 tick sẵn bộ đã có địa điểm).'
+      parameters:
+        - { name: placeId, in: query, required: false, schema: { type: integer, format: int64 } }
       responses:
         '200':
           description: OK
@@ -2036,6 +2039,7 @@ components:
         shareSlug: { type: [string, 'null'] }
         placeCount: { type: integer, description: Theo người xem — người khác chỉ tính địa điểm đang hiện }
         coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ], description: Ảnh bìa của địa điểm thêm gần nhất mà người xem thấy }
+        containsPlace: { type: [boolean, 'null'], description: 'Chỉ có ở `GET /me/collections?placeId=` — bộ đã có địa điểm đó; còn lại null / vắng' }
     CollectionDetail:
       allOf:
         - { $ref: '#/components/schemas/CollectionSummary' }

@@ -143,6 +143,31 @@ class CollectionFlowTests {
     }
 
     @Test
+    void myCollectionsMarkWhichOnesAlreadyHoldAPlace() throws Exception {
+        Account owner = account();
+        Account other = account();
+        long holding = create(owner, "Ăn sáng", false);
+        long empty = create(owner, "Cà phê", true);
+        long theirs = create(other, "Của người khác", true);
+        long spot = place("APPROVED");
+        addPlace(owner, holding, spot, null).andExpect(status().isNoContent());
+        addPlace(other, theirs, spot, null).andExpect(status().isNoContent());
+
+        // Mới tạo trước: [Cà phê, Ăn sáng]
+        perform(owner, get("/api/v1/me/collections").param("placeId", String.valueOf(spot)))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].id").value(empty))
+                .andExpect(jsonPath("$[0].containsPlace").value(false))
+                .andExpect(jsonPath("$[1].id").value(holding))
+                .andExpect(jsonPath("$[1].containsPlace").value(true));
+        // Không hỏi về địa điểm nào → để trống; trang cá nhân cũng vậy
+        perform(owner, get("/api/v1/me/collections"))
+                .andExpect(jsonPath("$[0].containsPlace").isEmpty());
+        mvc.perform(get("/api/v1/users/" + owner.id() + "/collections"))
+                .andExpect(jsonPath("$[0].containsPlace").isEmpty());
+    }
+
+    @Test
     void placesHiddenAfterAddingAreFilteredForEveryoneButTheOwner() throws Exception {
         Account owner = account();
         long id = create(owner, "Điểm check-in Đà Lạt", true);

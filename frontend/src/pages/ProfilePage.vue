@@ -2,10 +2,12 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { isAxiosError } from 'axios'
 import { computed, ref, useTemplateRef, watch } from 'vue'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
 
 import { problemMessage, toProblem } from '@/api/problem'
 import { usersApi } from '@/api/users'
+import CollectionFormDialog from '@/components/collection/CollectionFormDialog.vue'
+import { invalidateCollections } from '@/components/collection/collectionQueries'
 import PlacePhoto from '@/components/place/PlacePhoto.vue'
 import BadgeMedal from '@/components/profile/BadgeMedal.vue'
 import FollowListDialog from '@/components/profile/FollowListDialog.vue'
@@ -17,7 +19,7 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useNotify } from '@/plugins/toast'
 import { useAuthStore } from '@/stores/auth'
-import type { PlaceStatus, PublicProfile } from '@/types/api'
+import type { CollectionDetail, CollectionSummary, PlaceStatus, PublicProfile } from '@/types/api'
 import { formatDate, formatNumber } from '@/utils/format'
 
 /**
@@ -26,9 +28,9 @@ import { formatDate, formatNumber } from '@/utils/format'
  * nút Theo dõi; huy hiệu đã đạt. Tab qua `?tab=` (sitemap): Đánh giá · Bộ sưu tập · Huy hiệu, và trên trang của chính
  * mình thêm Check-in (riêng tư — chốt 2026-10-12) · Đề xuất (`/me/places`). Mỗi tab chỉ tải khi mở.
  *
- * Chốt 2026-10-18 (supervisor): phạm vi chỉ trang cá nhân — trang bộ sưu tập, chỉnh sửa hồ sơ, nút "Lưu" trên trang địa
- * điểm làm ở mục riêng (thẻ bộ sưu tập chưa bấm được, không có link chết); huy hiệu chỉ hiện cái đã đạt (API không có
- * tiến độ). Không hiện khu vực / số check-in / hạng tháng như bản mẫu: hồ sơ công khai không có các số này (check-in
+ * Chốt 2026-10-18 (supervisor): chỉnh sửa hồ sơ làm ở mục riêng; huy hiệu chỉ hiện cái đã đạt (API không có tiến độ).
+ * Bộ sưu tập (UC18, mục riêng cùng ngày): thẻ mở trang bộ sưu tập (của mình) / link chia sẻ (người khác); trang của mình
+ * có ô cuối "+ Tạo bộ sưu tập". Không hiện khu vực / số check-in / hạng tháng như bản mẫu: hồ sơ công khai không có các số này (check-in
  * là dữ liệu riêng tư).
  */
 const props = defineProps<{ id: number }>()
@@ -37,6 +39,7 @@ type Tab = 'reviews' | 'collections' | 'badges' | 'checkins' | 'places'
 
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 const queryClient = useQueryClient()
 const notify = useNotify()
 const requireLogin = useRequireLogin()
@@ -103,6 +106,17 @@ const collections = useQuery({
   queryFn: () => (isMe.value ? usersApi.myCollections() : usersApi.collections(props.id)),
   enabled: computed(() => tab.value === 'collections' && !!user.value),
 })
+/** Bộ của mình → trang quản lý; bộ (công khai) của người khác → link chia sẻ. */
+function collectionLink(c: CollectionSummary): RouteLocationRaw {
+  return isMe.value || !c.shareSlug
+    ? { name: 'collection', params: { id: c.id } }
+    : { name: 'shared-collection', params: { shareSlug: c.shareSlug } }
+}
+const collectionForm = useTemplateRef<InstanceType<typeof CollectionFormDialog>>('collectionForm')
+function collectionCreated(c: CollectionDetail): void {
+  invalidateCollections(queryClient, props.id)
+  void router.push({ name: 'collection', params: { id: c.id } })
+}
 
 const checkins = useInfiniteQuery({
   queryKey: computed(() => ['me', 'check-ins']),
@@ -272,18 +286,31 @@ async function toggleFollow(): Promise<void> {
         {{ isMe ? 'Bạn chưa có bộ sưu tập nào.' : 'Chưa có bộ sưu tập công khai nào.' }}
       </p>
       <ul class="m-0 grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-4">
-        <li v-for="c in collections.data.value ?? []" :key="c.id">
+        <li v-for="c in collections.data.value ?? []" :key="c.id" class="coll">
           <PlacePhoto
             :photo="c.coverPhoto"
             sizes="280px"
             class="aspect-square overflow-hidden rounded-md"
           />
-          <b class="mt-3 block">{{ c.name }}</b>
+          <RouterLink
+            class="coll__link mt-3 block font-semibold text-ink"
+            :to="collectionLink(c)"
+            >{{ c.name }}</RouterLink
+          >
           <span class="text-caption text-ink-muted">
             {{ formatNumber(c.placeCount) }} địa điểm<template v-if="!c.isPublic">
               · Riêng tư</template
             >
           </span>
+        </li>
+        <li v-if="isMe">
+          <button
+            type="button"
+            class="coll-new aspect-square w-full rounded-md"
+            @click="collectionForm?.open()"
+          >
+            + Tạo bộ sưu tập
+          </button>
         </li>
       </ul>
     </section>
@@ -380,5 +407,36 @@ async function toggleFollow(): Promise<void> {
     </section>
 
     <FollowListDialog ref="followDialog" :user-id="user.id" />
+    <CollectionFormDialog v-if="isMe" ref="collectionForm" @saved="collectionCreated" />
   </article>
 </template>
+
+<style scoped>
+/* Cả thẻ bộ sưu tập bấm được qua liên kết ở tên (như SpotCard) */
+.coll {
+  position: relative;
+}
+.coll__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.coll__link:hover,
+.coll__link:focus-visible {
+  text-decoration: underline;
+}
+/* Ô cuối "+ Tạo bộ sưu tập" viền đứt (P06 README) */
+.coll-new {
+  border: 1.5px dashed var(--line-strong);
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.coll-new:hover,
+.coll-new:focus-visible {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+</style>

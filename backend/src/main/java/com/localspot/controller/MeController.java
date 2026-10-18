@@ -81,10 +81,14 @@ public class MeController {
         return reviewService.writtenBy(user.id(), cursor, limit);
     }
 
-    /** Bộ sưu tập của tôi, công khai lẫn riêng tư, mới tạo trước (≤ 50 nên không phân trang). */
+    /**
+     * Bộ sưu tập của tôi, công khai lẫn riêng tư, mới tạo trước (≤ 50 nên không phân trang). {@code placeId}: kèm
+     * {@code containsPlace} cho hộp "Lưu" trên P03.
+     */
     @GetMapping("/collections")
-    public List<CollectionSummaryResponse> myCollections(@AuthenticationPrincipal AuthenticatedUser user) {
-        return collectionService.mine(user.id());
+    public List<CollectionSummaryResponse> myCollections(
+            @AuthenticationPrincipal AuthenticatedUser user, @RequestParam(required = false) Long placeId) {
+        return collectionService.mine(user.id(), placeId);
     }
 
     /**

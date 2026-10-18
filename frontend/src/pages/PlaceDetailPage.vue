@@ -4,8 +4,11 @@ import { isAxiosError } from 'axios'
 import { computed, defineAsyncComponent, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
+import { collectionsApi } from '@/api/collections'
 import { placesApi, type ReviewSort } from '@/api/places'
 import { reviewsApi } from '@/api/reviews'
+import { collectionKeys } from '@/components/collection/collectionQueries'
+import SaveToCollectionDialog from '@/components/collection/SaveToCollectionDialog.vue'
 import LsRating from '@/components/place/LsRating.vue'
 import PlacePhoto from '@/components/place/PlacePhoto.vue'
 import DirectionsDialog from '@/components/place/DirectionsDialog.vue'
@@ -36,8 +39,10 @@ import { scoreText } from '@/utils/rating'
  * Tương tác (2026-10-17): vote / bình luận / báo cáo đánh giá trong ReviewItem; "Báo cáo" địa điểm ở đầu trang; một
  * hộp thoại báo cáo dùng chung (UC14, UC15, UC17). Đánh giá chờ duyệt / bị từ chối của chính mình ghim đầu danh sách.
  *
- * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), Lưu (UC18), yêu cầu sở
- * hữu (UC23). Khối "Ảnh check-in" bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong
+ * Lưu (UC18, 2026-10-18): "+ Lưu" mở hộp chọn bộ sưu tập; đã có trong ít nhất một bộ → "✓ Đã lưu" (`aria-pressed`).
+ * Chỉ hiện với địa điểm đang hiện (backend chỉ nhận APPROVED); khách bấm → đăng nhập.
+ *
+ * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), yêu cầu sở hữu (UC23). Khối "Ảnh check-in" bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong
  * từng đánh giá.
  */
 const props = defineProps<{ slug: string }>()
@@ -45,6 +50,7 @@ const props = defineProps<{ slug: string }>()
 const PlaceMap = defineAsyncComponent(() => import('@/components/place/PlaceMap.vue'))
 const router = useRouter()
 const filter = useFilterStore()
+const auth = useAuthStore()
 
 const detail = useQuery({
   queryKey: computed(() => ['place', props.slug]),
@@ -137,6 +143,23 @@ function reportPlace(): void {
   if (!requireLogin() || !place.value) return
   openReport({ type: 'PLACE', id: place.value.id, label: place.value.name })
 }
+
+// ─── Lưu vào bộ sưu tập (UC18) — chỉ địa điểm đang hiện mới thêm được ────────
+const saveDialog = useTemplateRef<InstanceType<typeof SaveToCollectionDialog>>('saveDialog')
+const myCollections = useQuery({
+  queryKey: computed(() => collectionKeys.forPlace(placeId.value ?? 0)),
+  queryFn: () => collectionsApi.mine(placeId.value!),
+  enabled: computed(
+    () => auth.isAuthenticated && placeId.value !== null && place.value?.status === 'APPROVED',
+  ),
+})
+/** Đã có trong ít nhất một bộ của tôi — nút "Lưu" đổi chữ + `aria-pressed` (không chỉ bằng màu). */
+const saved = computed(() => (myCollections.data.value ?? []).some((c) => c.containsPlace))
+function openSave(): void {
+  if (!requireLogin()) return
+  saveDialog.value?.open()
+}
+
 const distribution = computed(() => {
   const d = place.value?.ratingDistribution
   const total = place.value?.reviewCount ?? 0
@@ -178,7 +201,6 @@ const nearby = useQuery({
 
 /** Chỉ đường trong ứng dụng (hộp thoại bản đồ lớn), không chuyển sang trang ngoài — chốt 2026-10-13. */
 const directions = useTemplateRef<InstanceType<typeof DirectionsDialog>>('directions')
-const auth = useAuthStore()
 /** `null` = không hiện nút: chủ địa điểm, địa điểm chưa duyệt. Khách bấm thì guard đưa qua đăng nhập. */
 const reviewAction = computed<'write' | 'edit' | null>(() => {
   const p = place.value
@@ -295,6 +317,13 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
           :variant="reviewAction === 'write' ? 'accent' : 'ghost'"
           :to="{ name: 'write-review', params: { slug: place.slug } }"
           >{{ reviewAction === 'write' ? 'Viết đánh giá' : 'Sửa đánh giá của bạn' }}</LsButton
+        >
+        <LsButton
+          v-if="place.status === 'APPROVED'"
+          variant="ghost"
+          :aria-pressed="saved"
+          @click="openSave"
+          >{{ saved ? '✓ Đã lưu' : '+ Lưu' }}</LsButton
         >
         <LsButton variant="ghost" @click="reportPlace">Báo cáo</LsButton>
       </div>
@@ -584,6 +613,12 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
       </LsCarousel>
     </div>
     <ReportDialog ref="reportDialog" />
+    <SaveToCollectionDialog
+      v-if="place.status === 'APPROVED'"
+      ref="saveDialog"
+      :place-id="place.id"
+      :place-name="place.name"
+    />
   </article>
 </template>
 

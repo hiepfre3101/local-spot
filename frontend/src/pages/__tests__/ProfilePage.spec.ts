@@ -130,6 +130,8 @@ async function mountProfile(userId: number, tab?: string): Promise<VueWrapper> {
       { path: '/propose', name: 'propose', component: Empty },
       { path: '/settings/password', name: 'settings-password', component: Empty },
       { path: '/users/:id', name: 'profile', component: Empty },
+      { path: '/collections/:id', name: 'collection', component: Empty },
+      { path: '/c/:shareSlug', name: 'shared-collection', component: Empty },
     ],
   })
   await router.push({ path: `/users/${userId}`, query: tab ? { tab } : {} })
@@ -254,13 +256,36 @@ describe('ProfilePage (P06)', () => {
     ])
     let wrapper = await mountProfile(100, 'collections')
     expect(api.collections).toHaveBeenCalledWith(100)
-    expect(wrapper.text()).toContain('Ăn sáng Hà Nội')
     expect(wrapper.text()).toContain('12 địa điểm')
+    // Bộ của người khác mở bằng link chia sẻ; không có ô tạo bộ
+    expect(wrapper.get('.coll a').text()).toBe('Ăn sáng Hà Nội')
+    expect(wrapper.get('.coll a').attributes('href')).toBe('/c/an-sang-x1')
+    expect(wrapper.text()).not.toContain('+ Tạo bộ sưu tập')
     wrapper.unmount()
 
     wrapper = await mountProfile(100, 'badges')
     expect(wrapper.text()).toContain('Có 10 đánh giá đang hiển thị.')
     expect(wrapper.text()).toContain('Đạt 01/09/2026')
+  })
+
+  it('bộ sưu tập của mình: thẻ mở trang quản lý, có ô "+ Tạo bộ sưu tập"', async () => {
+    useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+    api.profile.mockResolvedValue({ ...PROFILE, id: 42 })
+    api.myCollections.mockResolvedValue([
+      {
+        id: 7,
+        name: 'Riêng của tôi',
+        isPublic: false,
+        shareSlug: null,
+        placeCount: 2,
+        coverPhoto: null,
+      },
+    ])
+    const wrapper = await mountProfile(42, 'collections')
+    expect(api.myCollections).toHaveBeenCalled()
+    expect(wrapper.get('.coll a').attributes('href')).toBe('/collections/7')
+    expect(wrapper.text()).toContain('2 địa điểm · Riêng tư')
+    expect(wrapper.text()).toContain('+ Tạo bộ sưu tập')
   })
 
   it('người dùng không tồn tại → trang không tìm thấy', async () => {

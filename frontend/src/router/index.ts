@@ -50,6 +50,22 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Trang cá nhân' },
       },
       {
+        // UC18 — chủ bộ: sửa, chia sẻ, ghi chú (sitemap: auth). Bộ công khai của người khác vẫn đọc được (API cho phép).
+        path: 'collections/:id(\\d+)',
+        name: 'collection',
+        component: () => import('@/pages/CollectionPage.vue'),
+        props: (route) => ({ id: Number(route.params.id) }),
+        meta: { title: 'Bộ sưu tập', requiresAuth: true },
+      },
+      {
+        // UC18 — link chia sẻ: chỉ bộ công khai, chỉ đọc; về riêng tư thì link chết vĩnh viễn
+        path: 'c/:shareSlug',
+        name: 'shared-collection',
+        component: () => import('@/pages/CollectionPage.vue'),
+        props: true,
+        meta: { title: 'Bộ sưu tập' },
+      },
+      {
         // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
         path: 'propose',
         name: 'propose',

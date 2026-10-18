@@ -292,6 +292,18 @@ export interface CollectionSummary {
   shareSlug: string | null
   placeCount: number
   coverPhoto: Photo | null
+  /** Chỉ có ở `GET /me/collections?placeId=` — bộ đã có địa điểm đó (hộp "Lưu" trên P03). */
+  containsPlace?: boolean | null
+}
+
+/**
+ * openapi `CollectionDetail`. Chủ thấy cả địa điểm đã bị ẩn sau khi thêm (`place.status` khác APPROVED) để tự bỏ ra;
+ * người khác chỉ thấy địa điểm đang hiện.
+ */
+export interface CollectionDetail extends CollectionSummary {
+  description: string | null
+  owner: UserSummary
+  places: { place: PlaceSummary; note: string | null; addedAt: string }[]
 }
 
 /** openapi `CheckInResponse` — chỉ chính chủ xem (lịch sử vị trí là dữ liệu riêng tư). */
