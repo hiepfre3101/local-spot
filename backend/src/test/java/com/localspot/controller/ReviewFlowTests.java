@@ -138,6 +138,10 @@ class ReviewFlowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(pending))
                 .andExpect(jsonPath("$.placeId").value(placeId))
+                // Tham chiếu địa điểm cho danh sách ngoài trang địa điểm (trang cá nhân P06)
+                .andExpect(jsonPath("$.place.id").value(placeId))
+                .andExpect(jsonPath("$.place.name").value("Quán thử đánh giá"))
+                .andExpect(jsonPath("$.place.slug").value(org.hamcrest.Matchers.startsWith("review-")))
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andExpect(jsonPath("$.rating").value(3))
                 .andExpect(jsonPath("$.version").isNumber());

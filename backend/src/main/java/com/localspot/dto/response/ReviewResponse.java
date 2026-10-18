@@ -8,10 +8,12 @@ import java.util.List;
 /**
  * openapi {@code Review}. {@code rejectReason} chỉ có khi người xem là tác giả; {@code votedByMe} luôn {@code false}
  * với khách. {@code authorCheckedIn}: tác giả đã check-in tại địa điểm vào ngày viết hoặc trước đó (nhãn P04).
+ * {@code place}: tên + slug để danh sách ngoài trang địa điểm (trang cá nhân P06) hiện và dẫn tới địa điểm.
  */
 public record ReviewResponse(
         Long id,
         Long placeId,
+        PlaceRef place,
         UserSummary author,
         int rating,
         String content,

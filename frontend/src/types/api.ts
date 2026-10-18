@@ -221,6 +221,8 @@ export interface OwnerReply {
 export interface Review {
   id: number
   placeId: number
+  /** Tên + slug — danh sách ngoài trang địa điểm (trang cá nhân P06). */
+  place: PlaceRef
   author: UserSummary
   rating: number
   content: string
@@ -260,3 +262,44 @@ export interface Comment {
 
 export type ReportTargetType = 'PLACE' | 'REVIEW' | 'COMMENT' | 'USER'
 export type ReportReason = 'SPAM' | 'FAKE' | 'OFFENSIVE' | 'WRONG_INFO' | 'OTHER'
+
+/** openapi `Badge` — huy hiệu đã đạt (đã trao không thu hồi). `icon` là khóa trung tính. */
+export interface Badge {
+  code: string
+  name: string
+  description: string | null
+  icon: string
+  awardedAt: string
+}
+
+/** openapi `PublicProfile` — không có email (NFR-11). */
+export interface PublicProfile extends UserSummary {
+  bio: string | null
+  joinedAt: string
+  reviewCount: number
+  followerCount: number
+  followingCount: number
+  contributionPoints: number
+  badges: Badge[]
+  followedByMe: boolean
+}
+
+/** openapi `CollectionSummary` — `placeCount` theo người xem (người khác chỉ đếm địa điểm đang hiện). */
+export interface CollectionSummary {
+  id: number
+  name: string
+  isPublic: boolean
+  shareSlug: string | null
+  placeCount: number
+  coverPhoto: Photo | null
+}
+
+/** openapi `CheckInResponse` — chỉ chính chủ xem (lịch sử vị trí là dữ liệu riêng tư). */
+export interface CheckIn {
+  id: number
+  placeId: number
+  place: PlaceSummary
+  distanceM: number
+  checkinDate: string
+  createdAt: string
+}

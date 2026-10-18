@@ -4,6 +4,7 @@
 @import './public.css';
 @import './toast.css';
 @import './review.css';
+@import './profile.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
