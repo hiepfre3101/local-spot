@@ -1189,3 +1189,27 @@ Chưa commit.
 **Tài liệu**: plan §10 F (mục form đề xuất).
 
 **Kiểm chứng**: frontend `vitest` **111 test** xanh (thêm 7 `ProposePlacePage.spec`: gửi đúng dữ liệu — thẻ tách + bỏ trùng, giờ theo ngày bật, tiện ích, trường trống bỏ đi, xoá nháp; thiếu trường bắt buộc báo đủ 5 lỗi, giá ngược báo khi các trường khác hợp lệ, không gọi API; nghi trùng hiện ứng viên + khoảng cách, chặn gửi tới khi xác nhận; nháp tự lưu → khôi phục khi vào lại → bỏ nháp xoá sạch; 422 gắn ô `website` + "đặt lại ghim"; `parseTags`, `toOpeningHours`). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
+
+## 2026-10-18 16:07 (+07) — Checklist F: trang cá nhân (P06 — UC18, UC20, UC21, UC11)
+
+**Bối cảnh**: nhánh `feature/fe-profile` từ `develop` (`62403f3`, đã gộp #27–#29). Backend hồ sơ công khai, review theo người, bộ sưu tập, theo dõi, `/me/*` có từ E. Sitemap đã chốt 3 câu hỏi của P06 (bộ sưu tập bật / tắt công khai từng bộ, 8 huy hiệu O3, danh sách theo dõi công khai).
+
+**Supervisor chốt (qua câu hỏi):**
+- **Chỉ trang cá nhân** trong mục này. Trang bộ sưu tập (chi tiết / sửa / chia sẻ) và nút "Lưu" ở P03 tách thành mục riêng (API có sẵn, khối lượng gấp đôi); chỉnh sửa hồ sơ tách riêng vì backend `PATCH /me`, `PUT /me/avatar` có trong openapi nhưng **chưa cài** (MeController chỉ có `GET /me` + đổi mật khẩu — phát hiện khi rà, ghi vào plan).
+- **Huy hiệu chỉ hiện cái đã đạt**: API chỉ trả huy hiệu đã trao; bản mẫu có huy hiệu chưa đạt + "Còn …" cần endpoint mới (danh mục + tiến độ). Bị loại: thêm endpoint đó (lát backend + test).
+- **Thêm `place {id, slug, name}` vào Review** (backend): `Review` chỉ có `placeId`, danh sách đánh giá trên trang cá nhân không biết tên / liên kết địa điểm, không có API lấy theo lô. Bị loại: endpoint riêng cho trang cá nhân (lặp logic danh sách review), bỏ tên địa điểm (danh sách khó đọc, không bấm được).
+
+**Quyết định kỹ thuật:**
+- `place` nạp **một truy vấn native / trang** từ khóa ngoại trên proxy (không nạp từng địa điểm — N+1), gồm cả địa điểm đã xóa mềm (review vẫn cần biết mình thuộc đâu). Trường thêm vào, client cũ bỏ qua.
+- **Đầu trang theo dữ liệu có thật**: bản mẫu có khu vực, số check-in, hạng tháng — hồ sơ công khai không có (check-in là riêng tư, chốt 2026-10-12), nên dải số liệu là Đánh giá · Điểm đóng góp · Người theo dõi · Đang theo dõi; hai ô sau là nút mở danh sách công khai (hộp thoại, "Xem thêm" theo cursor).
+- **Tab qua `?tab=`** (sitemap), mỗi tab chỉ tải khi mở. Tab của chính chủ (`checkins`, `places`) gõ tay trên trang người khác → về tab Đánh giá, không gọi API riêng tư. Trang của mình dùng `/me/reviews` (mọi trạng thái + lý do từ chối) thay cho danh sách công khai.
+- **Tab "Đề xuất của tôi"** (`/me/places`) — thêm vào danh sách tab của sitemap: UC11 quy định người đề xuất theo dõi đề xuất ở trang cá nhân (câu hỏi 3 của P05). Trạng thái bằng ký hiệu + chữ.
+- **Theo dõi**: khách → đăng nhập rồi quay lại; cập nhật ngay nút + số người theo dõi, rồi nạp lại hồ sơ theo máy chủ. "Cài đặt tài khoản" (trang mật khẩu có sẵn) thay cho "Chỉnh sửa hồ sơ" tới khi có mục hồ sơ.
+- **Thẻ bộ sưu tập chưa bấm được**: trang bộ sưu tập chưa có — không tạo link chết (quy ước từ đợt khám phá).
+- Huy chương: khóa `icon` trung tính của V4 ánh xạ sang hình + cặp màu nền / chữ có sẵn của design system (sun / coral + `on-accent`, olive + `on-olive`) để giữ tương phản ở cả hai theme; khóa lạ dùng hình mặc định. `.ls-tabs`, `.ls-stats`, `.ls-medal` port từ bundle.css (`profile.css`). Tên tác giả trên ReviewItem và menu tài khoản dẫn tới trang cá nhân.
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử. Hai mục mới trong plan: Bộ sưu tập (UC18), Cài đặt — Hồ sơ (UC06, cần backend).
+
+**Tài liệu**: openapi (`Review.place`), sitemap (`/users/:id` thêm tab `places`, nút "Cài đặt tài khoản"), plan §10 F (mục trang cá nhân + 2 mục tách ra).
+
+**Kiểm chứng**: backend `ReviewFlowTests` (thêm kiểm `place.id` / `name` / `slug`), `CommunityFlowTests`, `HomeFlowTests`, `ReviewModerationFlowTests` — 31 test xanh, Spotless + SpotBugs sạch. Frontend `vitest` **118 test** xanh (thêm 7 `ProfilePage.spec`: số liệu, huy hiệu, 3 tab, liên kết địa điểm; theo dõi — khách → đăng nhập, đã đăng nhập → nút + số cập nhật; trang của mình: Cài đặt, 5 tab, đánh giá mọi trạng thái + lý do; Đề xuất của tôi theo trạng thái, chỉ tải tab đang mở; tab riêng tư trên trang người khác → Đánh giá; bộ sưu tập + huy hiệu có mô tả / ngày; 404 → trang không tìm thấy). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
