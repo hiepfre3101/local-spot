@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
-import type { MeResponse, PlaceDetail, Review } from '@/types/api'
+import type { CollectionSummary, MeResponse, PlaceDetail, Review } from '@/types/api'
 
 import PlaceDetailPage from '../PlaceDetailPage.vue'
 
@@ -23,6 +23,42 @@ vi.mock('@/api/places', () => ({
     nearby: (...args: unknown[]) => nearby(...args),
   },
 }))
+const mine = vi.fn()
+const addPlace = vi.fn()
+const removePlace = vi.fn()
+vi.mock('@/api/collections', () => ({
+  collectionsApi: {
+    mine: (...args: unknown[]) => mine(...args),
+    addPlace: (...args: unknown[]) => addPlace(...args),
+    removePlace: (...args: unknown[]) => removePlace(...args),
+  },
+}))
+vi.mock('@/plugins/toast', () => ({
+  useNotify: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn() }),
+}))
+
+const COLLECTION: CollectionSummary = {
+  id: 1,
+  name: 'Ăn sáng',
+  isPublic: false,
+  shareSlug: null,
+  placeCount: 1,
+  coverPhoto: null,
+}
+
+const ME: MeResponse = {
+  id: 42,
+  displayName: 'Minh Anh',
+  avatarUrl: null,
+  email: 'minh.anh@localspot.test',
+  bio: null,
+  emailVerified: true,
+  roles: ['USER'],
+  permissions: [],
+  trustScore: 40,
+  ownedPlaceIds: [],
+}
+
 vi.mock('@/components/place/PlaceMap.vue', () => ({
   __esModule: true,
   default: { name: 'PlaceMap', render: () => null },
@@ -90,6 +126,8 @@ async function mountAt(slug: string, options: { writeReviewRoute?: boolean } = {
     routes: [
       { path: '/', name: 'home', component: Empty },
       { path: '/search', name: 'search', component: Empty },
+      { path: '/login', name: 'login', component: Empty },
+      { path: '/users/:id', name: 'profile', component: Empty },
       { path: '/places/:slug', name: 'place', component: PlaceDetailPage, props: true },
       ...(options.writeReviewRoute
         ? [{ path: '/places/:slug/review', name: 'write-review', component: Empty }]
@@ -148,11 +186,72 @@ describe('PlaceDetailPage (P03)', () => {
     expect(wrapper.get('button[aria-label^="5 sao"]').attributes('aria-pressed')).toBe('true')
   })
 
-  it('không có nút dẫn tới màn chưa làm (check-in, lưu)', async () => {
+  it('không có nút dẫn tới màn chưa làm (check-in)', async () => {
     const wrapper = await mountAt('pho-thin-ha-noi')
     const labels = wrapper.findAll('a, button').map((el) => el.text())
     expect(labels).not.toContain('Check-in')
-    expect(labels).not.toContain('Lưu')
+  })
+
+  describe('Lưu vào bộ sưu tập (UC18)', () => {
+    const saveButton = (wrapper: Awaited<ReturnType<typeof mountAt>>) =>
+      wrapper.findAll('button').find((b) => /^(\+ Lưu|✓ Đã lưu)$/.test(b.text()))
+
+    beforeEach(() => {
+      HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+        this.open = true
+      }
+      HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+        this.open = false
+      }
+      mine.mockReset().mockResolvedValue([
+        { ...COLLECTION, id: 1, name: 'Ăn sáng', containsPlace: false },
+        { ...COLLECTION, id: 2, name: 'Phở ngon', containsPlace: true, placeCount: 3 },
+      ])
+      addPlace.mockReset().mockResolvedValue(undefined)
+      removePlace.mockReset().mockResolvedValue(undefined)
+    })
+
+    it('khách bấm → đăng nhập, không gọi API bộ sưu tập', async () => {
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      await saveButton(wrapper)!.trigger('click')
+      await flushPromises()
+      expect(wrapper.vm.$router.currentRoute.value.name).toBe('login')
+      expect(mine).not.toHaveBeenCalled()
+    })
+
+    it('đã có trong một bộ → "✓ Đã lưu"; tick / bỏ tick gọi API ngay', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      expect(mine).toHaveBeenCalledWith(5)
+      const button = saveButton(wrapper)!
+      expect(button.text()).toBe('✓ Đã lưu')
+      expect(button.attributes('aria-pressed')).toBe('true')
+
+      await button.trigger('click')
+      await flushPromises()
+      const boxes = wrapper.findAll('dialog fieldset input[type="checkbox"]')
+      expect(boxes.map((b) => (b.element as HTMLInputElement).checked)).toEqual([false, true])
+
+      await boxes[0]!.trigger('change')
+      await flushPromises()
+      expect(addPlace).toHaveBeenCalledWith(1, 5)
+      await boxes[1]!.trigger('change')
+      await flushPromises()
+      expect(removePlace).toHaveBeenCalledWith(2, 5)
+    })
+
+    it('chưa có trong bộ nào → "+ Lưu"; địa điểm chưa duyệt không có nút', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      mine.mockResolvedValue([{ ...COLLECTION, containsPlace: false }])
+      let wrapper = await mountAt('pho-thin-ha-noi')
+      expect(saveButton(wrapper)!.attributes('aria-pressed')).toBe('false')
+      expect(saveButton(wrapper)!.text()).toBe('+ Lưu')
+      wrapper.unmount()
+
+      detail.mockResolvedValue({ ...PLACE, status: 'PENDING' })
+      wrapper = await mountAt('pho-thin-ha-noi')
+      expect(saveButton(wrapper)).toBeUndefined()
+    })
   })
 
   it('nút đánh giá: viết khi chưa có, sửa khi đã có, chủ địa điểm không có', async () => {

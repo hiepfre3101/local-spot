@@ -1213,3 +1213,26 @@ Chưa commit.
 **Tài liệu**: openapi (`Review.place`), sitemap (`/users/:id` thêm tab `places`, nút "Cài đặt tài khoản"), plan §10 F (mục trang cá nhân + 2 mục tách ra).
 
 **Kiểm chứng**: backend `ReviewFlowTests` (thêm kiểm `place.id` / `name` / `slug`), `CommunityFlowTests`, `HomeFlowTests`, `ReviewModerationFlowTests` — 31 test xanh, Spotless + SpotBugs sạch. Frontend `vitest` **118 test** xanh (thêm 7 `ProfilePage.spec`: số liệu, huy hiệu, 3 tab, liên kết địa điểm; theo dõi — khách → đăng nhập, đã đăng nhập → nút + số cập nhật; trang của mình: Cài đặt, 5 tab, đánh giá mọi trạng thái + lý do; Đề xuất của tôi theo trạng thái, chỉ tải tab đang mở; tab riêng tư trên trang người khác → Đánh giá; bộ sưu tập + huy hiệu có mô tả / ngày; 404 → trang không tìm thấy). `vue-tsc`, `eslint --no-cache` sạch, `vite build` được.
+
+## 2026-10-18 16:50 (+07) — Checklist F: bộ sưu tập (UC18 — trang bộ sưu tập, link chia sẻ, nút "Lưu" P03)
+
+**Bối cảnh**: nhánh `feature/fe-collections` tách từ `feature/fe-profile` (thẻ bộ sưu tập trên trang cá nhân cần link sang trang mới; nhánh trang cá nhân chưa mở PR). API bộ sưu tập có từ E; sitemap đã có `/collections/:id` (auth) và `/c/:shareSlug`.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Trạng thái "đã lưu" lấy từ backend**: thêm tham số tùy chọn `GET /me/collections?placeId=` → mỗi bộ kèm `containsPlace`. Lý do: không API nào cho biết địa điểm đã nằm trong bộ nào. Bị loại: (a) chỉ frontend, hộp chỉ "thêm" không biết đã lưu — không bỏ lưu được tại chỗ; (b) tải chi tiết từng bộ — tới 50 request mỗi lần mở hộp.
+- **Nút lưu chỉ ở P03** (đúng mục plan); `.ls-save` trên SpotCard để sau — mỗi thẻ cần trạng thái đã lưu, phạm vi rộng hơn.
+
+**Quyết định kỹ thuật:**
+- Backend: một truy vấn JPQL `findCollectionIdsContaining(userId, placeId)` (kể cả địa điểm đã bị ẩn — chủ thấy mọi dòng của mình); `containsPlace` là `Boolean` để trống (`null`) khi không hỏi — client cũ và tab trang cá nhân không đổi. Không đụng phần lõi (không phải bảo mật / rating / chống review ảo).
+- **Một trang cho hai route**: `/collections/:id` có công cụ của chủ; `/c/:shareSlug` **luôn chỉ đọc**, kể cả chủ tự mở (khớp backend: link chia sẻ là góc nhìn công khai — chủ xem trước như người nhận). Bộ công khai của người khác mở bằng id cũng chỉ đọc. 404 (riêng tư / không tồn tại / link thu hồi) → trang không tìm thấy, như backend không phân biệt.
+- **Hộp "Lưu"**: tick / bỏ tick gọi PUT / DELETE ngay (idempotent), cập nhật cache lạc quan rồi hoàn tác nếu lỗi — không có nút "Lưu" thứ hai dễ quên bấm. Nút trên trang và hộp đọc **cùng khóa cache** nên đổi trạng thái ngay. Chỉ hiện với địa điểm APPROVED (backend chỉ nhận địa điểm đang hiện); khách bấm → đăng nhập. Trạng thái bằng chữ + `aria-pressed` ("+ Lưu" / "✓ Đã lưu").
+- **Tạo / sửa** dùng chung một hộp (tên ≤ 150, mô tả ≤ 1000, công khai — mặc định riêng tư như API); tắt công khai báo trước "link đã chia sẻ sẽ ngừng hoạt động" vì thu hồi là vĩnh viễn (chốt 2026-10-12). Tạo từ hộp Lưu → thêm luôn địa điểm; tạo từ trang cá nhân → mở trang bộ mới.
+- **Xoá bộ** xác nhận tại chỗ (cùng kiểu xoá bình luận), xong về tab Bộ sưu tập. **Bỏ địa điểm** không xác nhận (thêm lại được ngay). Ghi chú sửa tại chỗ qua PUT (địa điểm đã có → chỉ sửa ghi chú; để trống = bỏ ghi chú).
+- **Link chia sẻ** hiện trong ô chỉ đọc + "Sao chép" (Clipboard API); trình duyệt chặn clipboard thì báo chọn tay — link vẫn ở ô.
+- Trang cá nhân: thẻ bộ của mình → trang quản lý, của người khác → link chia sẻ; cả thẻ bấm được qua liên kết ở tên (như SpotCard); ô cuối "+ Tạo bộ sưu tập" viền đứt (P06 README). Địa điểm bị ẩn trong bộ: nhãn "✕ Đã bị ẩn — người khác không thấy".
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử. Nút lưu trên SpotCard.
+
+**Tài liệu**: openapi (`/me/collections` tham số `placeId`, `CollectionSummary.containsPlace`), plan §10 F (mục bộ sưu tập).
+
+**Kiểm chứng**: backend `CollectionFlowTests` thêm `myCollectionsMarkWhichOnesAlreadyHoldAPlace` (đánh dấu đúng bộ, không lẫn bộ người khác cùng địa điểm, không hỏi → trống, tab trang cá nhân → trống); `./mvnw verify` đầy đủ **354 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **132 test** xanh (thêm `CollectionPage.spec` 6: chủ — thông tin / link chia sẻ / công cụ / nhãn bị ẩn; bỏ địa điểm + sửa ghi chú; xoá phải xác nhận rồi về trang cá nhân; link chia sẻ chỉ đọc kể cả chủ; bộ người khác chỉ đọc; 404. `PlaceDetailPage.spec` +3: khách → đăng nhập; "✓ Đã lưu" + tick / bỏ tick gọi API; "+ Lưu", địa điểm chưa duyệt không có nút. `ProfilePage.spec` +1 và cập nhật; `routes.spec` +1 cho URL thật `/collections/7`, `/c/<slug>`). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.

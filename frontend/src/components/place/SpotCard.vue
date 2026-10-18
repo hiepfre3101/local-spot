@@ -11,7 +11,8 @@ import PlacePhoto from './PlacePhoto.vue'
 
 /**
  * SpotCard (README thành phần): ảnh 4:3, tên, Rating, dòng meta, tối đa 3 thẻ `#tag` — nằm thẳng trên `surface`, không
- * khung / bóng. Cả thẻ bấm được qua liên kết ở tên. Nút lưu (UC18) thêm khi module bộ sưu tập có API.
+ * khung / bóng. Cả thẻ bấm được qua liên kết ở tên. Nút lưu `.ls-save` (UC18) chưa gắn: supervisor chốt 2026-10-18 chỉ
+ * lưu từ trang chi tiết (P03) trong đợt bộ sưu tập.
  */
 const props = withDefaults(
   defineProps<{ place: PlaceSummary; featured?: boolean; headingLevel?: 'h2' | 'h3' }>(),

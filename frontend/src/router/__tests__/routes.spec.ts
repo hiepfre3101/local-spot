@@ -29,4 +29,12 @@ describe('bảng route', () => {
     expect(resolve('/propose').name).toBe('propose')
     expect(resolve('/search?q=pho').name).toBe('search')
   })
+
+  it('bộ sưu tập: /collections/:id (số) và link chia sẻ /c/:shareSlug', () => {
+    expect(resolve('/collections/7').name).toBe('collection')
+    expect(resolve('/collections/abc').name).toBe('not-found')
+    const shared = resolve('/c/quan-an-ha-noi-x7k2qa')
+    expect(shared.name).toBe('shared-collection')
+    expect(shared.params.shareSlug).toBe('quan-an-ha-noi-x7k2qa')
+  })
 })
