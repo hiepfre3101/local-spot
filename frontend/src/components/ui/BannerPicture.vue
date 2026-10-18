@@ -45,19 +45,26 @@ const srcset = computed(() => {
 </template>
 
 <style scoped>
-.banner-pic {
-  position: relative;
-  overflow: hidden;
-}
-.banner-pic img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.banner-pic__scrim {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in srgb, var(--on-accent) 65%, transparent);
+/*
+ * Trong layer `components` để lớp tiện ích của nơi dùng thắng: hero đặt `absolute inset-0` cho ảnh nằm dưới tiêu đề,
+ * ô tìm kiếm và nút. CSS ngoài layer luôn thắng CSS trong layer — để `position: relative` ở ngoài thì ảnh hero chiếm
+ * chỗ trong luồng và đẩy chữ xuống dưới ảnh.
+ */
+@layer components {
+  .banner-pic {
+    position: relative;
+    overflow: hidden;
+  }
+  .banner-pic img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .banner-pic__scrim {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--on-accent) 65%, transparent);
+  }
 }
 </style>

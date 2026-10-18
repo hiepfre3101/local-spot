@@ -40,6 +40,13 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Viết đánh giá', requiresAuth: true },
       },
       {
+        // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
+        path: 'propose',
+        name: 'propose',
+        component: () => import('@/pages/ProposePlacePage.vue'),
+        meta: { title: 'Đề xuất địa điểm', requiresAuth: true },
+      },
+      {
         path: 'settings/password',
         name: 'settings-password',
         component: () => import('@/pages/settings/PasswordSettingsPage.vue'),

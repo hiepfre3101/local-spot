@@ -12,6 +12,10 @@ import { useAuthStore } from '@/stores/auth'
 /**
  * Khung trang công khai (sitemap §1): header logo · điều hướng · Đăng nhập / Đăng ký hoặc menu tài khoản; chân trang
  * `olive` với chữ LOCALSPOT cỡ wordmark (HomePage README). Chuông thông báo thêm cùng module Thông báo.
+ *
+ * Header dính đầu trang khi cuộn (supervisor yêu cầu 2026-10-17): nền đặc + đường kẻ `line` sẵn có, không bóng (README).
+ * `z-index` trên lớp điều khiển của Leaflet (1000) để bản đồ không trượt đè lên header; hộp thoại `<dialog>` nằm ở top
+ * layer nên vẫn ở trên header.
  */
 const auth = useAuthStore()
 const router = useRouter()
@@ -26,31 +30,33 @@ const loginTarget = computed(() => ({ name: 'login', query: { redirect: route.fu
   <div class="flex min-h-screen flex-col">
     <a
       href="#main"
-      class="sr-only rounded-pill bg-surface-raised px-4 py-2 focus:not-sr-only focus:absolute focus:left-4 focus:top-4"
+      class="sr-only rounded-pill bg-surface-raised px-4 py-2 focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[1200]"
     >
       Bỏ qua điều hướng
     </a>
-    <div class="mx-auto w-full max-w-[1200px] px-4 md:px-12">
-      <header class="ls-nav">
-        <RouterLink class="ls-nav__logo" :to="{ name: 'home' }">LocalSpot</RouterLink>
-        <nav v-if="nav.length" aria-label="Điều hướng chính" class="max-md:hidden">
-          <RouterLink
-            v-for="item in nav"
-            :key="item.label"
-            :to="{ name: item.routeName, query: item.query }"
-          >
-            {{ item.label }}
-          </RouterLink>
-        </nav>
-        <div class="flex items-center gap-2">
-          <ThemeToggle />
-          <UserMenu v-if="auth.isAuthenticated" />
-          <template v-else>
-            <LsButton variant="ghost" size="sm" :to="loginTarget">Đăng nhập</LsButton>
-            <LsButton size="sm" :to="{ name: 'register' }">Đăng ký</LsButton>
-          </template>
-        </div>
-      </header>
+    <div class="sticky top-0 z-[1100] bg-surface">
+      <div class="mx-auto w-full max-w-[1200px] px-4 md:px-12">
+        <header class="ls-nav">
+          <RouterLink class="ls-nav__logo" :to="{ name: 'home' }">LocalSpot</RouterLink>
+          <nav v-if="nav.length" aria-label="Điều hướng chính" class="max-md:hidden">
+            <RouterLink
+              v-for="item in nav"
+              :key="item.label"
+              :to="{ name: item.routeName, query: item.query }"
+            >
+              {{ item.label }}
+            </RouterLink>
+          </nav>
+          <div class="flex items-center gap-2">
+            <ThemeToggle />
+            <UserMenu v-if="auth.isAuthenticated" />
+            <template v-else>
+              <LsButton variant="ghost" size="sm" :to="loginTarget">Đăng nhập</LsButton>
+              <LsButton size="sm" :to="{ name: 'register' }">Đăng ký</LsButton>
+            </template>
+          </div>
+        </header>
+      </div>
     </div>
     <VerifyEmailBanner />
 
