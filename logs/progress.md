@@ -1305,3 +1305,42 @@ Chưa commit.
 **Chưa làm (ghi để nối tiếp):** supervisor chạy thử với backend thật — lần này không chạy được backend local (MySQL từ chối user `localspot` — lệch thông tin trong `.env` máy dev; không đọc / sửa `.env`). Liên kết `CLAIM_SUBMITTED` khi có màn kiểm duyệt.
 
 **Kiểm chứng**: thêm `notificationView.spec` (5), `NotificationBell.spec` (5: "9+" + nhãn số thật, chưa mở chưa tải; "· Mới", bấm → đọc + chuyển trang + đóng; Escape trả focus; lọc Chưa đọc + Xem cũ hơn; đọc tất cả lỗi → báo lỗi), `relativeTime.spec` (7), store +1 (lọc + trang cũ về muộn). `vitest` **182 test** xanh; `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
+## 2026-10-19 13:43 (+07) — Checklist F: màn kiểm duyệt (UC27–UC30) + `GET /moderation/places/{id}`
+
+**Bối cảnh**: nhánh `feature/fe-moderation` tạo **từ `feature/fe-notifications`** (PR chưa gộp) — cùng sửa `plan-v1.md`, file này, và để gắn liên kết thông báo `CLAIM_SUBMITTED`; gộp nhánh thông báo trước. Backend kiểm duyệt có từ E (hàng chờ gộp, 4 luồng quyết định). Frontend trước đó chỉ có Người dùng & Ảnh trang chủ (quyền quản trị) → kiểm duyệt viên vào `/admin` bị 403.
+
+**Supervisor chốt (qua câu hỏi / trao đổi):**
+- **Kiểm duyệt viên dùng chung khu `/admin`**, mục ẩn theo quyền — đúng cơ chế sẵn có (sidebar lọc theo route + quyền, guard `meta.anyPermission` chặn cả khi gõ URL).
+- **Thêm backend `GET /moderation/places/{placeId}`** cho màn duyệt địa điểm. Bị loại: thêm `slug` vào mục hàng chờ (màn chi tiết vẫn thiếu nghi trùng, link theo id không dùng được); duyệt ngay trong hàng chờ (chỉ có `PlaceSummary` — không có mô tả / ảnh / giờ để xét UC27).
+
+**Quyết định kỹ thuật:**
+- Endpoint mới cùng khuôn `reviews/{id}`, `claims/{id}`: mọi trạng thái (mục vừa bị người khác xử lý vẫn mở được để thấy kết quả), không tính lượt xem, `possibleDuplicates` chỉ khi PENDING. Trả `PlaceDetail` dựng bằng đúng `PlaceService.toDetail` (người xem = kiểm duyệt viên: thấy ảnh chưa xử lý xong, `rejectReason`) + `proposer` + `submittedAt`. Không đổi schema / migration.
+- **Màn xử lý chỉ đọc + quyết định**: bản mẫu AdminForm cho sửa trường, giữ / bỏ ảnh trước khi duyệt, nhưng API chỉ nhận duyệt / từ chối — không bịa thao tác backend không có. Section hai cột như AdminForm, trường chỉ đọc dạng `dl`.
+- **Xong một mục → mở mục kế tiếp cùng loại** (FIFO, "Xử lý tiếp"); hết việc → về hàng chờ loại đó. 409 "đã xử lý / lệch phiên bản" → báo + tải lại màn để thấy kết quả thật. Gửi `version` đang thấy (optimistic lock).
+- **Lý do từ chối** = chọn lý do có sẵn + ghi chú ("Lý do khác" bắt buộc ghi chú), ghép thành một chuỗi ≤ 500 (API một trường; người gửi đọc nguyên câu trong thông báo).
+- **Tự xử lý**: khoá nút sẵn khi là đề xuất / review / yêu cầu / nội dung của chính mình hoặc về địa điểm mình sở hữu, kèm lời giải thích — backend vẫn chặn (409 `SELF_ACTION_FORBIDDEN`).
+- **Báo cáo**: hai nút Bỏ qua / Ẩn, nói trước hậu quả theo loại (O9: ai bị ghi vi phạm; tài khoản → chỉ ghi vi phạm, khoá ở P10; đối tượng đã xoá → chỉ đóng báo cáo). Lý do xác nhận chỉ chọn trong các lý do đã bị báo cáo, bắt buộc khi ẩn địa điểm. 404 `REPORT_NOT_FOUND` → "không còn báo cáo đang mở".
+- **Minh chứng yêu cầu sở hữu**: link presigned 5 phút qua API (không `<img src>` thẳng vào API — token chỉ ở header); ảnh lỗi → ký link mới **một lần**. Duyệt nói trước số yêu cầu khác sẽ tự bị từ chối.
+- `/admin` của kiểm duyệt viên → `/admin/queue` (mọi loại, sitemap §2.3). Lọc `?type=` chỉ trong loại có quyền (loại không có quyền bị bỏ qua thay vì gọi để nhận 403). Sidebar vẫn đánh dấu loại khi đang ở màn xử lý.
+- Thông báo `CLAIM_SUBMITTED` giờ dẫn tới màn duyệt yêu cầu.
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử. Số việc tồn trên sidebar (bản mẫu "Địa điểm 24") — API không có số đếm. Dashboard (UC33). Seed dev không có báo cáo đang mở → muốn thử màn báo cáo cần báo cáo một nội dung trên P03 trước.
+
+**Tài liệu**: openapi (`GET /moderation/places/{placeId}`, schema `ModerationPlaceDetail`), sitemap §2.3, plan §10 F.
+
+**Kiểm chứng**: backend `PlaceFlowTests.moderationDetailShowsProposalProposerAndDuplicatesWhilePending` (chi tiết + người đề xuất + nghi trùng gồm đề xuất chờ của người khác; đã duyệt vẫn mở, hết nghi trùng, không tính lượt xem; thành viên 403; id lạ 404); `./mvnw verify` **357 test** xanh, Spotless + SpotBugs sạch. Chạy thật trên backend dev: hàng chờ có dữ liệu seed, `GET /moderation/places/20` trả đủ. Frontend `vitest` **199 test** xanh (thêm `moderation.spec` 3, `ModerationPages.spec` 13: hàng chờ FIFO / lọc theo quyền; địa điểm: thiếu lý do, từ chối → mục kế tiếp, duyệt → hết việc, 409 → tải lại, tự duyệt bị khoá; review: chủ địa điểm bị khoá; báo cáo: lý do xác nhận khi ẩn địa điểm, bỏ qua, 404; yêu cầu sở hữu: cảnh báo + minh chứng + ký lại link; `routes.spec` +1, `notificationView.spec` +liên kết). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
+## 2026-10-19 15:23 (+07) — Đổi tài khoản quản trị MySQL `root` → `localspot_root` (Docker Compose)
+
+**Bối cảnh**: supervisor yêu cầu — tên `root` của MySQL trong compose trùng với tài khoản MySQL cài sẵn trên máy dev. Trong dự án `root` chỉ dùng ở healthcheck của compose; backend dùng `MYSQL_USER`, CI dùng Testcontainers (không đụng compose).
+
+**Supervisor chốt (qua câu hỏi):** áp dụng **cho cả dự án** (nhóm + CI), không chỉ máy cục bộ. Bị loại: chỉ đổi trên máy này qua override không commit (nhanh, nhưng nhóm vẫn dùng `root`).
+
+**Quyết định kỹ thuật:**
+- Image `mysql:8.4` không có biến môi trường để đổi tên root → đổi bằng SQL `RENAME USER 'root'@'%' TO 'localspot_root'@'%'` (giữ mật khẩu `MYSQL_ROOT_PASSWORD` và quyền), đặt ở `docker/mysql/initdb/` mount vào `/docker-entrypoint-initdb.d` — chỉ chạy khi volume trống.
+- **Giữ `'root'@'localhost'`**: entrypoint của image tắt máy chủ tạm sau bước init bằng `mysqladmin -uroot` qua socket — đổi cả tài khoản đó thì lần khởi tạo đầu tiên thất bại. Tài khoản này chỉ khớp kết nối socket trong container, không dùng được từ máy host / container khác.
+- Healthcheck đổi sang `-ulocalspot_root`. Không thêm biến `.env` mới (tên cố định, ít cấu hình hơn); `.env.example` ghi rõ tên tài khoản.
+- Volume có sẵn: chạy một lần cùng file SQL (README ghi lệnh). Đã chạy trên máy này — dữ liệu giữ nguyên.
+
+**Kiểm chứng**: container thử (volume trống): init chạy script, "init process done", `root` qua TCP bị từ chối, `localspot_root` vào được, healthcheck "alive", user ứng dụng `localspot` vẫn vào DB. Volume thật: sau khi đổi còn `localspot@%`, `localspot_root@%`, `root@localhost`; 301 địa điểm còn nguyên; container tạo lại với healthcheck mới → `healthy`.
