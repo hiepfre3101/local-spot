@@ -108,6 +108,10 @@ function report(): void {
       <div class="ls-ritem__meta mt-1 flex flex-wrap items-center gap-3">
         <LsRating :score="review.rating" />
         <time :datetime="review.createdAt">{{ formatDate(review.createdAt) }}</time>
+        <span v-if="review.revisedAt"
+          >Cập nhật
+          <time :datetime="review.revisedAt">{{ formatDate(review.revisedAt) }}</time></span
+        >
         <span v-if="review.authorCheckedIn">✓ Đã check-in</span>
       </div>
       <p class="ls-ritem__body">{{ review.content }}</p>

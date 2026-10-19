@@ -67,6 +67,7 @@ function review(overrides: Partial<Review> = {}): Review {
     commentCount: 0,
     ownerReply: null,
     createdAt: '2026-10-02T03:00:00Z',
+    revisedAt: null,
     updatedAt: '2026-10-02T03:00:00Z',
     version: 0,
     ...overrides,

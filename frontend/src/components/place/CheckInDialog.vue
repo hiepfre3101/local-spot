@@ -203,13 +203,18 @@ function directions(): void {
           Bạn đang cách {{ place.name }} {{ distanceText(state.checkIn.distanceM) }}. Lượt check-in
           đã được ghi lúc {{ formatDateTime(state.checkIn.createdAt) }}.
         </p>
+        <p v-if="place.myReviewId !== null">
+          Thấy khác lần trước? Cập nhật đánh giá theo lần ghé này — đánh giá sẽ có nhãn “Đã
+          check-in”.
+        </p>
         <div class="ls-dialog__meta">+1 điểm đóng góp</div>
         <div class="ls-dialog__acts">
+          <!-- Đã có đánh giá (1 / người / địa điểm) → cập nhật theo lần ghé mới (chốt 2026-10-19) -->
           <LsButton
-            v-if="place.myReviewId === null && $router.hasRoute('write-review')"
+            v-if="$router.hasRoute('write-review')"
             size="sm"
             :to="{ name: 'write-review', params: { slug: place.slug } }"
-            >Viết đánh giá</LsButton
+            >{{ place.myReviewId === null ? 'Viết đánh giá' : 'Cập nhật đánh giá' }}</LsButton
           >
           <LsButton variant="ghost" size="sm" @click="close">Đóng</LsButton>
         </div>
