@@ -54,7 +54,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/admin` | Chuyển hướng: quản trị viên → `/admin/dashboard`; kiểm duyệt viên → `/admin/queue` | — | có ít nhất một quyền kiểm duyệt |
 | `/admin/dashboard` | Tổng quan (AdminDashboard) | UC33 | `perm:dashboard:view` |
 | `/admin/queue` | Hàng chờ gộp FIFO (DataTable) — `GET /moderation/queue` | UC27–UC30 | bất kỳ quyền kiểm duyệt |
-| `/admin/moderation/places/:id` | Duyệt địa điểm (AdminForm) | UC27 | `perm:place:approve` |
+| `/admin/moderation/places/:id` | Duyệt địa điểm (AdminForm) — `GET /moderation/places/{id}` *(thêm 2026-10-19)*; chỉ đọc + Duyệt / Từ chối (API không cho sửa trước khi duyệt) | UC27 | `perm:place:approve` |
 | `/admin/moderation/reviews/:id` | Duyệt đánh giá | UC28 | `perm:review:moderate` |
 | `/admin/moderation/reports/:targetType/:targetId` | Xử lý báo cáo (nhóm theo đối tượng) | UC29 | `perm:report:handle` |
 | `/admin/moderation/claims/:id` | Duyệt yêu cầu sở hữu | UC30 | `perm:claim:approve` |

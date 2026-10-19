@@ -26,7 +26,7 @@ export interface NotificationView {
   parts: TextPart[]
   /** Dòng phụ: lý do từ chối / xử lý. */
   detail: string | null
-  /** Bấm vào đi đâu; `null` = không có trang tương ứng (nội dung đã bị ẩn, màn kiểm duyệt chưa có). */
+  /** Bấm vào đi đâu; `null` = không có trang tương ứng (nội dung đã bị ẩn). */
   to: RouteLocationRaw | null
 }
 
@@ -146,8 +146,10 @@ export function describeNotification(n: AppNotification, meId: number): Notifica
         icon: 'key',
         parts: [{ text: 'Có yêu cầu xác nhận sở hữu mới cho ' }, place],
         detail: null,
-        // Màn kiểm duyệt yêu cầu sở hữu chưa có ở frontend — gắn liên kết khi làm trang quản trị
-        to: null,
+        to:
+          d.claimId !== undefined
+            ? { name: 'admin-moderation-claim', params: { id: d.claimId } }
+            : null,
       }
     case 'CLAIM_APPROVED':
       return {

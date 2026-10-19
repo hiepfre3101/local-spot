@@ -51,6 +51,10 @@ describe('describeNotification', () => {
       query: { tab: 'places' },
     })
     expect(describeNotification(n('CLAIM_REJECTED', place), 42).to).toEqual({ name: 'owner' })
+    expect(describeNotification(n('CLAIM_SUBMITTED', { ...place, claimId: 5 }), 42).to).toEqual({
+      name: 'admin-moderation-claim',
+      params: { id: 5 },
+    })
   })
 
   it('từ chối kèm lý do ở dòng phụ', () => {

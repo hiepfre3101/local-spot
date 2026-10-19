@@ -31,7 +31,19 @@ const groups = computed(() => {
   return result
 })
 
+/** Màn xử lý một mục → mục sidebar của loại đó vẫn được đánh dấu. */
+const DETAIL_TYPES: Record<string, string> = {
+  'admin-moderation-place': 'PLACE',
+  'admin-moderation-review': 'REVIEW',
+  'admin-moderation-report': 'REPORT',
+  'admin-moderation-claim': 'CLAIM',
+}
+
 function isCurrent(item: AdminNavItem): boolean {
+  const detailType = DETAIL_TYPES[String(route.name)]
+  if (detailType && item.routeName === 'admin-queue') {
+    return item.query?.type === detailType
+  }
   if (route.name !== item.routeName) {
     return false
   }
