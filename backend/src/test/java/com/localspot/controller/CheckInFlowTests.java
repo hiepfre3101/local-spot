@@ -89,7 +89,27 @@ class CheckInFlowTests {
         assertThat(checkinCount(placeId)).isEqualTo(2);
         String slug = jdbc.queryForObject("SELECT slug FROM places WHERE id = ?", String.class, placeId);
         mvc.perform(get("/api/v1/places/" + slug))
-                .andExpect(jsonPath("$.checkinCount").value(2));
+                .andExpect(jsonPath("$.checkinCount").value(2))
+                .andExpect(jsonPath("$.checkedInToday").value(false)); // khách
+    }
+
+    @Test
+    void detailTellsTheViewerWhetherTheyCheckedInToday() throws Exception {
+        Account member = account(true);
+        long placeId = place("APPROVED", null);
+        String slug = jdbc.queryForObject("SELECT slug FROM places WHERE id = ?", String.class, placeId);
+
+        perform(member, get("/api/v1/places/" + slug))
+                .andExpect(jsonPath("$.checkedInToday").value(false));
+        checkIn(member, placeId, north(50), 10).andExpect(status().isCreated());
+        perform(member, get("/api/v1/places/" + slug))
+                .andExpect(jsonPath("$.checkedInToday").value(true));
+        // Người khác chưa check-in; check-in hôm qua không tính là hôm nay
+        perform(account(true), get("/api/v1/places/" + slug))
+                .andExpect(jsonPath("$.checkedInToday").value(false));
+        jdbc.update("UPDATE check_ins SET checkin_date = checkin_date - INTERVAL 1 DAY WHERE user_id = ?", member.id());
+        perform(member, get("/api/v1/places/" + slug))
+                .andExpect(jsonPath("$.checkedInToday").value(false));
     }
 
     @Test
