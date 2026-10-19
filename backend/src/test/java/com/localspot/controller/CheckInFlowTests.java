@@ -2,6 +2,7 @@ package com.localspot.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -284,6 +285,51 @@ class CheckInFlowTests {
         assertThat(labelOf(json, reviewSameDay)).isTrue();
         assertThat(labelOf(json, reviewAfter)).isFalse();
         assertThat(labelOf(json, reviewNever)).isFalse();
+    }
+
+    @Test
+    void revisingTheReviewAfterARevisitEarnsTheLabel() throws Exception {
+        Account member = account(true); // trước place(): người đề xuất là user đầu tiên trong CSDL
+        long placeId = place("APPROVED", null);
+        long reviewId = review(placeId, member, 30); // viết 1 tháng trước, chưa từng check-in
+        checkIn(member, placeId, north(10), 10).andExpect(status().isCreated()); // quay lại hôm nay
+
+        perform(member, get("/api/v1/reviews/" + reviewId))
+                .andExpect(jsonPath("$.authorCheckedIn").value(false))
+                .andExpect(jsonPath("$.revisedAt").isEmpty());
+
+        // Gửi lại y nguyên → không tính là sửa, chưa có nhãn
+        String current = perform(member, get("/api/v1/reviews/" + reviewId))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        int rating = JsonPath.read(current, "$.rating");
+        String content = JsonPath.read(current, "$.content");
+        perform(
+                        member,
+                        patch("/api/v1/reviews/" + reviewId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(jsonBody(rating, content)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revisedAt").isEmpty())
+                .andExpect(jsonPath("$.authorCheckedIn").value(false));
+
+        // Cập nhật theo lần ghé mới → mốc là hôm nay, check-in hôm nay → có nhãn
+        perform(
+                        member,
+                        patch("/api/v1/reviews/" + reviewId)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(jsonBody(2, "Lần này quay lại thấy phục vụ chậm hơn hẳn, món nguội.")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.revisedAt").isNotEmpty())
+                .andExpect(jsonPath("$.authorCheckedIn").value(true));
+        assertThat(jdbc.queryForObject(
+                        "SELECT revised_at IS NOT NULL FROM reviews WHERE id = ?", Boolean.class, reviewId))
+                .isTrue();
+    }
+
+    private static String jsonBody(int rating, String content) {
+        return "{\"rating\": %d, \"content\": \"%s\"}".formatted(rating, content);
     }
 
     // ─── Hỗ trợ ─────────────────────────────────────────────────────────────

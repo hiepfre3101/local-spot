@@ -221,6 +221,7 @@ Quyền seed theo Q2: `MODERATOR` = duyệt địa điểm / review / claim, x�
 | rating | TINYINT UNSIGNED | NN, CHECK 1–5 | |
 | content | TEXT | NN | ≥ 20 ký tự (U4, kiểm tra ở DTO) |
 | visited_at | DATE | NN | |
+| revised_at | DATETIME(6) | | Lần cuối tác giả sửa số sao / nội dung / ngày đến (V6, 2026-10-19); NULL = chưa sửa — mốc của nhãn "đã check-in" |
 | status | VARCHAR(20) | NN, CHECK IN (`PENDING`, `PUBLISHED`, `REJECTED`, `HIDDEN`) | |
 | ip_address | VARCHAR(45) | NN | |
 | ip_prefix | VARCHAR(45) | NN | IPv4 /24 (ví dụ `113.22.5.0`), IPv6 /64 — dùng cho luật cảnh báo IP (U3) |

@@ -23,9 +23,11 @@ public interface CheckInRepository extends JpaRepository<CheckIn, Long> {
     List<CheckIn> findByUser(@Param("userId") Long userId, @Param("afterId") Long afterId, Limit limit);
 
     /**
-     * Nhãn "đã check-in" trên review (sitemap P04, chốt 2026-10-12): tác giả có check-in tại địa điểm vào ngày viết review
-     * hoặc trước đó — so theo <b>ngày</b> giờ Việt Nam (không theo giờ phút) vì người dùng hay viết review ngay tại quán rồi
-     * mới bấm check-in. Check-in sau ngày viết không tính: review cũ không "được xác nhận" ngược về sau. Việt Nam không
+     * Nhãn "đã check-in" trên review (sitemap P04, chốt 2026-10-12; mốc đổi 2026-10-19): tác giả có check-in tại địa
+     * điểm vào ngày viết — hoặc ngày <b>sửa nội dung gần nhất</b> ({@code revised_at}, V6) — hay trước đó. So theo
+     * <b>ngày</b> giờ Việt Nam (không theo giờ phút) vì người dùng hay viết review ngay tại quán rồi mới bấm check-in.
+     * Check-in sau mốc đó không tính: review không "được xác nhận" ngược về sau; quay lại quán thì check-in rồi cập nhật
+     * review theo lần ghé mới. Việt Nam không
      * có giờ mùa hè → lệch cố định +07:00, không cần bảng múi giờ của MySQL. Một truy vấn cho cả trang review.
      */
     @Query(value = """
@@ -33,7 +35,7 @@ public interface CheckInRepository extends JpaRepository<CheckIn, Long> {
             WHERE r.id IN (:reviewIds) AND EXISTS (
               SELECT 1 FROM check_ins c
               WHERE c.user_id = r.user_id AND c.place_id = r.place_id
-                AND c.checkin_date <= DATE(CONVERT_TZ(r.created_at, '+00:00', '+07:00')))
+                AND c.checkin_date <= DATE(CONVERT_TZ(COALESCE(r.revised_at, r.created_at), '+00:00', '+07:00')))
             """, nativeQuery = true)
     List<Long> findCheckedInReviewIds(@Param("reviewIds") Collection<Long> reviewIds);
 }
