@@ -347,3 +347,47 @@ export interface CheckIn {
   checkinDate: string
   createdAt: string
 }
+
+/** openapi `Notification.type` (chốt 2026-10-16 — chỉ các sự kiện trong UC). */
+export type NotificationType =
+  | 'PLACE_APPROVED'
+  | 'PLACE_REJECTED'
+  | 'REVIEW_PUBLISHED'
+  | 'REVIEW_REJECTED'
+  | 'NEW_REVIEW_ON_MY_PLACE'
+  | 'OWNER_REPLIED'
+  | 'REPORT_ACTION_TAKEN'
+  | 'REPORT_RESOLVED'
+  | 'CLAIM_SUBMITTED'
+  | 'CLAIM_APPROVED'
+  | 'CLAIM_REJECTED'
+
+/**
+ * `Notification.data` — ảnh chụp lúc gửi, không join lại khi đọc (địa điểm có thể đã đổi tên / bị ẩn). Trường có mặt tuỳ
+ * loại (bảng trong openapi); mọi loại về địa điểm có `placeId`, `placeName`, `placeSlug`.
+ */
+export interface NotificationData {
+  placeId?: number
+  placeName?: string
+  placeSlug?: string
+  reviewId?: number
+  rating?: number
+  authorName?: string
+  reason?: string | null
+  targetType?: ReportTargetType
+  targetId?: number
+  preview?: string
+  confirmedReason?: string
+  violation?: boolean
+  claimId?: number
+  hiddenReviewId?: number
+}
+
+/** openapi `Notification` (FR-27) — cùng một dạng cho `GET /me/notifications` và khung STOMP. */
+export interface AppNotification {
+  id: number
+  type: NotificationType
+  data: NotificationData
+  readAt: string | null
+  createdAt: string
+}

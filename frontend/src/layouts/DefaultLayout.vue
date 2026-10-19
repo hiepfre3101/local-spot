@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
 import ThemeToggle from '@/components/layout/ThemeToggle.vue'
 import UserMenu from '@/components/layout/UserMenu.vue'
+import NotificationBell from '@/components/notification/NotificationBell.vue'
 import VerifyEmailBanner from '@/components/layout/VerifyEmailBanner.vue'
 import { visiblePublicNav } from '@/components/layout/publicNav'
 import LsButton from '@/components/ui/LsButton.vue'
@@ -49,7 +50,10 @@ const loginTarget = computed(() => ({ name: 'login', query: { redirect: route.fu
           </nav>
           <div class="flex items-center gap-2">
             <ThemeToggle />
-            <UserMenu v-if="auth.isAuthenticated" />
+            <template v-if="auth.isAuthenticated">
+              <NotificationBell />
+              <UserMenu />
+            </template>
             <template v-else>
               <LsButton variant="ghost" size="sm" :to="loginTarget">Đăng nhập</LsButton>
               <LsButton size="sm" :to="{ name: 'register' }">Đăng ký</LsButton>

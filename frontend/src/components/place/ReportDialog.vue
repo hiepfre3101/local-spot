@@ -7,20 +7,13 @@ import LsButton from '@/components/ui/LsButton.vue'
 import { useNotify } from '@/plugins/toast'
 import type { ReportReason } from '@/types/api'
 
-import type { ReportTarget } from './reportTarget'
+import { REPORT_REASONS, type ReportTarget } from './reportTarget'
 
 /**
  * Báo cáo vi phạm (UC17, FR-25) — một hộp thoại dùng chung cho địa điểm, đánh giá, bình luận trên trang chi tiết. Lý do
  * "Thông tin sai" / "Khác" bắt buộc mô tả (chốt 2026-10-14). Mỗi người báo cáo một đối tượng một lần (U10): đã báo cáo
  * thì nói rõ, không coi là lỗi. Gọi `open({ type, id, label })`.
  */
-const REASONS: { value: ReportReason; label: string }[] = [
-  { value: 'SPAM', label: 'Spam hoặc quảng cáo' },
-  { value: 'FAKE', label: 'Giả mạo, không có thật' },
-  { value: 'OFFENSIVE', label: 'Xúc phạm, thô tục' },
-  { value: 'WRONG_INFO', label: 'Thông tin sai' },
-  { value: 'OTHER', label: 'Lý do khác' },
-]
 const DETAIL_MAX = 1000
 
 const id = useId()
@@ -90,7 +83,7 @@ async function submit(): Promise<void> {
       <h2 :id="`${id}-title`" class="m-0 text-title">Báo cáo {{ target?.label }}</h2>
       <fieldset class="m-0 flex flex-col gap-2 border-0 p-0">
         <legend class="mb-2 font-semibold">Lý do</legend>
-        <label v-for="option in REASONS" :key="option.value" class="ls-check">
+        <label v-for="option in REPORT_REASONS" :key="option.value" class="ls-check">
           <input v-model="reason" type="radio" :name="`${id}-reason`" :value="option.value" />
           {{ option.label }}
         </label>

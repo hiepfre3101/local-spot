@@ -49,6 +49,7 @@
 | Data fetching | TanStack Query (Vue Query) | Cache, infinite scroll cho danh sách review |
 | Bản đồ | Leaflet + OpenStreetMap | Miễn phí, không cần thẻ tín dụng như Google Maps. *(2026-10-12: thêm `leaflet.markercluster` — plugin chính thức gom ghim, supervisor duyệt)* *(2026-10-13: lớp nền MapTiler Dataviz / Dataviz Dark — key miễn phí `VITE_MAPTILER_KEY`, thiếu key dùng OSM Đức; `tile.openstreetmap.org` bị nhà mạng chặn DNS, CARTO bắt buộc key)* |
 | Ảnh | vue-advanced-cropper | Crop trước khi upload |
+| Realtime | @stomp/stompjs | Client STOMP cho chuông thông báo (FR-27) — token ở khung CONNECT, tự nối lại lùi dần *(thêm 2026-10-19, supervisor duyệt)* |
 | Khác | dayjs, vue-toastification | |
 
 ### Backend
@@ -415,7 +416,8 @@ Chừa dư 1–2 tuần đệm nếu lịch cho phép — phần viết báo cá
 ### F. Frontend
 - [x] Layout, router, navigation guard — 3 layout theo sitemap §1; guard theo permission (`MeResponse.permissions`), `?redirect=` chỉ nhận đường dẫn nội bộ; header / sidebar chỉ hiện mục đã có route
 - [x] Axios client, interceptor, xử lý refresh/401 — access token chỉ trong bộ nhớ; 401 → làm mới một lần cho mọi request đồng thời, khóa giữa các tab bằng Web Locks (refresh token xoay vòng — U2); lỗi chuẩn hoá từ RFC 7807
-- [ ] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); **place, filter xong** (2026-10-12: filter đọc / ghi bộ lọc trên URL, place giữ vị trí người dùng + địa điểm đang chọn); notification làm cùng module thông báo
+- [x] Pinia store: auth, place, filter, notification — **auth xong** (2026-10-05); **place, filter xong** (2026-10-12: filter đọc / ghi bộ lọc trên URL, place giữ vị trí người dùng + địa điểm đang chọn); **notification xong** (2026-10-19)
+- [ ] Thông báo (UC19, FR-27) — **đã code 2026-10-19, chờ supervisor chạy thử**: store `notification` gắn theo phiên (đăng nhập → đọc số chưa đọc + mở STOMP `@stomp/stompjs`; đăng xuất → đóng, xoá); chuông + bảng P07 400px ở header công khai **và chân sidebar quản trị**; lọc Tất cả / Chưa đọc (lọc ở máy chủ `unreadOnly`); "Xem cũ hơn" trong bảng (O4: không có trang riêng); bấm thông báo → đánh dấu đã đọc + tới trang tương ứng; nối lại → đọc lại số + trang đầu. Thông báo yêu cầu sở hữu cho kiểm duyệt viên chưa có liên kết (màn kiểm duyệt chưa làm)
 - [x] Màn tài khoản P01 (UC01–UC05) + Cài đặt — Mật khẩu (UC06) + quản trị Người dùng & vai trò P10 (UC31) — làm cùng nền tảng F, dùng API đã có của checklist D
 - [x] Trang chủ: nổi bật, danh mục, mới nhất — backend `GET /home` cache Redis + `featuredReview`, thẻ `tags` trên PlaceSummary; supervisor chạy thử trên dữ liệu seed 2026-10-13
 - [x] Trang tìm kiếm: bộ lọc, sắp xếp, infinite scroll — bộ lọc trên URL; "Quanh tôi" chỉ lọc danh mục + bán kính (chốt 2026-10-12)
