@@ -10,7 +10,7 @@ Cập nhật: 2026-09-29 — supervisor duyệt màn P01–P12 (xem mục 4).
 |---|---|---|
 | `DefaultLayout` | Trang công khai (khách, thành viên, chủ địa điểm) | Header: logo · Khám phá · Bản đồ · Bảng xếp hạng · Đề xuất địa điểm; phải: Đăng nhập / Đăng ký **hoặc** chuông thông báo + ảnh đại diện. Chân trang `olive` |
 | `AuthLayout` | Đăng nhập, đăng ký, khôi phục mật khẩu | Chia đôi: ảnh `radius-lg` trái, form 440px phải (P01) |
-| `AdminLayout` | Kiểm duyệt viên, quản trị viên | Sidebar 224px theo vai trò + vùng chính; bo góc tối thiểu |
+| `AdminLayout` | Kiểm duyệt viên, quản trị viên | Sidebar 224px theo vai trò + vùng chính; bo góc tối thiểu. Chân sidebar có chuông thông báo (P07, bảng mở sang phải — thêm 2026-10-19: kiểm duyệt viên nhận yêu cầu sở hữu mới) |
 
 ## 2. Route
 
@@ -33,7 +33,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/settings/password` | Cài đặt — Mật khẩu (P06) | UC06 | `auth` | |
 | `/owner` | Địa điểm của tôi (P09) | UC23 | `auth` | Chưa sở hữu địa điểm nào → form yêu cầu xác nhận sở hữu; đã có → danh sách |
 | `/owner/places/:id` | Quản lý địa điểm (P09) | UC24, UC25, UC26 | `perm:place:update-own` | Tab `?tab=stats\|info\|reviews` |
-| — (thả xuống ở header) | Thông báo (P07) | UC19 | `auth` | Bảng thả xuống 400px, không có route |
+| — (thả xuống ở header) | Thông báo (P07) | UC19 | `auth` | Bảng thả xuống 400px, không có route (O4); "Xem cũ hơn" tải tiếp trong bảng |
 
 ### 2.2 Tài khoản — `AuthLayout`
 
@@ -113,7 +113,7 @@ Supervisor duyệt toàn bộ P01–P12 → chấp nhận **phương án đề x
 | O1 | P03 | Bình luận mở tại chỗ hay trang riêng của đánh giá | Nếu trang riêng → thêm route `/reviews/:id` |
 | O2 ✅ | P04 | Sửa đánh giá đã đăng khi tác giả trust < 30: bản cũ vẫn hiện trong lúc bản sửa chờ duyệt? | **Chốt 2026-09-30**: không giữ bản cũ — đánh giá về `PENDING` cả bài tới khi duyệt lại; `reviews` giữ một trạng thái, không thêm bảng |
 | O3 ✅ | P06, P08 | Bộ huy hiệu và công thức điểm đóng góp chính thức | **Chốt 2026-10-12**: điểm tính từ nội dung đang hiện (review +10, ảnh +2 tối đa 5 / review, vote hợp lệ +1, check-in +1, đề xuất được duyệt +15); 8 huy hiệu (REVIEWER_1..5, EXPLORER, PHOTOGRAPHER, HELPFUL) seed ở `V4__seed_badges.sql`; P08 lọc theo thành phố — xem requirements §5 |
-| O4 | P07 | Gửi email kèm thông báo? Gom thông báo cùng loại? Cần trang "Tất cả thông báo"? | FR-27 chỉ yêu cầu trong ứng dụng; trang riêng → thêm route `/notifications` |
+| O4 ✅ | P07 | Gửi email kèm thông báo? Gom thông báo cùng loại? Cần trang "Tất cả thông báo"? | **Chốt 2026-10-19**: chỉ trong ứng dụng (FR-27), không email; không có trang `/notifications` — bảng thả xuống tải tiếp bằng "Xem cũ hơn". Gom cùng loại: không cần — backend chỉ gửi sự kiện tần suất thấp (không gửi hữu ích / bình luận / theo dõi, chốt 2026-10-16), mỗi sự kiện một dòng; nếu danh sách của chủ quán quá dày khi demo thì gom "đánh giá mới" theo địa điểm ở frontend, không đổi backend / schema |
 | O5 ✅ | P09 | Chủ cập nhật thông tin (UC24) có phải duyệt lại? | **Chốt 2026-10-05**: không — áp dụng ngay (`PATCH /owner/places/{id}`, như E1). Chủ đã qua xác minh sở hữu (UC30); tên, vị trí, danh mục vốn không sửa được; thông tin sai → người dùng báo cáo WRONG_INFO |
 | O6 ✅ | P10 | Gán trực tiếp vai trò "Chủ địa điểm"? Khoá có lý do / thời hạn? | **Chốt 2026-10-03**: không gán / gỡ OWNER tại P10 (chỉ qua duyệt yêu cầu sở hữu UC30); mọi tài khoản giữ USER; admin không tự khóa / tự gỡ ADMIN. Khoá bắt buộc thời hạn + lý do (openapi `POST /admin/users/{id}/lock`) |
 | O7 ✅ | P11 | Tiện ích gắn theo danh mục hay dùng chung | **Chốt 2026-10-06**: dùng chung — giữ schema (`amenities` không có `category_id`), form / bộ lọc hiện đủ danh sách |

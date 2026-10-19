@@ -12,6 +12,7 @@ import { createQueryClient } from './plugins/query'
 import { Toast, toastOptions } from './plugins/toast'
 import router from './router'
 import { useAuthStore } from './stores/auth'
+import { useNotificationStore } from './stores/notification'
 
 initTheme()
 
@@ -44,5 +45,8 @@ connectAuth({
     }
   },
 })
+
+// Thông báo realtime theo phiên: đăng nhập → mở kết nối STOMP, đăng xuất / hết phiên → đóng và xoá (FR-27)
+useNotificationStore(pinia).init()
 
 app.mount('#app')

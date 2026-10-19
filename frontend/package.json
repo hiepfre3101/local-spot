@@ -17,6 +17,7 @@
     "format:check": "prettier --check src/"
   },
   "dependencies": {
+    "@stomp/stompjs": "^7.5.0",
     "@tanstack/vue-query": "^5.104.1",
     "@vee-validate/zod": "^4.15.1",
     "axios": "^1.20.0",

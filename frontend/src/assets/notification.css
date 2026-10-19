@@ -1,0 +1,127 @@
+/*
+ * P07 Thông báo. `.ls-pop__head`, `.ls-note*`, `.ls-noteicon`, số trên chuông (`.ls-iconbtn .dot`) port từ
+ * docs/design-system/components/bundle.css. Thêm so với bản gốc: dòng lý do (`.ls-note__detail`), trạng thái tải / trống
+ * / lỗi, chiều rộng co theo màn hình điện thoại, danh sách cuộn trong bảng, biến thể quản trị (`.ls-pop--admin`: bảng
+ * vuông, chip bo 2px — trang quản trị không dùng pill).
+ */
+@layer components {
+  .ls-iconbtn .dot {
+    position: absolute;
+    top: 4px;
+    right: 2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: var(--radius-pill);
+    background: var(--coral);
+    color: var(--on-accent);
+    font: 700 11px/18px var(--font-sans);
+    text-align: center;
+  }
+
+  .ls-notes {
+    width: 400px;
+    max-width: calc(100vw - 2 * var(--space-4));
+  }
+  .ls-pop__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-4) var(--space-4) var(--space-3);
+    border-bottom: 1px solid var(--line);
+  }
+  .ls-pop__head b {
+    font: 700 16px/22px var(--font-sans);
+  }
+  .ls-pop__head .ls-link {
+    font-size: 13px;
+  }
+  .ls-notes__filter {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--line);
+  }
+  .ls-notes__filter .ls-fchip {
+    height: 30px;
+  }
+  .ls-notes__list {
+    max-height: min(560px, calc(100vh - 220px));
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+  .ls-note {
+    display: grid;
+    grid-template-columns: 36px 1fr 10px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--line);
+    font: 400 14px/20px var(--font-sans);
+  }
+  .ls-note time {
+    display: block;
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .ls-note--new {
+    background: var(--surface);
+  }
+  .ls-note .unread {
+    width: 8px;
+    height: 8px;
+    margin-top: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--sea);
+  }
+  .ls-note__body {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+  }
+  a.ls-note__body:hover,
+  button.ls-note__body:hover {
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .ls-note__detail {
+    display: block;
+    color: var(--ink-muted);
+  }
+  .ls-noteicon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-sunk);
+  }
+  .ls-noteicon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.8;
+  }
+  .ls-notes__state {
+    margin: 0;
+    padding: var(--space-3) var(--space-4);
+    text-align: center;
+    font: 400 14px/20px var(--font-sans);
+    color: var(--ink-muted);
+  }
+
+  .ls-pop--admin {
+    border-radius: 0;
+  }
+  .ls-pop--admin .ls-fchip {
+    border-radius: var(--radius-xs);
+  }
+}

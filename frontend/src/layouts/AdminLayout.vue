@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
 import { ROLE_LABELS, primaryRole } from '@/auth/permissions'
 import ThemeToggle from '@/components/layout/ThemeToggle.vue'
+import NotificationBell from '@/components/notification/NotificationBell.vue'
 import { useAuthStore } from '@/stores/auth'
 
 import { visibleAdminNav, type AdminNavItem } from './adminNav'
@@ -78,7 +79,10 @@ async function logout(): Promise<void> {
               Đăng xuất
             </button>
           </span>
-          <ThemeToggle />
+          <span class="flex items-center">
+            <NotificationBell variant="admin" />
+            <ThemeToggle />
+          </span>
         </div>
       </div>
     </aside>

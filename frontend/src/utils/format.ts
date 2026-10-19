@@ -46,3 +46,20 @@ export function formatPriceRange(min: number | null, max: number | null): string
   }
   return min !== null ? `từ ${formatNumber(min)} ₫` : `đến ${formatNumber(max!)} ₫`
 }
+
+/**
+ * Thời gian tương đối như bản mẫu P07: "Vừa xong", "5 phút trước", "3 giờ trước", "Hôm qua", "2 ngày trước"; quá 7 ngày
+ * thì ghi ngày (14/03/2025) — "23 ngày trước" khó hình dung hơn một ngày cụ thể.
+ */
+export function relativeTime(iso: string, now: number = Date.now()): string {
+  const then = dayjs(iso)
+  const minutes = Math.floor((now - then.valueOf()) / 60_000)
+  if (minutes < 1) return 'Vừa xong'
+  if (minutes < 60) return `${minutes} phút trước`
+  const today = dayjs(now).startOf('day')
+  if (minutes < 24 * 60 && !then.isBefore(today)) return `${Math.floor(minutes / 60)} giờ trước`
+  const days = today.diff(then.startOf('day'), 'day')
+  if (days <= 1) return 'Hôm qua'
+  if (days < 7) return `${days} ngày trước`
+  return formatDate(iso)
+}
