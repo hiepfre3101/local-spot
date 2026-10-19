@@ -6,6 +6,7 @@ import com.localspot.dto.request.AmenityRequest;
 import com.localspot.dto.request.CategoryRequest;
 import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryNode;
+import com.localspot.dto.response.CityResponse;
 import com.localspot.entity.Amenity;
 import com.localspot.entity.Category;
 import com.localspot.event.CatalogChangedEvent;
@@ -79,6 +80,18 @@ public class CatalogService {
     public List<AmenityResponse> amenities() {
         return amenities.findAllByOrderByIdAsc().stream()
                 .map(CatalogService::toResponse)
+                .toList();
+    }
+
+    /**
+     * Thành phố có địa điểm đang hiện, nhiều địa điểm trước (bộ lọc khu vực P08). Cache {@code CITIES_TTL}: không xóa
+     * khi duyệt địa điểm — một thành phố mới xuất hiện trễ vài phút là chấp nhận được, như bảng xếp hạng.
+     */
+    @Cacheable(CacheConfig.CITIES)
+    @Transactional(readOnly = true)
+    public List<CityResponse> cities() {
+        return places.countApprovedByCity().stream()
+                .map(row -> new CityResponse((String) row[0], ((Number) row[1]).longValue()))
                 .toList();
     }
 

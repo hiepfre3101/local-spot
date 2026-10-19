@@ -11,13 +11,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import com.localspot.TestcontainersConfiguration;
+import com.localspot.config.CacheConfig;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -50,6 +54,9 @@ class CatalogFlowTests {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private CacheManager cacheManager;
+
     // ─── Đọc công khai ───────────────────────────────────────────────────────
 
     @Test
@@ -71,6 +78,34 @@ class CatalogFlowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].slug").value("wifi"))
                 .andExpect(jsonPath("$[0].name").value("Wi-Fi miễn phí"));
+    }
+
+    @Test
+    void guestsReadCitiesThatHaveVisiblePlacesMostPlacesFirst() throws Exception {
+        String suffix = UUID.randomUUID().toString().substring(0, 8);
+        String busy = "Thành phố đông " + suffix;
+        String quiet = "Thành phố vắng " + suffix;
+        String pendingOnly = "Chỉ chờ duyệt " + suffix;
+        String deletedOnly = "Đã xoá " + suffix;
+        insertPlace(busy, "APPROVED", false);
+        insertPlace(busy, "APPROVED", false);
+        insertPlace(busy, "PENDING", false);
+        insertPlace(quiet, "APPROVED", false);
+        insertPlace(pendingOnly, "PENDING", false);
+        insertPlace(deletedOnly, "APPROVED", true);
+        // Cache 10 phút: test khác có thể đã đọc trước — xoá để thấy dữ liệu vừa chèn
+        cacheManager.getCache(CacheConfig.CITIES).clear();
+
+        String json = mvc.perform(get("/api/v1/cities"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString(StandardCharsets.UTF_8);
+        List<String> names = JsonPath.read(json, "$[*].name");
+        assertThat(names).contains(busy, quiet).doesNotContain(pendingOnly, deletedOnly);
+        assertThat(names.indexOf(busy)).isLessThan(names.indexOf(quiet));
+        assertThat(JsonPath.<List<Integer>>read(json, "$[?(@.name == '" + busy + "')].placeCount"))
+                .containsExactly(2);
     }
 
     // ─── Danh mục (quản trị) ────────────────────────────────────────────────
@@ -355,5 +390,22 @@ class CatalogFlowTests {
                 Long.class,
                 action,
                 targetId);
+    }
+
+    private void insertPlace(String city, String status, boolean deleted) {
+        Long proposer = jdbc.queryForObject("SELECT MIN(id) FROM users", Long.class);
+        jdbc.update(
+                """
+                INSERT INTO places (category_id, created_by, name, slug, address, city, location, status, deleted_at,
+                                    created_at, updated_at)
+                VALUES (?, ?, 'Quán thử thành phố', ?, '1 Phố Thử', ?, ST_PointFromText('POINT(21.03 105.85)', 4326), ?,
+                        ?, UTC_TIMESTAMP(6), UTC_TIMESTAMP(6))
+                """,
+                categoryId("pho-bun"),
+                proposer,
+                "city-" + UUID.randomUUID(),
+                city,
+                status,
+                deleted ? Timestamp.from(Instant.now()) : null);
     }
 }

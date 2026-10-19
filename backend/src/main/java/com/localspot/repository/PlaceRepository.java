@@ -163,4 +163,13 @@ public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearch
     @Modifying
     @Query(value = "UPDATE places SET checkin_count = checkin_count + 1 WHERE id = :id", nativeQuery = true)
     void incrementCheckinCount(@Param("id") Long id);
+
+    /** Mỗi dòng {@code [city, count]}: thành phố có địa điểm APPROVED (chưa xóa mềm — {@code @SQLRestriction}). */
+    @Query("""
+            SELECT p.city, COUNT(p) FROM Place p
+            WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED
+            GROUP BY p.city
+            ORDER BY COUNT(p) DESC, p.city ASC
+            """)
+    List<Object[]> countApprovedByCity();
 }

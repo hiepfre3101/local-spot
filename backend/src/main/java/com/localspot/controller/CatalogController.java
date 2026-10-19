@@ -2,6 +2,7 @@ package com.localspot.controller;
 
 import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryNode;
+import com.localspot.dto.response.CityResponse;
 import com.localspot.dto.response.HomeResponse;
 import com.localspot.service.CatalogService;
 import com.localspot.service.HomeService;
@@ -37,5 +38,11 @@ public class CatalogController {
     @GetMapping("/amenities")
     public List<AmenityResponse> amenities() {
         return catalog.amenities();
+    }
+
+    /** Thành phố có địa điểm — bộ lọc khu vực của bảng xếp hạng (P08, thêm 2026-10-19). */
+    @GetMapping("/cities")
+    public List<CityResponse> cities() {
+        return catalog.cities();
     }
 }
