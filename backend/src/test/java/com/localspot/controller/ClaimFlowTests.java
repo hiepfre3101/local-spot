@@ -339,6 +339,37 @@ class ClaimFlowTests {
     }
 
     @Test
+    void claimantFollowsOwnClaimsNewestFirstWithRejectReason() throws Exception {
+        Account moderator = account(true, "MODERATOR");
+        Account claimant = account(true);
+        Account other = account(true);
+        long rejectedPlace = place("APPROVED");
+        long pendingPlace = place("APPROVED");
+        long rejected = submit(claimant, rejectedPlace);
+        perform(moderator, decision(rejected, "REJECT", "Ảnh mờ", null)).andExpect(status().isNoContent());
+        long pending = submit(claimant, pendingPlace);
+        submit(other, pendingPlace); // yêu cầu của người khác không lẫn vào
+
+        perform(claimant, get("/api/v1/me/claims").param("limit", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(pending))
+                .andExpect(jsonPath("$.items[0].status").value("PENDING"))
+                .andExpect(jsonPath("$.items[0].place.id").value(pendingPlace))
+                .andExpect(jsonPath("$.items[0].place.slug").value(slugOf(pendingPlace)))
+                .andExpect(jsonPath("$.items[0].reviewedAt").isEmpty())
+                .andExpect(jsonPath("$.items[0].contactPhone").doesNotExist())
+                .andExpect(jsonPath("$.nextCursor").isString());
+        perform(claimant, get("/api/v1/me/claims"))
+                .andExpect(jsonPath("$.items.length()").value(2))
+                .andExpect(jsonPath("$.items[1].id").value(rejected))
+                .andExpect(jsonPath("$.items[1].status").value("REJECTED"))
+                .andExpect(jsonPath("$.items[1].rejectReason").value("Ảnh mờ"))
+                .andExpect(jsonPath("$.items[1].reviewedAt").isString());
+        mvc.perform(get("/api/v1/me/claims")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void moderatorCannotApproveOwnClaimOrStaleVersion() throws Exception {
         Account moderator = account(true, "MODERATOR");
         long own = submit(moderator, place("APPROVED"));

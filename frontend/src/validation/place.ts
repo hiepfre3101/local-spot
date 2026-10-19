@@ -8,8 +8,8 @@ import type { OpeningHour } from '@/types/api'
  */
 export const TAGS_MAX = 10
 export const TAG_MAX_LENGTH = 50
-const PHONE = /^[0-9+()\s.-]{6,20}$/
-const WEBSITE = /^https?:\/\/\S+$/
+export const PHONE = /^[0-9+()\s.-]{6,20}$/
+export const WEBSITE = /^https?:\/\/\S+$/
 
 /** "1 = Thứ Hai … 7 = Chủ nhật" (openapi `OpeningHour`). */
 export const WEEKDAYS: readonly { day: number; label: string }[] = [
@@ -38,6 +38,21 @@ export function toOpeningHours(week: readonly DayHours[]): OpeningHour[] {
   return week.flatMap((d, i) =>
     d.open ? [{ dayOfWeek: i + 1, openTime: d.openTime, closeTime: d.closeTime }] : [],
   )
+}
+
+/**
+ * `openingHours` của API → form (màn sửa của chủ — P09). Form một khung / ngày: ngày có nhiều khung lấy khung mở sớm
+ * nhất (dữ liệu nhập qua LocalSpot luôn một khung / ngày); ngày vắng = đóng cửa. `HH:mm:ss` → `HH:mm` cho ô giờ.
+ */
+export function fromOpeningHours(hours: readonly OpeningHour[]): DayHours[] {
+  return WEEKDAYS.map(({ day }) => {
+    const first = hours
+      .filter((h) => h.dayOfWeek === day)
+      .sort((a, b) => a.openTime.localeCompare(b.openTime))[0]
+    return first
+      ? { open: true, openTime: first.openTime.slice(0, 5), closeTime: first.closeTime.slice(0, 5) }
+      : { open: false, openTime: '07:00', closeTime: '22:00' }
+  })
 }
 
 /**

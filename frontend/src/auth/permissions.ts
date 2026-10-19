@@ -17,6 +17,10 @@ export const Permission = {
   DASHBOARD_VIEW: 'dashboard:view',
   /** Ảnh trang chủ (UC34 — thêm 2026-10-17). */
   BANNER_MANAGE: 'banner:manage',
+  /** Chủ địa điểm (P09) — role OWNER, có hiệu lực ngay khi yêu cầu sở hữu được duyệt. */
+  PLACE_UPDATE_OWN: 'place:update-own',
+  PLACE_STATS_OWN: 'place:stats-own',
+  REVIEW_REPLY_OWN_PLACE: 'review:reply-own-place',
 } as const
 
 export type PermissionName = (typeof Permission)[keyof typeof Permission]

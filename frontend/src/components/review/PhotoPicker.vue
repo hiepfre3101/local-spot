@@ -10,9 +10,13 @@ import { REVIEW_PHOTOS_MAX } from '@/validation/review'
 /**
  * Ảnh đính kèm review (FR-19): chọn nhiều ảnh, xem trước, cắt (tùy chọn), bỏ. Ảnh chọn được chuẩn bị ngay ở trình duyệt
  * (`prepareImage` — JPEG / PNG ≤ 5 MB) nên lỗi định dạng báo trước khi gửi. Màn sửa có thêm ảnh đã tải (`existing`):
- * bỏ ảnh đó chỉ đánh dấu, trang gọi API xóa khi lưu. Tổng ảnh cũ + mới ≤ 10, như backend.
+ * bỏ ảnh đó chỉ đánh dấu, trang gọi API xóa khi lưu. Tổng ảnh cũ + mới ≤ `max` (mặc định 10 như review), như backend.
+ * Dùng lại cho ảnh địa điểm của chủ (≤ 30) và ảnh minh chứng sở hữu (1–5) — đổi `max` / `label`.
  */
-const props = defineProps<{ existing?: Photo[]; disabled?: boolean }>()
+const props = withDefaults(
+  defineProps<{ existing?: Photo[]; disabled?: boolean; max?: number; label?: string }>(),
+  { existing: undefined, max: REVIEW_PHOTOS_MAX, label: undefined },
+)
 const drafts = defineModel<DraftPhoto[]>({ required: true })
 const emit = defineEmits<{ removeExisting: [photoId: number] }>()
 
@@ -22,7 +26,7 @@ const error = ref<string | null>(null)
 const preparing = ref(false)
 
 const existingCount = computed(() => props.existing?.length ?? 0)
-const remaining = computed(() => REVIEW_PHOTOS_MAX - existingCount.value - drafts.value.length)
+const remaining = computed(() => props.max - existingCount.value - drafts.value.length)
 
 async function onFiles(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement
@@ -30,7 +34,7 @@ async function onFiles(event: Event): Promise<void> {
   target.value = '' // chọn lại cùng tệp vẫn phát sự kiện
   error.value = null
   if (files.length > remaining.value) {
-    error.value = `Tối đa ${REVIEW_PHOTOS_MAX} ảnh — chỉ thêm được ${Math.max(remaining.value, 0)} ảnh nữa.`
+    error.value = `Tối đa ${props.max} ảnh — chỉ thêm được ${Math.max(remaining.value, 0)} ảnh nữa.`
   }
   preparing.value = true
   const added: DraftPhoto[] = []
@@ -67,9 +71,9 @@ function remove(draft: DraftPhoto): void {
 
 <template>
   <div class="ls-field">
-    <span :id="`${id}-label`" class="ls-field__label"
-      >Ảnh (tuỳ chọn, tối đa {{ REVIEW_PHOTOS_MAX }})</span
-    >
+    <span :id="`${id}-label`" class="ls-field__label">{{
+      label ?? `Ảnh (tuỳ chọn, tối đa ${max})`
+    }}</span>
     <ul class="ls-photos" :aria-labelledby="`${id}-label`">
       <li v-for="photo in existing" :key="`photo-${photo.id}`">
         <img

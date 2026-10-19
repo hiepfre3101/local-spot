@@ -42,8 +42,11 @@ import { scoreText } from '@/utils/rating'
  * Lưu (UC18, 2026-10-18): "+ Lưu" mở hộp chọn bộ sưu tập; đã có trong ít nhất một bộ → "✓ Đã lưu" (`aria-pressed`).
  * Chỉ hiện với địa điểm đang hiện (backend chỉ nhận APPROVED); khách bấm → đăng nhập.
  *
- * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12), yêu cầu sở hữu (UC23). Khối "Ảnh check-in" bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong
- * từng đánh giá.
+ * Yêu cầu sở hữu (UC23, 2026-10-18): khi `claimable` (đã duyệt, chưa có chủ, người xem chưa có yêu cầu đang chờ) — liên
+ * kết "Yêu cầu xác nhận sở hữu" mở form ở `/owner` với địa điểm chọn sẵn.
+ *
+ * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12). Khối "Ảnh check-in"
+ * bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong từng đánh giá.
  */
 const props = defineProps<{ slug: string }>()
 
@@ -310,6 +313,12 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
         <ul v-if="place.tags.length" class="ls-tags text-caption!" aria-label="Thẻ">
           <li v-for="tag in place.tags" :key="tag">{{ tagLabel(tag) }}</li>
         </ul>
+        <p v-if="place.claimable" class="mt-3 mb-0 text-caption text-ink-muted">
+          Bạn là chủ địa điểm này?
+          <RouterLink class="ls-link" :to="{ name: 'owner', query: { place: place.slug } }"
+            >Yêu cầu xác nhận sở hữu</RouterLink
+          >
+        </p>
       </div>
       <div class="flex flex-wrap gap-2">
         <LsButton

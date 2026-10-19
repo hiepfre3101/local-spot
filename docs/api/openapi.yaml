@@ -240,6 +240,16 @@ paths:
       parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInPage' } } } }
+  /me/claims:
+    get:
+      tags: [Me, Owner]
+      summary: Yêu cầu xác nhận sở hữu của tôi, mới nhất trước (UC23)
+      description: |
+        *(thêm 2026-10-18)* P09 `/owner`: người gửi theo dõi yêu cầu (đang chờ / được duyệt / bị từ chối kèm lý do) và
+        gửi lại khi bị từ chối. Không trả số điện thoại, minh chứng, người duyệt.
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MyClaimPage' } } } }
   /me/places:
     get:
       tags: [Me]
@@ -576,6 +586,7 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
         - { name: sort, in: query, schema: { type: string, enum: [NEWEST, HELPFUL], default: NEWEST } }
         - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Lọc theo số sao }
+        - { name: unreplied, in: query, schema: { type: boolean, default: false }, description: '*(thêm 2026-10-18)* Chỉ review chưa có phản hồi của chủ — cột "Cần phản hồi" của P09. Không giới hạn cho chủ: phản hồi vốn công khai' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -2022,6 +2033,21 @@ components:
       type: object
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/CheckInResponse' } }
+        nextCursor: { type: [string, 'null'] }
+    MyClaim:
+      type: object
+      description: '*(thêm 2026-10-18)* Yêu cầu sở hữu nhìn từ người gửi'
+      properties:
+        id: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceRef' }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        rejectReason: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+    MyClaimPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MyClaim' } }
         nextCursor: { type: [string, 'null'] }
     CollectionRequest:
       type: object
