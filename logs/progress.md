@@ -1261,3 +1261,47 @@ Chưa commit.
 **Tài liệu**: openapi (`unreplied`, `/me/claims`, `MyClaim`), plan §10 F (mục trang chủ quán; trả mục UC06 về [ ]).
 
 **Kiểm chứng**: backend thêm `OwnerReplyFlowTests.unrepliedFilterListsOnlyReviewsWithoutOwnerReply` (lọc đúng, phân trang, HELPFUL, mặc định không lọc, xoá phản hồi → vào lại) và `ClaimFlowTests.claimantFollowsOwnClaimsNewestFirstWithRejectReason` (mới nhất trước, phân trang, lý do từ chối, không lẫn người khác, không lộ điện thoại, khách 401); `ClaimFlowTests` + `OwnerReplyFlowTests` + `ReviewFlowTests` 31 test xanh; `./mvnw verify` đầy đủ **356 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **150 test** xanh (thêm `OwnerHomePage.spec` 6, `OwnerPlacePage.spec` 5, `stats.spec` 5, P03 +1 liên kết yêu cầu sở hữu, `routes.spec` +1). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
+## 2026-10-19 11:06 (+07) — Checklist F: thông báo phía frontend (UC19, FR-27) — phần nền
+
+**Bối cảnh**: kéo `develop` (gộp tới PR #32, đã có `feature/be-notifications`). Nhánh `feature/fe-notifications` từ `develop`. Backend thông báo xong từ 2026-10-16 (REST `/me/notifications*` + STOMP `/ws`, kênh `/user/queue/notifications`, token ở khung CONNECT). Việc còn lại: store `notification` (mục F "Pinia store") + chuông / bảng P07.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Làm thông báo trước** (trước trang quản trị / Cài đặt — Hồ sơ): backend sẵn, đóng luôn mục "Pinia store".
+- **Thêm thư viện `@stomp/stompjs` 7.5** (ngoài stack đã chốt — supervisor đồng ý). Bị loại: tự viết client STOMP (~100 dòng phải tự test heartbeat / nối lại / phân khung), chỉ polling (không dùng tới backend STOMP — mất điểm trình bày).
+- **O4 — chỉ bảng thả xuống, không có trang `/notifications`**: 10 dòng, "Xem cũ hơn" tải tiếp trong bảng. Đúng sitemap P07 (không route). Không gửi email (FR-27 chỉ yêu cầu trong ứng dụng). Gom cùng loại là câu hỏi riêng (không phụ thuộc bảng / trang) — supervisor đồng ý 2026-10-19: không cần, backend chỉ gửi sự kiện tần suất thấp nên mỗi sự kiện một dòng; danh sách chủ quán quá dày khi demo thì gom "đánh giá mới" theo địa điểm ở frontend.
+- **Chuông cả ở `AdminLayout`**: kiểm duyệt viên nhận `CLAIM_SUBMITTED` khi đang ở trang quản trị. Lệch sitemap §1 (chỉ ghi chuông ở `DefaultLayout`) → cập nhật sitemap cùng thay đổi giao diện.
+
+**Quyết định kỹ thuật:**
+- **Danh sách thông báo nằm trong Pinia, không trong cache Vue Query** (khác quy ước các store khác): dữ liệu bị máy chủ đẩy tới, số chưa đọc và danh sách phải đổi cùng nhau, phải xoá khi đổi phiên. Gắn theo `auth.user.id` (không theo token — làm mới token 15 phút không mở lại kết nối). `init()` gọi một lần trong `main.ts`.
+- **Bộ đếm thế hệ phiên**: kết quả request của phiên cũ về muộn bị bỏ — thông báo / số của người trước không hiện cho người sau trên cùng máy.
+- **Danh sách nạp lười** khi mở bảng lần đầu; số chưa đọc đọc ngay khi đăng nhập (chuông cần số, không cần danh sách).
+- **Nối lại → đọc lại số + trang đầu** (khung đẩy lúc mất kết nối không được gửi lại — openapi Realtime); lần kết nối đầu bỏ qua vì vừa đọc lúc đăng nhập. Khung trùng id bị bỏ (đẩy sau commit có thể trùng với lần đọc REST).
+- **Token đọc lại trước mỗi lần CONNECT** (`beforeConnect`), không đặt trên URL. Máy chủ trả ERROR (token hết hạn khi đang mất mạng) → lần sau làm mới phiên trước, dùng chung `auth.refresh()` (gộp lời gọi + khoá giữa tab, tránh dùng lại refresh token cũ — U2). Làm mới thất bại → dừng hẳn; đưa về đăng nhập vẫn do luồng 401 của axios.
+- **Nối lại lùi dần 2 s → 60 s** (`EXPONENTIAL`): máy chủ khởi động lại không bị mọi tab dội cùng lúc.
+- **Đánh dấu đã đọc lạc quan**: giao diện đổi ngay; lỗi → trả lại + đọc lại số. "Đọc tất cả" lỗi → khôi phục và ném lỗi cho giao diện báo.
+- Kiểu `AppNotification` (không đặt `Notification` — trùng API Notification của trình duyệt).
+
+**Chưa làm (ghi để nối tiếp):** chuông + bảng P07 (public + admin), đường dẫn theo loại thông báo, sitemap §1 + plan §2 (thêm `@stomp/stompjs`) + §10 F. **Chờ supervisor bổ sung `docs/design-system/`** (không có trong bản sao cục bộ — `.gitignore`; CLAUDE.md yêu cầu đọc trước khi làm giao diện).
+
+**Kiểm chứng**: `notificationSocket.spec` (5: URL cùng origin / wss, token ở CONNECT, ERROR → làm mới, hết phiên → dừng, đăng ký kênh + bỏ khung hỏng) và `notification.spec` (9: khách, đăng nhập, đăng xuất xoá dữ liệu, phiên cũ về muộn, khung đẩy + trùng, nối lại, đánh dấu đọc + lỗi, đọc tất cả + lỗi, tải thêm). `vitest` **164 test** xanh; `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.
+
+## 2026-10-19 11:29 (+07) — Checklist F: thông báo phía frontend (UC19, FR-27) — chuông + bảng P07
+
+**Bối cảnh**: supervisor bổ sung `docs/design-system/` → làm phần giao diện theo `components/P07Notifications` (bảng 400px `.ls-pop`, viền `line-strong` thay bóng; lọc Tất cả / Chưa đọc; dòng chưa đọc = nền `surface` + chấm `sea` + "· Mới"; số trên chuông pill `coral` tối đa "9+").
+
+**Quyết định kỹ thuật:**
+- **Lọc "Chưa đọc" ở máy chủ** (`unreadOnly`), không lọc trên dòng đã tải — cùng lý do bộ lọc "chưa phản hồi" P09 (phân trang keyset). Đánh dấu đọc trong chế độ lọc giữ dòng tại chỗ, không nhảy danh sách. Mỗi request danh sách có số thứ tự riêng: đổi bộ lọc khi trang cũ chưa về thì trang cũ bị bỏ, không đụng request đọc số chưa đọc.
+- **Câu theo loại** (`notificationView.ts`) dựng từ `data` ảnh chụp, ghép bằng text node (không `v-html` — tên địa điểm / đoạn trích do người dùng nhập). Bản mẫu có bình luận / hữu ích / theo dõi / huy hiệu — backend không gửi các loại đó (chốt 2026-10-16), chỉ hiện 11 loại có thật.
+- **Đích khi bấm**: duyệt địa điểm / review, chủ phản hồi → trang địa điểm; từ chối đề xuất → tab "Đề xuất" trên trang cá nhân; review mới cho chủ → `/owner/places/:id?tab=reviews`; yêu cầu sở hữu được duyệt → trang quản lý địa điểm, bị từ chối → `/owner`. **Không liên kết**: báo cáo (nội dung đã bị ẩn) và `CLAIM_SUBMITTED` (màn kiểm duyệt chưa có — gắn khi làm trang quản trị). Dòng không có đích mà chưa đọc là nút "Đánh dấu đã đọc".
+- Bấm dòng có đích: RouterLink tự chuyển trang, handler chỉ đánh dấu đọc + đóng bảng (tránh điều hướng hai lần).
+- **Bản quản trị**: chuông ở chân sidebar cạnh nút đổi theme; bảng `fixed` mở sang phải sidebar (sidebar không có thanh trên), bo 0 + chip 2px (`.ls-pop--admin` — trang quản trị không dùng pill).
+- Thời gian tương đối như bản mẫu ("5 phút trước", "Hôm qua"); quá 7 ngày ghi ngày cụ thể. Nhãn lý do báo cáo chuyển sang `reportTarget.ts` dùng chung với hộp thoại báo cáo.
+- Truy cập: chuông `aria-expanded` / `aria-controls`, nhãn "Thông báo, N mới" (số thật, không "9+"); Escape đóng + trả focus về chuông; danh sách `aria-live="polite"` để khung đẩy tới được đọc.
+- CSS port vào `assets/notification.css` (không hard-code màu / cỡ chữ trong template).
+
+**Tài liệu**: plan §2 (thêm `@stomp/stompjs`), §10 F (store notification [x], mục thông báo chờ chạy thử); sitemap §1 (chuông ở `AdminLayout`), P07, O4 ✅.
+
+**Chưa làm (ghi để nối tiếp):** supervisor chạy thử với backend thật — lần này không chạy được backend local (MySQL từ chối user `localspot` — lệch thông tin trong `.env` máy dev; không đọc / sửa `.env`). Liên kết `CLAIM_SUBMITTED` khi có màn kiểm duyệt.
+
+**Kiểm chứng**: thêm `notificationView.spec` (5), `NotificationBell.spec` (5: "9+" + nhãn số thật, chưa mở chưa tải; "· Mới", bấm → đọc + chuyển trang + đóng; Escape trả focus; lọc Chưa đọc + Xem cũ hơn; đọc tất cả lỗi → báo lỗi), `relativeTime.spec` (7), store +1 (lọc + trang cũ về muộn). `vitest` **182 test** xanh; `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
