@@ -297,6 +297,45 @@ class PlaceFlowTests {
     }
 
     @Test
+    void moderationDetailShowsProposalProposerAndDuplicatesWhilePending() throws Exception {
+        Account member = account("USER");
+        Account other = account("USER");
+        Account moderator = account("USER", "MODERATOR");
+        String city = city();
+        long placeId = placeIdOf(proposeSlug(member, "Bún chả Hương Liên", city));
+        long twinId = placeIdOf(proposeSlug(other, "Bún chả Hương Liên", city));
+
+        MvcResult pending = perform(moderator, get(MODERATION + "/" + placeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.place.id").value(placeId))
+                .andExpect(jsonPath("$.place.status").value("PENDING"))
+                .andExpect(jsonPath("$.place.address").value("1 Phố Huế"))
+                .andExpect(jsonPath("$.place.version").value(0))
+                .andExpect(jsonPath("$.proposer.id").value(member.id()))
+                .andExpect(jsonPath("$.submittedAt").isString())
+                .andReturn();
+        // Đề xuất chờ của người khác — người đề xuất không thấy nhau, kiểm duyệt viên bắt trùng ở đây
+        List<Number> duplicateIds = read(pending, "$.possibleDuplicates[*].id");
+        assertThat(duplicateIds).extracting(Number::longValue).contains(twinId).doesNotContain(placeId);
+
+        // Đã xử lý vẫn mở được để xem kết quả; không còn nghi trùng, không tính lượt xem
+        perform(moderator, decision(placeId, "{\"decision\": \"APPROVE\", \"version\": 0}"))
+                .andExpect(status().isNoContent());
+        perform(moderator, get(MODERATION + "/" + placeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.place.status").value("APPROVED"))
+                .andExpect(jsonPath("$.possibleDuplicates.length()").value(0));
+        assertThat(viewsToday(placeId)).isZero();
+
+        perform(member, get(MODERATION + "/" + placeId))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        perform(moderator, get(MODERATION + "/999999999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PLACE_NOT_FOUND"));
+    }
+
+    @Test
     void pendingQueueIsFifoAndHistoryIsNewestFirst() throws Exception {
         Account member = account("USER");
         Account moderator = account("USER", "MODERATOR");

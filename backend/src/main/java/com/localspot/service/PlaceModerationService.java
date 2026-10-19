@@ -2,6 +2,7 @@ package com.localspot.service;
 
 import com.localspot.audit.AuditedAction;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.ModerationPlaceDetailResponse;
 import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.dto.response.PlaceSummaryResponse;
 import com.localspot.entity.Place;
@@ -10,6 +11,7 @@ import com.localspot.event.ContributionChangedEvent;
 import com.localspot.event.PlaceIndexChangedEvent;
 import com.localspot.exception.ApiException;
 import com.localspot.exception.ErrorCode;
+import com.localspot.mapper.PlaceMapper;
 import com.localspot.repository.PlaceRepository;
 import com.localspot.repository.UserRepository;
 import java.time.Clock;
@@ -44,6 +46,8 @@ public class PlaceModerationService {
     private final UserRepository users;
     private final PlaceSummaries summaries;
     private final NearbyPlaceService nearby;
+    private final PlaceService placeService;
+    private final PlaceMapper mapper;
     private final ApplicationEventPublisher events;
     private final NotificationService notifications;
     private final Clock clock;
@@ -53,6 +57,8 @@ public class PlaceModerationService {
             UserRepository users,
             PlaceSummaries summaries,
             NearbyPlaceService nearby,
+            PlaceService placeService,
+            PlaceMapper mapper,
             ApplicationEventPublisher events,
             NotificationService notifications,
             Clock clock) {
@@ -60,6 +66,8 @@ public class PlaceModerationService {
         this.users = users;
         this.summaries = summaries;
         this.nearby = nearby;
+        this.placeService = placeService;
+        this.mapper = mapper;
         this.events = events;
         this.notifications = notifications;
         this.clock = clock;
@@ -93,6 +101,21 @@ public class PlaceModerationService {
                     cards.get(i), withDuplicates ? nearby.possibleDuplicatesOf(page.get(i)) : List.of()));
         }
         return items;
+    }
+
+    /**
+     * Màn duyệt một địa điểm (UC27 bước 2 — thêm 2026-10-19, sitemap có route {@code /admin/moderation/places/:id}).
+     * Mọi trạng thái: mục vừa được người khác xử lý vẫn mở được để hiện kết quả, như màn duyệt review / yêu cầu sở hữu.
+     * Nghi trùng chỉ tính khi còn PENDING (đã xử lý thì không còn gì để quyết).
+     */
+    @Transactional(readOnly = true)
+    public ModerationPlaceDetailResponse detail(Long placeId, Long moderatorId) {
+        Place place = places.findDetailById(placeId).orElseThrow(PlaceService::placeNotFound);
+        return new ModerationPlaceDetailResponse(
+                placeService.detailForModerator(place, moderatorId),
+                mapper.toUserSummary(place.getCreatedBy()),
+                place.getCreatedAt(),
+                place.getStatus() == PlaceStatus.PENDING ? nearby.possibleDuplicatesOf(place) : List.of());
     }
 
     @Transactional
