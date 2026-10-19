@@ -139,6 +139,7 @@ const placeDetail = (overrides: Partial<PlaceDetail> = {}): ModerationPlaceDetai
     owner: null,
     claimable: false,
     myReviewId: null,
+    checkedInToday: false,
     rejectReason: null,
     version: 3,
     ...overrides,

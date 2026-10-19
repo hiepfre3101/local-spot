@@ -59,6 +59,7 @@ const PLACE: PlaceDetail = {
   owner: null,
   claimable: true,
   myReviewId: null,
+  checkedInToday: false,
   rejectReason: null,
   version: 0,
 }
