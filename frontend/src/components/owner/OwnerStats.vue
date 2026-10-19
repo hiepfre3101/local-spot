@@ -8,7 +8,7 @@ import { formatNumber } from '@/utils/format'
 import { scoreText } from '@/utils/rating'
 import { deltaText, shiftDate, splitPeriods, sum, vietnamToday } from '@/utils/stats'
 
-import BarChart from './BarChart.vue'
+import BarChart from '@/components/ui/BarChart.vue'
 import OwnerReviewList from './OwnerReviewList.vue'
 
 /**
@@ -98,7 +98,7 @@ const trendClass = { up: 'ls-up', down: 'ls-down', flat: '' } as const
         </div>
       </div>
 
-      <div class="grid gap-10 lg:grid-cols-[2fr_1fr] lg:gap-0 owner-split">
+      <div class="grid gap-10 lg:grid-cols-[2fr_1fr] lg:gap-0 stats-split">
         <div class="min-w-0">
           <h2 class="ls-h2 text-title!">Lượt xem trang mỗi ngày</h2>
           <BarChart

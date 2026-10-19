@@ -6,7 +6,8 @@ import { formatNumber } from '@/utils/format'
 
 /**
  * Biểu đồ cột một chuỗi theo ngày (P09 / AdminDashboard: cột `sea`, rê chuột đổi `olive`, lưới `line`) — SVG tự vẽ,
- * không thêm thư viện biểu đồ ngoài stack. Trình đọc màn hình đọc bảng số liệu ẩn thay cho hình.
+ * không thêm thư viện biểu đồ ngoài stack. Rê chuột / chạm một cột hiện ngày + số (`<title>`); trình đọc màn hình đọc bảng
+ * số liệu ẩn thay cho hình. Một chuỗi → không cần chú giải (tiêu đề khối gọi tên chuỗi).
  */
 const props = defineProps<{ series: DailyCount[]; label: string; unit: string }>()
 
@@ -30,6 +31,16 @@ const labelEvery = computed(() => Math.ceil(props.series.length / 8))
 
 function y(value: number): number {
   return HEIGHT - PAD_BOTTOM - (value / top.value) * (HEIGHT - PAD_BOTTOM - 8)
+}
+
+/** Cột bo 2px ở đầu dữ liệu, góc chân cột vuông (bám trục) — README AdminDashboard. */
+function barPath(x: number, value: number): string {
+  const base = HEIGHT - PAD_BOTTOM
+  const top = y(value)
+  const r = Math.min(2, (base - top) / 2, barWidth.value / 2)
+  const w = barWidth.value
+  if (base - top <= 0) return ''
+  return `M${x},${base}V${top + r}Q${x},${top} ${x + r},${top}H${x + w - r}Q${x + w},${top} ${x + w},${top + r}V${base}Z`
 }
 
 function shortDate(iso: string): string {
@@ -57,12 +68,7 @@ function niceCeil(value: number): number {
         <text :x="PAD_LEFT - 6" :y="y(t) + 4" text-anchor="end">{{ formatNumber(t) }}</text>
       </g>
       <g v-for="(day, i) in series" :key="day.date" class="bar">
-        <rect
-          :x="PAD_LEFT + i * slot + (slot - barWidth) / 2"
-          :y="y(day.count)"
-          :width="barWidth"
-          :height="Math.max(0, HEIGHT - PAD_BOTTOM - y(day.count))"
-        />
+        <path :d="barPath(PAD_LEFT + i * slot + (slot - barWidth) / 2, day.count)" />
         <rect
           class="hit"
           :x="PAD_LEFT + i * slot"
@@ -120,10 +126,10 @@ function niceCeil(value: number): number {
 .chart text {
   fill: var(--ink-muted);
 }
-.bar rect:first-child {
+.bar path {
   fill: var(--sea);
 }
-.bar:hover rect:first-child {
+.bar:hover path {
   fill: var(--olive);
 }
 .hit {

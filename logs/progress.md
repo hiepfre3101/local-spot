@@ -1344,3 +1344,21 @@ Chưa commit.
 - Volume có sẵn: chạy một lần cùng file SQL (README ghi lệnh). Đã chạy trên máy này — dữ liệu giữ nguyên.
 
 **Kiểm chứng**: container thử (volume trống): init chạy script, "init process done", `root` qua TCP bị từ chối, `localspot_root` vào được, healthcheck "alive", user ứng dụng `localspot` vẫn vào DB. Volume thật: sau khi đổi còn `localspot@%`, `localspot_root@%`, `root@localhost`; 301 địa điểm còn nguyên; container tạo lại với healthcheck mới → `healthy`.
+
+## 2026-10-19 22:10 (+07) — Checklist F: dashboard quản trị (UC33)
+
+**Bối cảnh**: nhánh `feature/fe-admin-dashboard` từ `develop` (`92138a1`, đã gộp #30–#34). Backend `GET /admin/dashboard` có từ #25 (supervisor chốt 2026-10-17: so với kỳ trước, hot = review đang hiện mới viết, không CSV). Sidebar đã có mục "Tổng quan" trỏ `admin-dashboard` — chỉ thiếu route. Supervisor đặt thứ tự việc còn lại: dashboard → check-in (FE) → bảng xếp hạng → cài đặt hồ sơ → skeleton / responsive / a11y / SEO; hai mục check-in và bảng xếp hạng chưa có trong plan → thêm vào.
+
+**Quyết định kỹ thuật:**
+- **Theo README AdminDashboard**: KPI một dải chia đường kẻ; biểu đồ | danh sách tách đường kẻ dọc (chỉ từ màn rộng, điện thoại xếp chồng); hàng chờ FIFO đặt thẳng trong section. `/admin` vẫn chuyển hướng theo mục đầu tiên của sidebar → quản trị viên vào Tổng quan, kiểm duyệt viên vào Hàng chờ (đúng sitemap) mà không sửa logic chuyển hướng.
+- **4 KPI theo dữ liệu có thật**: đánh giá mới, hàng chờ (địa điểm + đánh giá + sở hữu, kèm tuổi việc cũ nhất), báo cáo nhận được (+ số chưa xử lý), thành viên mới — ▲▼ + chữ so với kỳ trước. **Báo cáo tăng tô `danger`** (tăng là xấu); màu chỉ nhấn thêm, ký hiệu + chữ vẫn nói đúng chiều. Bản mẫu chỉ có một biểu đồ; API trả thêm thành viên mới theo ngày và 10 địa điểm nổi bật nên thêm hàng thứ hai cùng bố cục (không bỏ phí dữ liệu đã tính).
+- **Biểu đồ**: dùng lại `BarChart` (chuyển từ `components/owner` sang `components/ui`), đầu cột bo 2px, chân cột vuông bám trục (README: "cột biểu đồ bo 2px"); một chuỗi → không chú giải, tiêu đề khối gọi tên; tooltip `<title>` khi rê; bảng số liệu ẩn cho trình đọc màn hình. Không thêm thư viện biểu đồ.
+- **Tách `QueueTable`** khỏi màn Hàng chờ để dashboard hiện 5 việc đầu cùng một bảng (không lặp markup / nhãn trạng thái); màn Hàng chờ dùng lại, test kiểm duyệt cũ vẫn xanh. Chỉ tải hàng chờ khi người dùng có quyền kiểm duyệt.
+- `owner.css` → `stats.css` (dải KPI dùng chung trang chủ quán + quản trị), `.owner-split` → `.stats-split`.
+- Khoảng 7 / 14 (mặc định, như backend) / 30 / 90 ngày, tính "hôm nay" theo giờ VN ở trình duyệt; không cache (`staleTime: 0`) — số luôn là hiện trạng như backend.
+
+**Ghi chú môi trường**: `@stomp/stompjs` (từ #33) chưa cài trên máy → `npm ci` theo lockfile (không thêm thư viện).
+
+**Tài liệu**: plan §10 F (mục trang quản trị: dashboard đã code; thêm mục Check-in FE, Bảng xếp hạng).
+
+**Kiểm chứng**: frontend `vitest` **205 test** xanh (thêm `AdminDashboardPage.spec` 6: khoảng mặc định 14 ngày + đổi khoảng; KPI ▲▼ + chữ, báo cáo tăng tô xấu, hàng chờ + tuổi cũ nhất; 2 biểu đồ + bảng ẩn + xếp hạng khu vực / địa điểm có liên kết; 5 việc đầu, hàng đầu "Xử lý tiếp"; không quyền kiểm duyệt → không tải hàng chờ; lỗi → thử lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được. Không đổi backend.
