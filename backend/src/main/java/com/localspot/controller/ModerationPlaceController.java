@@ -2,6 +2,7 @@ package com.localspot.controller;
 
 import com.localspot.dto.request.ModerationDecisionRequest;
 import com.localspot.dto.response.CursorPage;
+import com.localspot.dto.response.ModerationPlaceDetailResponse;
 import com.localspot.dto.response.ModerationPlaceResponse;
 import com.localspot.entity.PlaceStatus;
 import com.localspot.security.AuthenticatedUser;
@@ -37,6 +38,14 @@ public class ModerationPlaceController {
             @RequestParam(required = false) String cursor,
             @RequestParam(required = false) Integer limit) {
         return moderation.queue(status, cursor, limit);
+    }
+
+    /** Màn duyệt một địa điểm (UC27) — thêm 2026-10-19. */
+    @GetMapping("/{placeId}")
+    @PreAuthorize("hasAuthority('" + Permissions.PLACE_APPROVE + "')")
+    public ModerationPlaceDetailResponse detail(
+            @AuthenticationPrincipal AuthenticatedUser moderator, @PathVariable Long placeId) {
+        return moderation.detail(placeId, moderator.id());
     }
 
     @PostMapping("/{placeId}/decision")

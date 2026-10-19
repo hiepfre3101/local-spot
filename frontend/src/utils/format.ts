@@ -63,3 +63,8 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
   if (days < 7) return `${days} ngày trước`
   return formatDate(iso)
 }
+
+/** Ngày giờ gọn cho bảng quản trị: 27/09 08:10 (bản mẫu DataTable). */
+export function formatShortDateTime(iso: string): string {
+  return dayjs(iso).format('DD/MM HH:mm')
+}

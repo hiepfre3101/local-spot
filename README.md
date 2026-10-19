@@ -45,6 +45,9 @@ Profile prod (Docker `--profile app`) không nạp dữ liệu demo.
 
 > **Đổi Meilisearch v1.10 → v1.54 (2026-10-08)**: v1.54 không mở được dữ liệu của v1.10. Máy đã chạy compose trước ngày này làm một lần: `docker compose rm -sf meilisearch && docker volume rm local-spot_meilisearch_data && docker compose up -d` — không mất gì, index được dựng lại từ MySQL khi backend khởi động.
 
+> **Tài khoản quản trị MySQL là `localspot_root`, không phải `root` (2026-10-19)** — tránh trùng với MySQL cài sẵn trên máy. Mật khẩu vẫn là `MYSQL_ROOT_PASSWORD`; backend vẫn dùng `MYSQL_USER`. Volume mới tự đổi qua `docker/mysql/initdb/01-rename-root.sql`; máy đã có volume từ trước chạy một lần (giữ nguyên dữ liệu):
+> `docker exec -i localspot-mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD"' < docker/mysql/initdb/01-rename-root.sql && docker compose up -d mysql`
+
 ## Kiểm tra trước khi push
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) chạy đúng các lệnh sau; chạy local trước để khỏi đỏ CI.

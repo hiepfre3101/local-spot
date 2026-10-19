@@ -1115,6 +1115,20 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationPlacePage' } } } }
+  /moderation/places/{placeId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một địa điểm (UC27) — chi tiết đầy đủ, người đề xuất, nghi trùng
+      description: |
+        *(thêm 2026-10-19 — sitemap có route `/admin/moderation/places/:id`; hàng chờ chỉ có id, `/places/{slug}` cần
+        slug và không có nghi trùng)* Mọi trạng thái (mục vừa được người khác xử lý vẫn mở được để hiện kết quả), như
+        `/moderation/reviews/{id}`, `/moderation/claims/{id}`. Không tính lượt xem. `possibleDuplicates` chỉ khi còn
+        PENDING — cùng luật với hàng chờ.
+      x-permission: place:approve
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationPlaceDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
   /moderation/places/{placeId}/decision:
     post:
       tags: [Moderation]
@@ -1870,6 +1884,17 @@ components:
         possibleDuplicates:
           type: array
           description: Gần nhất trước, kèm `distanceM` tới `place`
+          items: { $ref: '#/components/schemas/PlaceSummary' }
+    ModerationPlaceDetail:
+      type: object
+      description: '*(thêm 2026-10-19)* Màn duyệt một địa điểm'
+      properties:
+        place: { $ref: '#/components/schemas/PlaceDetail' }
+        proposer: { $ref: '#/components/schemas/UserSummary' }
+        submittedAt: { type: string, format: date-time }
+        possibleDuplicates:
+          type: array
+          description: Gần nhất trước, kèm `distanceM`; rỗng khi đã xử lý
           items: { $ref: '#/components/schemas/PlaceSummary' }
     ModerationPlacePage:
       type: object

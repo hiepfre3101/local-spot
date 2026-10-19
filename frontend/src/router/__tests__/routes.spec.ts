@@ -45,4 +45,16 @@ describe('bảng route', () => {
     expect(shared.name).toBe('shared-collection')
     expect(shared.params.shareSlug).toBe('quan-an-ha-noi-x7k2qa')
   })
+
+  it('kiểm duyệt: hàng chờ + 4 màn xử lý theo sitemap §2.3, tham số sai → không tìm thấy', () => {
+    expect(resolve('/admin/queue?type=REVIEW').name).toBe('admin-queue')
+    expect(resolve('/admin/moderation/places/12').name).toBe('admin-moderation-place')
+    expect(resolve('/admin/moderation/reviews/9').name).toBe('admin-moderation-review')
+    expect(resolve('/admin/moderation/claims/3').name).toBe('admin-moderation-claim')
+    const report = resolve('/admin/moderation/reports/COMMENT/44')
+    expect(report.name).toBe('admin-moderation-report')
+    expect(report.params).toEqual({ targetType: 'COMMENT', targetId: '44' })
+    expect(resolve('/admin/moderation/reports/PHOTO/44').name).toBe('not-found')
+    expect(resolve('/admin/moderation/places/abc').name).toBe('not-found')
+  })
 })

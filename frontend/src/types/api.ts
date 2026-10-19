@@ -391,3 +391,109 @@ export interface AppNotification {
   readAt: string | null
   createdAt: string
 }
+
+// ── Kiểm duyệt (UC27–UC30) ──
+
+export type ModerationItemType = 'PLACE' | 'REVIEW' | 'REPORT' | 'CLAIM'
+
+/** openapi `ModerationQueueItem` — một dòng hàng chờ gộp FIFO. Với REPORT, `id` là id đối tượng bị báo cáo. */
+export interface ModerationQueueItem {
+  position: number
+  type: ModerationItemType
+  id: number
+  reportTargetType?: ReportTargetType | null
+  title: string | null
+  submittedBy: string | null
+  submittedAt: string
+  flags: ('IP_FLAGGED' | 'LOW_TRUST')[]
+  reportCount?: number | null
+}
+
+/** openapi `ModerationDecision` — `reason` bắt buộc khi REJECT; `version` lệch → 409. */
+export interface ModerationDecision {
+  decision: 'APPROVE' | 'REJECT'
+  reason?: string
+  version?: number
+}
+
+/** openapi `ModerationPlaceDetail` (thêm 2026-10-19). `possibleDuplicates` rỗng khi đã xử lý. */
+export interface ModerationPlaceDetail {
+  place: PlaceDetail
+  proposer: UserSummary
+  submittedAt: string
+  possibleDuplicates: PlaceSummary[]
+}
+
+/** openapi `ModerationReview`. */
+export interface ModerationReview {
+  review: Review
+  place: PlaceSummary
+  authorTrustScore: number
+  authorActiveViolations: number
+  ipFlagged: boolean
+  sameSubnetReviewCount24h: number
+}
+
+/** openapi `ModerationReviewDetail` — `authorReviewCounts` đủ 4 khóa trạng thái. */
+export interface ModerationReviewDetail {
+  item: ModerationReview
+  authorJoinedAt: string
+  authorReviewCounts: Record<ReviewStatus, number>
+  sameSubnetReviews: Review[]
+}
+
+/** openapi `ReportGroup`. `targetPreview` null khi đối tượng đã bị xoá (`targetStatus = DELETED`). */
+export interface ReportGroup {
+  targetType: ReportTargetType
+  targetId: number
+  targetPreview: string | null
+  reportCount: number
+  reasons: Partial<Record<ReportReason, number>>
+  firstReportedAt: string
+  targetStatus: string
+}
+
+export interface ReportItem {
+  id: number
+  reporter: UserSummary
+  reason: ReportReason
+  detail: string | null
+  createdAt: string
+}
+
+/** openapi `ReportGroupDetail` — `author` là người sẽ bị ghi vi phạm khi ẩn (luật O9). */
+export interface ReportGroupDetail {
+  group: ReportGroup
+  author: UserSummary | null
+  reports: ReportItem[]
+}
+
+/** openapi `ReportDecision` — `confirmedReason` bắt buộc khi ẩn địa điểm, phải là lý do có trong các báo cáo đang mở. */
+export interface ReportDecision {
+  targetType: ReportTargetType
+  targetId: number
+  decision: 'HIDE' | 'DISMISS'
+  confirmedReason?: ReportReason
+  note?: string
+}
+
+/** openapi `Claim` — màn duyệt yêu cầu sở hữu (UC30). */
+export interface ModerationClaim {
+  id: number
+  place: PlaceSummary
+  claimant: UserSummary
+  contactPhone: string
+  note: string | null
+  evidenceCount: number
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  rejectReason: string | null
+  otherPendingClaimCount: number
+  createdAt: string
+  version: number
+}
+
+/** openapi `EvidenceLink` — link presigned 5 phút tới file minh chứng riêng tư. */
+export interface EvidenceLink {
+  url: string
+  expiresAt: string
+}

@@ -261,6 +261,11 @@ public class PlaceService {
 
     // ─── Chi tiết ────────────────────────────────────────────────────────────
 
+    /** Chi tiết dựng sẵn cho màn duyệt (UC27) — không tính lượt xem; quyền kiểm ở nơi gọi. */
+    PlaceDetailResponse detailForModerator(Place place, Long moderatorId) {
+        return toDetail(place, new Viewer(moderatorId, true));
+    }
+
     private PlaceDetailResponse toDetail(Place place, Viewer viewer) {
         Long proposerId = place.getCreatedBy().getId();
         Long ownerId = place.getOwner() == null ? null : place.getOwner().getId();

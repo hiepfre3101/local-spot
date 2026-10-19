@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import { STAFF_PERMISSIONS, Permission } from '@/auth/permissions'
 import { visibleAdminNav } from '@/layouts/adminNav'
+import { MODERATION_PERMISSIONS } from '@/pages/admin/moderation/moderation'
 import { useAuthStore } from '@/stores/auth'
 
 import { installGuards } from './guards'
@@ -151,8 +152,45 @@ export const routes: RouteRecordRaw[] = [
         beforeEnter: () => {
           const auth = useAuthStore()
           const first = visibleAdminNav(router, auth.canAny)[0]
-          return first ? { name: first.routeName, query: first.query } : { name: 'forbidden' }
+          if (!first) {
+            return { name: 'forbidden' }
+          }
+          // Kiểm duyệt viên: hàng chờ gộp mọi loại (sitemap §2.3), không phải riêng loại đầu tiên
+          return first.routeName === 'admin-queue'
+            ? { name: 'admin-queue' }
+            : { name: first.routeName, query: first.query }
         },
+      },
+      {
+        // UC27–UC30 — hàng chờ gộp FIFO; lọc loại qua `?type=` (không tách route)
+        path: 'queue',
+        name: 'admin-queue',
+        component: () => import('@/pages/admin/moderation/ModerationQueuePage.vue'),
+        meta: { title: 'Hàng chờ kiểm duyệt', anyPermission: MODERATION_PERMISSIONS },
+      },
+      {
+        path: 'moderation/places/:id(\\d+)',
+        name: 'admin-moderation-place',
+        component: () => import('@/pages/admin/moderation/ModerationPlacePage.vue'),
+        meta: { title: 'Duyệt địa điểm', anyPermission: [Permission.PLACE_APPROVE] },
+      },
+      {
+        path: 'moderation/reviews/:id(\\d+)',
+        name: 'admin-moderation-review',
+        component: () => import('@/pages/admin/moderation/ModerationReviewPage.vue'),
+        meta: { title: 'Duyệt đánh giá', anyPermission: [Permission.REVIEW_MODERATE] },
+      },
+      {
+        path: 'moderation/reports/:targetType(PLACE|REVIEW|COMMENT|USER)/:targetId(\\d+)',
+        name: 'admin-moderation-report',
+        component: () => import('@/pages/admin/moderation/ModerationReportPage.vue'),
+        meta: { title: 'Xử lý báo cáo', anyPermission: [Permission.REPORT_HANDLE] },
+      },
+      {
+        path: 'moderation/claims/:id(\\d+)',
+        name: 'admin-moderation-claim',
+        component: () => import('@/pages/admin/moderation/ModerationClaimPage.vue'),
+        meta: { title: 'Duyệt yêu cầu sở hữu', anyPermission: [Permission.CLAIM_APPROVE] },
       },
       {
         path: 'users',
