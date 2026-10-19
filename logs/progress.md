@@ -1344,3 +1344,24 @@ Chưa commit.
 - Volume có sẵn: chạy một lần cùng file SQL (README ghi lệnh). Đã chạy trên máy này — dữ liệu giữ nguyên.
 
 **Kiểm chứng**: container thử (volume trống): init chạy script, "init process done", `root` qua TCP bị từ chối, `localspot_root` vào được, healthcheck "alive", user ứng dụng `localspot` vẫn vào DB. Volume thật: sau khi đổi còn `localspot@%`, `localspot_root@%`, `root@localhost`; 301 địa điểm còn nguyên; container tạo lại với healthcheck mới → `healthy`.
+
+## 2026-10-19 22:40 (+07) — Checklist F: bảng xếp hạng (UC21, P08)
+
+**Bối cảnh**: nhánh `feature/fe-leaderboard` từ `develop`. Backend `GET /leaderboard` có từ E (O3, chốt 2026-10-12: công thức điểm, 7 / 30 ngày trượt, hạng kiểu thi đấu, cache 5 phút, `city` = khu vực). Thanh điều hướng đã có mục "Bảng xếp hạng" chờ route.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Thêm `GET /cities`** cho bộ lọc khu vực. Bị loại: ô gõ tên (phải khớp chính xác — gõ sai ra bảng trống), bỏ lọc khu vực.
+- **Sửa `SecurityConfig`** (phần lõi — hỏi riêng, được đồng ý): thêm `/api/v1/cities` vào đúng luật `permitAll` GET sẵn có của Catalog — khách xem bảng xếp hạng cần danh sách khu vực.
+- **Hàng của tôi chỉ khi nằm trong top 100** (API trả top N). Bị loại: thêm `GET /leaderboard/me`.
+- **Không có nút Theo dõi trên bảng** — tên dẫn tới trang cá nhân (theo dõi ở đó). Bị loại: thêm `followedByMe` vào từng dòng.
+
+**Quyết định kỹ thuật:**
+- `/cities`: một truy vấn `GROUP BY city` trên địa điểm APPROVED (xoá mềm tự loại nhờ `@SQLRestriction`), nhiều địa điểm trước; cache Redis 10 phút, **không xoá khi duyệt** — thành phố mới xuất hiện trễ vài phút, cùng mức chấp nhận như bảng xếp hạng (5 phút).
+- Tải top 100 một lần, hiện 20 + "Xem thêm" ở trình duyệt — đủ để tìm hàng của mình mà không gọi thêm API. "Còn N điểm để lên hạng R": R = hạng của người ngay trên có điểm cao hơn; cùng điểm là cùng hạng nên N = chênh lệch điểm (không +1).
+- Bộ lọc trên URL (sitemap) — F5 / chia sẻ link giữ đúng bảng; giá trị mặc định (MONTH) không ghi lên URL. Nhãn kỳ là "7 ngày / 30 ngày" (không phải "Tuần này / Tháng 9" như bản mẫu) vì API là cửa sổ **trượt**.
+- Bục 3 ô theo README: hạng 1 nền `sun` (chữ `on-accent`), 2–3 nền `surface-sunk`, cạnh nhau không khung lồng. Hàng của mình: nền sunk + chữ "Bạn" / "(Bạn)" + `aria-current` (không chỉ bằng màu). Bản mẫu có khu vực dưới tên người — người dùng không có thành phố trong dữ liệu nên bỏ.
+- Dòng công thức dưới bảng theo công thức thật (FR-29: review ×10, ảnh ×2 tối đa 5, hữu ích ×1, check-in ×1, đề xuất được duyệt ×15) — bản mẫu ghi công thức đề xuất cũ.
+
+**Tài liệu**: openapi (`/cities`, `City`), sitemap (`/leaderboard`), plan §10 F (mục Bảng xếp hạng — nhánh dashboard cũng thêm dòng mục này, gộp sau giải xung đột 1 dòng).
+
+**Kiểm chứng**: backend `CatalogFlowTests.guestsReadCitiesThatHaveVisiblePlacesMostPlacesFirst` (khách gọi được; chỉ địa điểm APPROVED chưa xoá; đếm đúng; nhiều trước) — `CatalogFlowTests` 8 + `PermissionCatalogTests` 4 xanh; `./mvnw verify` đầy đủ **358 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **204 test** xanh (thêm `LeaderboardPage.spec` 5: mặc định 30 ngày toàn quốc, bục + 20 dòng + "Xem thêm", cùng điểm cùng hạng; bộ lọc lên URL + gọi lại; đọc bộ lọc từ URL; hàng của tôi ghim + số điểm còn thiếu; dẫn đầu / ngoài top / bảng trống). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.

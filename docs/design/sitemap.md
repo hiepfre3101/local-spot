@@ -25,7 +25,7 @@ Cột **Quyền**: `—` công khai; `auth` cần đăng nhập; `perm:x` cần 
 | `/places/:slug` | Chi tiết địa điểm (P03) | UC10, UC13–UC17, UC18, UC22, UC25 | — | Check-in mở hộp thoại P12 (không phải route). Chủ địa điểm thấy nút Phản hồi |
 | `/places/:slug/review` | Viết / sửa đánh giá (P04) | UC12, UC13 | `auth` | Đã có đánh giá → chế độ sửa (1 đánh giá / người / địa điểm, D2). Không có bước gắn thẻ (chốt 2026-10-17 — UC22 ở P05) |
 | `/propose` | Đề xuất địa điểm (P05) | UC11, UC22 | `auth` | Một trang có thanh tiến độ; cảnh báo trùng U7 |
-| `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period` (WEEK / MONTH / ALL), `city` (= "region", chốt 2026-10-12) |
+| `/leaderboard` | Bảng xếp hạng (P08) | UC21, UC20 | — | Query: `period` (WEEK / MONTH / ALL), `city` (= "region", chốt 2026-10-12; danh sách từ `GET /cities` — thêm 2026-10-19). Theo dõi (UC20) ở trang cá nhân — bảng không có nút Theo dõi (chốt 2026-10-19) |
 | `/users/:id` | Trang cá nhân (P06) | UC11, UC18, UC20, UC21 | — | Tab qua query `?tab=reviews\|collections\|badges\|checkins\|places`. Chính mình → nút "Cài đặt tài khoản" (chỉnh sửa hồ sơ làm ở mục riêng). Tab `checkins` và `places` (đề xuất của tôi — `GET /me/places`, theo dõi kết quả duyệt UC11, thêm 2026-10-18) chỉ hiện trên trang của chính mình (`GET /me/check-ins` — chốt 2026-10-12) |
 | `/collections/:id` | Bộ sưu tập của mình | UC18 | `auth` (chủ bộ) | Bật/tắt công khai từng bộ (`is_public`) |
 | `/c/:shareSlug` | Bộ sưu tập chia sẻ | UC18 | — | Chỉ bộ công khai; về riêng tư thì link cũ hết hiệu lực vĩnh viễn (chốt 2026-10-12) |
