@@ -7,7 +7,8 @@ import java.util.List;
 
 /**
  * openapi {@code Review}. {@code rejectReason} chỉ có khi người xem là tác giả; {@code votedByMe} luôn {@code false}
- * với khách. {@code authorCheckedIn}: tác giả đã check-in tại địa điểm vào ngày viết hoặc trước đó (nhãn P04).
+ * với khách. {@code authorCheckedIn}: tác giả đã check-in tại địa điểm vào ngày viết / sửa nội dung gần nhất hoặc trước
+ * đó (nhãn P04). {@code revisedAt}: lần cuối tác giả sửa số sao / nội dung / ngày đến, {@code null} = chưa sửa.
  * {@code place}: tên + slug để danh sách ngoài trang địa điểm (trang cá nhân P06) hiện và dẫn tới địa điểm.
  */
 public record ReviewResponse(
@@ -27,6 +28,7 @@ public record ReviewResponse(
         long commentCount,
         OwnerReplyResponse ownerReply,
         Instant createdAt,
+        Instant revisedAt,
         Instant updatedAt,
         int version) {
 

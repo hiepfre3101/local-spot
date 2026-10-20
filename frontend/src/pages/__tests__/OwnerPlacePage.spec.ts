@@ -78,6 +78,7 @@ const PLACE: PlaceDetail = {
   owner: { id: 42, displayName: 'Minh Anh', avatarUrl: null },
   claimable: false,
   myReviewId: null,
+  checkedInToday: false,
   rejectReason: null,
   version: 3,
 }
@@ -118,6 +119,7 @@ function review(id: number): Review {
     commentCount: 0,
     ownerReply: null,
     createdAt: '2026-10-02T03:00:00Z',
+    revisedAt: null,
     updatedAt: '2026-10-02T03:00:00Z',
     version: 0,
   }

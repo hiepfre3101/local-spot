@@ -49,6 +49,10 @@ public class Review extends AuditableEntity {
     @Column(name = "visited_at", nullable = false)
     private LocalDate visitedAt;
 
+    /** Lần cuối tác giả sửa số sao / nội dung / ngày đến (V6); {@code null} = chưa sửa. Mốc của nhãn "đã check-in". */
+    @Column(name = "revised_at")
+    private Instant revisedAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ReviewStatus status;
@@ -142,6 +146,14 @@ public class Review extends AuditableEntity {
 
     public void setVisitedAt(LocalDate visitedAt) {
         this.visitedAt = visitedAt;
+    }
+
+    public Instant getRevisedAt() {
+        return revisedAt;
+    }
+
+    public void markRevised(Instant at) {
+        this.revisedAt = at;
     }
 
     public ReviewStatus getStatus() {

@@ -35,6 +35,10 @@ const photos = computed(() =>
     <div class="mt-1 flex flex-wrap items-center gap-3 text-caption text-ink-muted">
       <LsRating :score="review.rating" />
       <time :datetime="review.createdAt">{{ formatDate(review.createdAt) }}</time>
+      <span v-if="review.revisedAt">
+        · Cập nhật
+        <time :datetime="review.revisedAt">{{ formatDate(review.revisedAt) }}</time></span
+      >
       <span v-if="review.helpfulCount > 0">Hữu ích · {{ formatNumber(review.helpfulCount) }}</span>
     </div>
     <p v-if="status" class="mt-1 mb-0 text-caption font-semibold">

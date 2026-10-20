@@ -1,0 +1,147 @@
+/*
+ * P12 Check-in — kiểm tra vị trí. `.ls-dialog`, `.ls-radar`, `.ls-state` port từ docs/design-system/components/bundle.css.
+ * Thêm so với bản gốc: hộp thoại là `<dialog>` gốc (lớp phủ `::backdrop` tối phẳng 55%, không gradient) và co theo màn
+ * điện thoại thay vì cố định 420px.
+ */
+@layer components {
+  .ls-dialog {
+    position: relative;
+    width: min(420px, calc(100vw - 32px));
+    padding: var(--space-8) var(--space-8) var(--space-6);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    color: var(--ink);
+    text-align: center;
+  }
+  .ls-dialog::backdrop {
+    background: rgb(20 20 16 / 0.55);
+  }
+  .ls-dialog__body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+  }
+  .ls-dialog h2 {
+    margin: 0;
+    font: 700 22px/28px var(--font-sans);
+  }
+  .ls-dialog p {
+    margin: 0;
+    font: 400 14px/20px var(--font-sans);
+    color: var(--ink-muted);
+  }
+  .ls-dialog__x {
+    position: absolute;
+    top: var(--space-3);
+    right: var(--space-3);
+  }
+  .ls-dialog__acts {
+    display: flex;
+    gap: var(--space-2);
+    justify-content: center;
+    margin-top: var(--space-3);
+    flex-wrap: wrap;
+  }
+  .ls-dialog__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--space-4);
+    font: 500 12px/16px var(--font-sans);
+    color: var(--ink-muted);
+  }
+
+  /* Radar: chấm sea + 3 vòng lan ra; đứng yên khi "giảm chuyển động" */
+  .ls-radar {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    margin-bottom: var(--space-2);
+  }
+  .ls-radar::before {
+    content: '';
+    position: absolute;
+    inset: 30%;
+    border: 1.5px solid var(--sea);
+    border-radius: var(--radius-pill);
+    opacity: 0.6;
+  }
+  .ls-radar i {
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--sea);
+    border-radius: var(--radius-pill);
+    opacity: 0;
+    animation: ls-ping 2.4s linear infinite;
+  }
+  .ls-radar i:nth-child(2) {
+    animation-delay: 0.8s;
+  }
+  .ls-radar i:nth-child(3) {
+    animation-delay: 1.6s;
+  }
+  .ls-radar b {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    margin: -11px 0 0 -11px;
+    border-radius: var(--radius-pill);
+    background: var(--sea);
+    border: 4px solid var(--surface-raised);
+  }
+  @keyframes ls-ping {
+    0% {
+      transform: scale(0.2);
+      opacity: 0.9;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ls-radar i {
+      animation: none;
+      opacity: 0.5;
+    }
+    .ls-radar i:nth-child(1) {
+      transform: scale(0.4);
+    }
+    .ls-radar i:nth-child(2) {
+      transform: scale(0.7);
+    }
+  }
+
+  /* Biểu tượng kết quả — hình khác nhau cho từng trạng thái, không chỉ khác màu */
+  .ls-state {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius-pill);
+  }
+  .ls-state svg {
+    width: 30px;
+    height: 30px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+  }
+  .ls-state--ok {
+    background: var(--olive);
+    color: var(--on-olive);
+  }
+  .ls-state--far {
+    background: var(--sun);
+    color: var(--on-accent);
+  }
+  .ls-state--off {
+    background: var(--surface-sunk);
+    color: var(--ink);
+    border: 1.5px solid var(--line-strong);
+  }
+}

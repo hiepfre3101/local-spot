@@ -167,6 +167,8 @@ public class ReviewService {
         ReviewStatus before = review.getStatus();
         requireEditable(review);
         int ratingBefore = review.getRating();
+        String contentBefore = review.getContent();
+        LocalDate visitedBefore = review.getVisitedAt();
         if (request.rating() != null) {
             review.setRating(request.rating());
         }
@@ -175,6 +177,13 @@ public class ReviewService {
         }
         if (request.visitedAt() != null) {
             review.setVisitedAt(checkVisitedAt(request.visitedAt()));
+        }
+        // Cập nhật theo lần ghé mới (chốt 2026-10-19): chỉ đổi thật sự số sao / nội dung / ngày đến mới tính là sửa —
+        // gửi lại y nguyên không "làm mới" review để lấy nhãn check-in
+        if (review.getRating() != ratingBefore
+                || !review.getContent().equals(contentBefore)
+                || !review.getVisitedAt().equals(visitedBefore)) {
+            review.markRevised(clock.instant());
         }
 
         if (before == ReviewStatus.REJECTED) {

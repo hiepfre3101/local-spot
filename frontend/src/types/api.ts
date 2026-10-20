@@ -149,6 +149,8 @@ export interface PlaceDetail extends PlaceSummary {
   owner: UserSummary | null
   claimable: boolean
   myReviewId: number | null
+  /** Người xem đã check-in hôm nay (giờ VN) — nút Check-in P12. Khách = `false`. */
+  checkedInToday: boolean
   rejectReason: string | null
   version: number
 }
@@ -254,6 +256,36 @@ export interface PlaceStats {
 
 export type ClaimStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
+/** Tổng trong một kỳ: tài khoản mới, review được gửi (mọi trạng thái), báo cáo nhận được. */
+export interface DashboardTotals {
+  newUsers: number
+  reviews: number
+  reports: number
+}
+
+/**
+ * openapi `Dashboard` (UC33, FR-41). `previousTotals` = kỳ liền trước cùng số ngày (▲▼); `pendingCounts` là việc tồn
+ * **hiện tại** (không theo khoảng), cùng định nghĩa với hàng chờ gộp.
+ */
+export interface Dashboard {
+  from: string
+  to: string
+  generatedAt: string
+  totals: DashboardTotals
+  previousTotals: DashboardTotals
+  newUsersByDay: DailyCount[]
+  reviewsByDay: DailyCount[]
+  reviewsByCity: { city: string; reviewCount: number }[]
+  hotPlaces: { place: PlaceSummary; newReviewCount: number }[]
+  pendingCounts: {
+    places: number
+    reviews: number
+    reports: number
+    claims: number
+    oldestSubmittedAt: string | null
+  }
+}
+
 /** openapi `MyClaim` — yêu cầu sở hữu nhìn từ người gửi (`GET /me/claims`). */
 export interface MyClaim {
   id: number
@@ -283,6 +315,8 @@ export interface Review {
   commentCount: number
   ownerReply: OwnerReply | null
   createdAt: string
+  /** Lần cuối tác giả sửa số sao / nội dung / ngày đến; `null` = chưa sửa (cập nhật theo lần ghé mới — 2026-10-19). */
+  revisedAt: string | null
   updatedAt: string
   version: number
 }

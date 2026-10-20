@@ -7,6 +7,7 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
 import type { CollectionSummary, MeResponse, PlaceDetail, Review } from '@/types/api'
+import { PositionError } from '@/utils/position'
 
 import PlaceDetailPage from '../PlaceDetailPage.vue'
 
@@ -59,6 +60,17 @@ const ME: MeResponse = {
   ownedPlaceIds: [],
 }
 
+const checkIn = vi.fn()
+vi.mock('@/api/checkins', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/checkins')>()),
+  checkInsApi: { checkIn: (...a: unknown[]) => checkIn(...a) },
+}))
+const measure = vi.fn()
+vi.mock('@/utils/position', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/utils/position')>()),
+  measurePosition: (...a: unknown[]) => measure(...a),
+}))
+
 vi.mock('@/components/place/PlaceMap.vue', () => ({
   __esModule: true,
   default: { name: 'PlaceMap', render: () => null },
@@ -92,6 +104,7 @@ const PLACE: PlaceDetail = {
   owner: null,
   claimable: true,
   myReviewId: null,
+  checkedInToday: false,
   rejectReason: null,
   version: 0,
 }
@@ -114,6 +127,7 @@ function review(id: number, rating: number, helpfulCount: number): Review {
     commentCount: 0,
     ownerReply: null,
     createdAt: '2026-10-02T03:00:00Z',
+    revisedAt: null,
     updatedAt: '2026-10-02T03:00:00Z',
     version: 0,
   }
@@ -198,10 +212,132 @@ describe('PlaceDetailPage (P03)', () => {
     expect(wrapper.text()).not.toContain('Yêu cầu xác nhận sở hữu')
   })
 
-  it('không có nút dẫn tới màn chưa làm (check-in)', async () => {
-    const wrapper = await mountAt('pho-thin-ha-noi')
-    const labels = wrapper.findAll('a, button').map((el) => el.text())
-    expect(labels).not.toContain('Check-in')
+  describe('Check-in (UC16, P12)', () => {
+    const button = (wrapper: Awaited<ReturnType<typeof mountAt>>, text: string) =>
+      wrapper.findAll('button').find((b) => b.text() === text)
+
+    beforeEach(() => {
+      HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+        this.open = true
+      }
+      HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+        this.open = false
+      }
+      measure.mockReset().mockResolvedValue({ lat: 21.0179, lng: 105.8523, accuracyM: 15 })
+      checkIn.mockReset()
+      mine.mockReset().mockResolvedValue([])
+    })
+
+    it('khách bấm → đăng nhập, không đo vị trí', async () => {
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      expect(wrapper.vm.$router.currentRoute.value.name).toBe('login')
+      expect(measure).not.toHaveBeenCalled()
+    })
+
+    it('đã check-in hôm nay → nút tắt; chủ địa điểm không có nút', async () => {
+      detail.mockResolvedValue({ ...PLACE, checkedInToday: true })
+      let wrapper = await mountAt('pho-thin-ha-noi')
+      expect(button(wrapper, '✓ Đã check-in hôm nay')!.attributes('disabled')).toBeDefined()
+      wrapper.unmount()
+
+      detail.mockResolvedValue(PLACE)
+      useAuthStore().$patch({ user: { ...ME, ownedPlaceIds: [5] }, accessToken: 'token' })
+      wrapper = await mountAt('pho-thin-ha-noi')
+      expect(button(wrapper, 'Check-in')).toBeUndefined()
+    })
+
+    it('thành công: gửi vị trí đo được, báo khoảng cách, nút đổi trạng thái', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      // Máy chủ sau khi check-in: chi tiết nạp lại có trạng thái mới
+      checkIn.mockImplementation(async () => {
+        detail.mockResolvedValue({ ...PLACE, checkedInToday: true, checkinCount: 4 })
+        return checkInResult
+      })
+      const checkInResult = {
+        id: 1,
+        placeId: 5,
+        place: PLACE,
+        distanceM: 42,
+        checkinDate: '2026-10-19',
+        createdAt: '2026-10-19T12:24:00Z',
+      }
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      const reviewCallsBefore = reviews.mock.calls.length
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      expect(checkIn).toHaveBeenCalledWith(5, { lat: 21.0179, lng: 105.8523, accuracyM: 15 })
+      const dialog = wrapper.get('dialog.ls-dialog')
+      expect(dialog.text()).toContain('Check-in thành công')
+      expect(dialog.text()).toContain('Bạn đang cách Phở Thìn 42 m')
+      expect(button(wrapper, '✓ Đã check-in hôm nay')).toBeDefined()
+      // Danh sách đánh giá nạp lại (nhãn "đã check-in" của đánh giá viết hôm nay đổi ngay)
+      expect(reviews.mock.calls.length).toBeGreaterThan(reviewCallsBefore)
+    })
+
+    it('đã có đánh giá → gợi ý "Cập nhật đánh giá" theo lần ghé này', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      detail.mockResolvedValue({ ...PLACE, myReviewId: 77 })
+      checkIn.mockResolvedValue({
+        id: 2,
+        placeId: 5,
+        place: PLACE,
+        distanceM: 15,
+        checkinDate: '2026-10-19',
+        createdAt: '2026-10-19T12:24:00Z',
+      })
+      const wrapper = await mountAt('pho-thin-ha-noi', { writeReviewRoute: true })
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      const dialog = wrapper.get('dialog.ls-dialog')
+      expect(dialog.text()).toContain('Thấy khác lần trước?')
+      const link = dialog.findAll('a').find((a) => a.text() === 'Cập nhật đánh giá')!
+      expect(link.attributes('href')).toBe('/places/pho-thin-ha-noi/review')
+    })
+
+    it('quá xa → khoảng cách từ máy chủ + Chỉ đường / Thử lại', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      const config = { headers: {} } as InternalAxiosRequestConfig
+      checkIn.mockRejectedValue(
+        new AxiosError('x', 'ERR', config, null, {
+          data: { code: 'CHECKIN_TOO_FAR', detail: 'x', distanceM: 1200 },
+          status: 422,
+          statusText: '',
+          headers: {},
+          config,
+        }),
+      )
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      const dialog = wrapper.get('dialog.ls-dialog')
+      expect(dialog.text()).toContain('Bạn chưa ở đủ gần')
+      expect(dialog.text()).toContain('cách khoảng 1,2 km')
+      expect(dialog.text()).toContain('Chỉ đường')
+
+      await button(wrapper, 'Thử lại')!.trigger('click')
+      await flushPromises()
+      expect(measure).toHaveBeenCalledTimes(2)
+    })
+
+    it('GPS kém (> 100 m) → không gửi; bị chặn quyền → hướng dẫn bật', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      measure.mockResolvedValue({ lat: 21, lng: 105, accuracyM: 300 })
+      const wrapper = await mountAt('pho-thin-ha-noi')
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      expect(checkIn).not.toHaveBeenCalled()
+      expect(wrapper.get('dialog.ls-dialog').text()).toContain('±300 m')
+
+      measure.mockRejectedValue(new PositionError('denied'))
+      await button(wrapper, 'Thử lại')!.trigger('click')
+      await flushPromises()
+      const dialog = wrapper.get('dialog.ls-dialog')
+      expect(dialog.text()).toContain('Chưa có quyền vị trí')
+      await button(wrapper, 'Cách bật')!.trigger('click')
+      expect(dialog.text()).toContain('Cho phép')
+    })
   })
 
   describe('Lưu vào bộ sưu tập (UC18)', () => {

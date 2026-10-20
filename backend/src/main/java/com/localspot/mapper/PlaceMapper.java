@@ -88,6 +88,7 @@ public interface PlaceMapper {
                 place.getOwner() == null ? null : toUserSummary(place.getOwner()),
                 extras.claimable(),
                 extras.myReviewId(),
+                extras.checkedInToday(),
                 extras.showRejectReason() ? place.getRejectReason() : null,
                 place.getVersion());
     }
@@ -104,6 +105,7 @@ public interface PlaceMapper {
             Map<Integer, Long> ratingDistribution,
             boolean claimable,
             Long myReviewId,
+            boolean checkedInToday,
             boolean showRejectReason,
             PhotoResponse coverPhoto,
             List<PhotoResponse> photos) {

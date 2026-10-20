@@ -1854,6 +1854,7 @@ components:
             owner: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
             claimable: { type: boolean, description: Chưa có chủ và người xem chưa có yêu cầu đang chờ }
             myReviewId: { type: [integer, 'null'], format: int64, description: 'Review của người xem (kể cả đã xóa → nút "Viết đánh giá" bị ẩn, D2)' }
+            checkedInToday: { type: boolean, description: '*(thêm 2026-10-19)* Người xem đã check-in địa điểm hôm nay (giờ VN) — nút Check-in P12 thành "✓ Đã check-in hôm nay". Khách = false' }
             rejectReason: { type: [string, 'null'], description: Chỉ người đề xuất / kiểm duyệt viên thấy }
             version: { type: integer, description: 'Optimistic lock — gửi lại khi sửa (owner PATCH) / ra quyết định (2026-10-04)' }
     PlaceCreateRequest:
@@ -2008,10 +2009,11 @@ components:
         photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
         helpfulCount: { type: integer }
         votedByMe: { type: boolean }
-        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review hoặc trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
+        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review — hoặc ngày sửa nội dung gần nhất (`revisedAt`, đổi 2026-10-19) — hay trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
         commentCount: { type: integer }
         ownerReply: { oneOf: [ { $ref: '#/components/schemas/OwnerReply' }, { type: 'null' } ] }
         createdAt: { type: string, format: date-time }
+        revisedAt: { type: [string, 'null'], format: date-time, description: '*(thêm 2026-10-19)* Lần cuối tác giả sửa số sao / nội dung / ngày đến (cập nhật theo lần ghé mới); null = chưa sửa. Gửi lại y nguyên không tính' }
         updatedAt: { type: string, format: date-time }
         version: { type: integer }
     ReviewPage:

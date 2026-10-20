@@ -122,6 +122,7 @@ public class ReviewViews {
                 commentCount,
                 ownerReply,
                 review.getCreatedAt(),
+                review.getRevisedAt(),
                 review.getUpdatedAt(),
                 review.getVersion());
     }

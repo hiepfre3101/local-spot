@@ -8,7 +8,8 @@ import java.util.TreeMap;
 
 /**
  * openapi {@code PlaceDetail} = {@code PlaceSummary} + chi tiết (FR-13). Trường theo người xem: {@code claimable},
- * {@code myReviewId}, {@code rejectReason} (chỉ người đề xuất / kiểm duyệt viên). {@code ratingDistribution} đếm review
+ * {@code myReviewId}, {@code checkedInToday} (đã check-in hôm nay theo giờ VN — nút Check-in P12, thêm 2026-10-19),
+ * {@code rejectReason} (chỉ người đề xuất / kiểm duyệt viên). {@code ratingDistribution} đếm review
  * PUBLISHED theo số sao, đủ 5 khóa 1–5.
  */
 public record PlaceDetailResponse(
@@ -39,6 +40,7 @@ public record PlaceDetailResponse(
         UserSummary owner,
         boolean claimable,
         Long myReviewId,
+        boolean checkedInToday,
         String rejectReason,
         int version) {
 

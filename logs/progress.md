@@ -1345,6 +1345,43 @@ Chưa commit.
 
 **Kiểm chứng**: container thử (volume trống): init chạy script, "init process done", `root` qua TCP bị từ chối, `localspot_root` vào được, healthcheck "alive", user ứng dụng `localspot` vẫn vào DB. Volume thật: sau khi đổi còn `localspot@%`, `localspot_root@%`, `root@localhost`; 301 địa điểm còn nguyên; container tạo lại với healthcheck mới → `healthy`.
 
+## 2026-10-19 22:10 (+07) — Checklist F: dashboard quản trị (UC33)
+
+**Bối cảnh**: nhánh `feature/fe-admin-dashboard` từ `develop` (`92138a1`, đã gộp #30–#34). Backend `GET /admin/dashboard` có từ #25 (supervisor chốt 2026-10-17: so với kỳ trước, hot = review đang hiện mới viết, không CSV). Sidebar đã có mục "Tổng quan" trỏ `admin-dashboard` — chỉ thiếu route. Supervisor đặt thứ tự việc còn lại: dashboard → check-in (FE) → bảng xếp hạng → cài đặt hồ sơ → skeleton / responsive / a11y / SEO; hai mục check-in và bảng xếp hạng chưa có trong plan → thêm vào.
+
+**Quyết định kỹ thuật:**
+- **Theo README AdminDashboard**: KPI một dải chia đường kẻ; biểu đồ | danh sách tách đường kẻ dọc (chỉ từ màn rộng, điện thoại xếp chồng); hàng chờ FIFO đặt thẳng trong section. `/admin` vẫn chuyển hướng theo mục đầu tiên của sidebar → quản trị viên vào Tổng quan, kiểm duyệt viên vào Hàng chờ (đúng sitemap) mà không sửa logic chuyển hướng.
+- **4 KPI theo dữ liệu có thật**: đánh giá mới, hàng chờ (địa điểm + đánh giá + sở hữu, kèm tuổi việc cũ nhất), báo cáo nhận được (+ số chưa xử lý), thành viên mới — ▲▼ + chữ so với kỳ trước. **Báo cáo tăng tô `danger`** (tăng là xấu); màu chỉ nhấn thêm, ký hiệu + chữ vẫn nói đúng chiều. Bản mẫu chỉ có một biểu đồ; API trả thêm thành viên mới theo ngày và 10 địa điểm nổi bật nên thêm hàng thứ hai cùng bố cục (không bỏ phí dữ liệu đã tính).
+- **Biểu đồ**: dùng lại `BarChart` (chuyển từ `components/owner` sang `components/ui`), đầu cột bo 2px, chân cột vuông bám trục (README: "cột biểu đồ bo 2px"); một chuỗi → không chú giải, tiêu đề khối gọi tên; tooltip `<title>` khi rê; bảng số liệu ẩn cho trình đọc màn hình. Không thêm thư viện biểu đồ.
+- **Tách `QueueTable`** khỏi màn Hàng chờ để dashboard hiện 5 việc đầu cùng một bảng (không lặp markup / nhãn trạng thái); màn Hàng chờ dùng lại, test kiểm duyệt cũ vẫn xanh. Chỉ tải hàng chờ khi người dùng có quyền kiểm duyệt.
+- `owner.css` → `stats.css` (dải KPI dùng chung trang chủ quán + quản trị), `.owner-split` → `.stats-split`.
+- Khoảng 7 / 14 (mặc định, như backend) / 30 / 90 ngày, tính "hôm nay" theo giờ VN ở trình duyệt; không cache (`staleTime: 0`) — số luôn là hiện trạng như backend.
+
+**Ghi chú môi trường**: `@stomp/stompjs` (từ #33) chưa cài trên máy → `npm ci` theo lockfile (không thêm thư viện).
+
+**Tài liệu**: plan §10 F (mục trang quản trị: dashboard đã code; thêm mục Check-in FE, Bảng xếp hạng).
+
+**Kiểm chứng**: frontend `vitest` **205 test** xanh (thêm `AdminDashboardPage.spec` 6: khoảng mặc định 14 ngày + đổi khoảng; KPI ▲▼ + chữ, báo cáo tăng tô xấu, hàng chờ + tuổi cũ nhất; 2 biểu đồ + bảng ẩn + xếp hạng khu vực / địa điểm có liên kết; 5 việc đầu, hàng đầu "Xử lý tiếp"; không quyền kiểm duyệt → không tải hàng chờ; lỗi → thử lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được. Không đổi backend.
+
+## 2026-10-19 22:20 (+07) — Checklist F: check-in ở frontend (UC16, P12)
+
+**Bối cảnh**: nhánh `feature/fe-checkin` từ `develop` (độc lập với nhánh dashboard). Backend check-in có từ E (chốt 2026-10-12: accuracy ≤ 100 m, ≤ 200 m, 1 lần / địa điểm / ngày giờ VN; P12 câu hỏi 1–3 đã chốt theo đó). Bản mẫu P12 muốn nút đổi thành "✓ Đã check-in hôm nay", nhưng `PlaceDetail` không cho biết người xem đã check-in hôm nay chưa.
+
+**Supervisor chốt (qua câu hỏi):** thêm `checkedInToday` (theo người xem, như `myReviewId`) vào `PlaceDetail`. Bị loại: chỉ frontend (nút sai sau khi tải lại trang, phải bấm lần nữa mới biết qua 409).
+
+**Quyết định kỹ thuật:**
+- Backend: một truy vấn `exists` có sẵn (`existsByUserIdAndPlaceIdAndCheckinDate`) với **cùng "hôm nay" giờ VN** như luật 1 lần / ngày của `CheckInService` — không đụng luồng kiểm tra GPS (phần lõi chống gian lận). Khách = `false`.
+- Đo vị trí **mới, độ chính xác cao** (`maximumAge: 0`, `enableHighAccuracy`, hết 10 giây như P12) bằng hàm riêng `measurePosition` — không dùng `usePlaceStore().locate()` của "tìm quanh tôi" (vị trí cũ tới 5 phút, không có `accuracy`).
+- GPS kém hơn ±100 m: **không gửi** (backend chắc chắn từ chối) — báo độ chính xác hiện tại + cách khắc phục. Ngưỡng hiển thị (200 m, ±100 m) là hằng số phía client chỉ để giải thích; kiểm thật ở máy chủ.
+- Kết quả theo `code` của máy chủ: `CHECKIN_TOO_FAR` đọc `distanceM` của problem (đúng số máy chủ tính, không tự tính lại); `CHECKIN_ALREADY_TODAY` → trạng thái "Hôm nay bạn đã check-in" + nạp lại chi tiết (nút cũ tự sửa); thêm hai trạng thái bản mẫu thiếu nhưng API có (GPS kém, đã check-in). "Cách bật" mở hướng dẫn ngay trong hộp thoại (không có trang trợ giúp — không tạo link chết). "Chỉ đường" mở hộp thoại chỉ đường có sẵn của P03.
+- Hộp thoại `<dialog>` gốc: `aria-live` cho kết quả, Esc / ✕ huỷ (bỏ qua kết quả về muộn của lần đo đang chạy), radar đứng yên khi "giảm chuyển động"; biểu tượng kết quả khác **hình** (✓ / ghim / ghim gạch chéo), không chỉ khác màu. Viền `line-strong`, không bóng, lớp phủ tối phẳng 55%.
+- Bản mẫu ghi "+2 điểm xếp hạng" — công thức điểm đóng góp (FR-29) là **+1 / check-in**, nên hiện "+1 điểm đóng góp".
+- Nút "Check-in" đầu hàng thao tác P03 (thứ tự bản mẫu: Check-in · Viết đánh giá · Lưu), ẩn với chủ địa điểm (backend 409) và địa điểm chưa duyệt; khách → đăng nhập. Thành công → nút + số lượt check-in đổi ngay rồi nạp lại theo máy chủ.
+
+**Tài liệu**: openapi (`PlaceDetail.checkedInToday`), plan §10 F (mục Check-in FE — nhánh dashboard cũng thêm mục này, gộp sau có thể phải giải xung đột 1 dòng).
+
+**Kiểm chứng**: backend `CheckInFlowTests` thêm `detailTellsTheViewerWhetherTheyCheckedInToday` (trước / sau check-in, người khác, check-in hôm qua không tính) + khách = false; `CheckInFlowTests` + `PlaceFlowTests` 26 test xanh; `./mvnw verify` đầy đủ **358 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **203 test** xanh (P03 thay test "chưa có nút check-in" bằng 5 test: khách → đăng nhập; đã check-in → nút tắt, chủ không có nút; thành công gửi đúng vị trí + khoảng cách + nút đổi; quá xa → khoảng cách máy chủ, Thử lại đo lại; GPS kém không gửi, bị chặn quyền → hướng dẫn). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
 ## 2026-10-19 22:40 (+07) — Checklist F: bảng xếp hạng (UC21, P08)
 
 **Bối cảnh**: nhánh `feature/fe-leaderboard` từ `develop`. Backend `GET /leaderboard` có từ E (O3, chốt 2026-10-12: công thức điểm, 7 / 30 ngày trượt, hạng kiểu thi đấu, cache 5 phút, `city` = khu vực). Thanh điều hướng đã có mục "Bảng xếp hạng" chờ route.
@@ -1365,3 +1402,24 @@ Chưa commit.
 **Tài liệu**: openapi (`/cities`, `City`), sitemap (`/leaderboard`), plan §10 F (mục Bảng xếp hạng — nhánh dashboard cũng thêm dòng mục này, gộp sau giải xung đột 1 dòng).
 
 **Kiểm chứng**: backend `CatalogFlowTests.guestsReadCitiesThatHaveVisiblePlacesMostPlacesFirst` (khách gọi được; chỉ địa điểm APPROVED chưa xoá; đếm đúng; nhiều trước) — `CatalogFlowTests` 8 + `PermissionCatalogTests` 4 xanh; `./mvnw verify` đầy đủ **358 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **204 test** xanh (thêm `LeaderboardPage.spec` 5: mặc định 30 ngày toàn quốc, bục + 20 dòng + "Xem thêm", cùng điểm cùng hạng; bộ lọc lên URL + gọi lại; đọc bộ lọc từ URL; hàng của tôi ghim + số điểm còn thiếu; dẫn đầu / ngoài top / bảng trống). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
+## 2026-10-19 23:30 (+07) — Cập nhật đánh giá theo lần ghé mới (phương án A)
+
+**Bối cảnh**: supervisor chạy thử check-in và nêu vấn đề: đã đánh giá một quán, một tháng sau quay lại, check-in, thấy khác trước và muốn đánh giá mới — nhưng chỉ sửa được đánh giá cũ (1 đánh giá / người / địa điểm, D2), và sửa xong cũng không có nhãn "đã check-in" vì nhãn so với **ngày viết đầu tiên** (chốt 2026-10-12). Nhánh `feature/review-revisit` xếp trên `feature/fe-checkin` (dùng hộp thoại check-in).
+
+**Phương án đã nêu** (agent đề xuất, supervisor chọn A, ưu tiên trước Cài đặt hồ sơ):
+- **A — cập nhật theo lần ghé mới** (chọn): giữ `UNIQUE(place_id, user_id)` và một phiếu / người trong Bayesian; nhãn so với lần sửa nội dung gần nhất.
+- B — A + lịch sử các lần ghé (`review_revisions`): để sau nếu còn thời gian, xây trên A không phải làm lại.
+- C — "bình luận cập nhật" kèm số sao mới: điểm nằm hai nơi, kiểm duyệt hai nơi.
+- D — mỗi lần ghé một đánh giá (bỏ UNIQUE): không khuyến nghị — đụng ràng buộc lõi, luồng Bayesian, D2, rate limit, trust score; tăng rủi ro spam.
+
+**Quyết định kỹ thuật:**
+- **Migration mới V6** `reviews.revised_at` DATETIME(6) NULL — không sửa migration cũ; **không backfill**: NULL đúng nghĩa "chưa sửa", nhãn của mọi đánh giá hiện có giữ nguyên (`COALESCE(revised_at, created_at)` = luật cũ). Không cột NOT NULL để không phá các seed chèn review.
+- `revised_at` chỉ ghi khi số sao / nội dung / ngày đến **đổi thật** — gửi lại y nguyên không "làm mới" đánh giá để lấy nhãn. Thêm / xoá ảnh không tính (ảnh không đổi nhận xét). Không dùng `updated_at` vì cột này đổi theo cả vote / kiểm duyệt.
+- **Luật nhãn đổi** (phần chống review ảo — supervisor đồng ý khi chọn A): check-in trong hoặc trước **ngày của lần sửa gần nhất** (hoặc ngày viết nếu chưa sửa). Vẫn không "xác nhận ngược": muốn có nhãn phải có mặt ở quán (check-in kiểm GPS) rồi mới cập nhật. Sửa vẫn qua các luật cũ (trust < 30 → chờ duyệt; bị từ chối → chờ duyệt lại), Bayesian chỉ tính lại khi tập PUBLISHED / số sao đổi như trước.
+- UI: hộp check-in thành công khi đã có đánh giá → "Thấy khác lần trước?" + nút **Cập nhật đánh giá**; P04 khi hôm nay đã check-in mà đánh giá chưa có nhãn → gợi ý + nút "Đặt ngày đến là hôm nay" (không tự đổi ngày thay người dùng); đánh giá đã sửa hiện "Cập nhật dd/mm/yyyy" (P03, trang cá nhân) để người đọc biết đã được làm mới.
+- **Sửa lỗi phát hiện khi thử**: sau check-in, danh sách đánh giá của địa điểm chưa nạp lại → nhãn của đánh giá viết cùng ngày phải F5 mới hiện. Nay nạp lại danh sách + đánh giá chờ duyệt của tôi.
+
+**Tài liệu**: openapi (`Review.revisedAt`, mô tả `authorCheckedIn`), database.md (`reviews.revised_at`), plan §10 F (mục mới).
+
+**Kiểm chứng**: backend `CheckInFlowTests.revisingTheReviewAfterARevisitEarnsTheLabel` (đánh giá 1 tháng trước + check-in hôm nay → chưa nhãn; gửi lại y nguyên → vẫn chưa, `revisedAt` trống; sửa thật → `revisedAt` có, có nhãn); test luật cũ `reviewLabelMeansCheckedInOnOrBeforeTheDayOfWriting` vẫn xanh; `./mvnw verify` đầy đủ **359 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **206 test** xanh (P04 +2: gợi ý + đặt ngày hôm nay + gửi đúng; không gợi ý khi chưa check-in / đã có nhãn. P03 +1: "Cập nhật đánh giá" sau check-in; test thành công kiểm thêm danh sách nạp lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.
