@@ -103,6 +103,17 @@ const { handleSubmit, isSubmitting, setFieldError, resetForm } = useForm<ReviewF
 const content = useField<string>('content', undefined, { validateOnValueUpdate: false })
 const visitedAt = useField<string>('visitedAt', undefined, { validateOnValueUpdate: false })
 const contentLength = computed(() => (content.value.value ?? '').trim().length)
+/**
+ * Quay lại quán (chốt 2026-10-19, phương án A): đã có đánh giá + hôm nay đã check-in → gợi ý cập nhật theo lần ghé này.
+ * Nhãn "đã check-in" tính theo lần sửa nội dung gần nhất, nên lưu thay đổi hôm nay là được nhãn.
+ */
+const revisit = computed(
+  () =>
+    editing.value &&
+    !!place.value?.checkedInToday &&
+    !!review.value &&
+    !review.value.authorCheckedIn,
+)
 
 const drafts = ref<DraftPhoto[]>([])
 const removedPhotoIds = ref<number[]>([])
@@ -274,6 +285,19 @@ function isStatus(error: unknown, status: number): boolean {
           <p v-if="needsVerification" class="mt-4" role="alert">
             Xác thực email trước khi gửi đánh giá — liên kết ở băng nhắc phía trên.
           </p>
+          <div v-if="revisit" class="mt-4 flex flex-wrap items-center gap-3" role="status">
+            <span
+              >✓ Bạn vừa check-in hôm nay. Cập nhật đánh giá theo lần ghé này — đánh giá sẽ có nhãn
+              “Đã check-in”.</span
+            >
+            <LsButton
+              v-if="visitedAt.value.value !== today"
+              size="sm"
+              variant="ghost"
+              @click="visitedAt.value.value = today"
+              >Đặt ngày đến là hôm nay</LsButton
+            >
+          </div>
 
           <form class="mt-8 flex flex-col gap-6" novalidate @submit="submit">
             <RatingInput name="rating" label="Điểm của bạn *" />

@@ -97,6 +97,7 @@ function myReview(overrides: Partial<Review> = {}): Review {
     commentCount: 0,
     ownerReply: null,
     createdAt: '2026-10-02T03:00:00Z',
+    revisedAt: null,
     updatedAt: '2026-10-02T03:00:00Z',
     version: 3,
     ...overrides,
@@ -241,6 +242,36 @@ describe('WriteReviewPage (P04)', () => {
       version: 3,
     })
     expect(wrapper.get('h1').text()).toBe('Đã lưu thay đổi')
+  })
+
+  it('quay lại quán: đã check-in hôm nay → gợi ý cập nhật theo lần ghé này, đặt ngày đến hôm nay', async () => {
+    detail.mockResolvedValue({ ...PLACE, myReviewId: 77, checkedInToday: true })
+    getReview.mockResolvedValue(myReview())
+    update.mockResolvedValue(myReview({ version: 4 }))
+    const wrapper = await mountPage()
+
+    expect(wrapper.text()).toContain('Bạn vừa check-in hôm nay')
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Đặt ngày đến là hôm nay')!
+      .trigger('click')
+    const today = todayInVietnam()
+    expect(wrapper.get('input[name="visitedAt"]').element).toHaveProperty('value', today)
+    await submit(wrapper)
+    expect(update).toHaveBeenCalledWith(77, expect.objectContaining({ visitedAt: today }))
+  })
+
+  it('không gợi ý khi chưa check-in hôm nay hoặc đánh giá đã có nhãn', async () => {
+    detail.mockResolvedValue({ ...PLACE, myReviewId: 77 })
+    getReview.mockResolvedValue(myReview())
+    let wrapper = await mountPage()
+    expect(wrapper.text()).not.toContain('Bạn vừa check-in hôm nay')
+    wrapper.unmount()
+
+    detail.mockResolvedValue({ ...PLACE, myReviewId: 77, checkedInToday: true })
+    getReview.mockResolvedValue(myReview({ authorCheckedIn: true }))
+    wrapper = await mountPage()
+    expect(wrapper.text()).not.toContain('Bạn vừa check-in hôm nay')
   })
 
   it('đánh giá bị từ chối: hiện lý do để sửa rồi gửi lại', async () => {

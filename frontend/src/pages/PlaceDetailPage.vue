@@ -223,6 +223,9 @@ function checkedIn(): void {
     old ? { ...old, checkedInToday: true, checkinCount: old.checkinCount + 1 } : old,
   )
   void queryClient.invalidateQueries({ queryKey: ['place', props.slug] })
+  // Nhãn "đã check-in" của đánh giá viết hôm nay đổi ngay — nạp lại danh sách + đánh giá chờ duyệt của tôi
+  void queryClient.invalidateQueries({ queryKey: ['place', placeId.value, 'reviews'] })
+  void queryClient.invalidateQueries({ queryKey: ['review'] })
 }
 
 /** Chỉ đường trong ứng dụng (hộp thoại bản đồ lớn), không chuyển sang trang ngoài — chốt 2026-10-13. */

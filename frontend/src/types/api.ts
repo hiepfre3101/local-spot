@@ -300,6 +300,8 @@ export interface Review {
   commentCount: number
   ownerReply: OwnerReply | null
   createdAt: string
+  /** Lần cuối tác giả sửa số sao / nội dung / ngày đến; `null` = chưa sửa (cập nhật theo lần ghé mới — 2026-10-19). */
+  revisedAt: string | null
   updatedAt: string
   version: number
 }

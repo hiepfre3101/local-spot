@@ -1380,3 +1380,24 @@ Chưa commit.
 **Tài liệu**: openapi (`PlaceDetail.checkedInToday`), plan §10 F (mục Check-in FE — nhánh dashboard cũng thêm mục này, gộp sau có thể phải giải xung đột 1 dòng).
 
 **Kiểm chứng**: backend `CheckInFlowTests` thêm `detailTellsTheViewerWhetherTheyCheckedInToday` (trước / sau check-in, người khác, check-in hôm qua không tính) + khách = false; `CheckInFlowTests` + `PlaceFlowTests` 26 test xanh; `./mvnw verify` đầy đủ **358 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **203 test** xanh (P03 thay test "chưa có nút check-in" bằng 5 test: khách → đăng nhập; đã check-in → nút tắt, chủ không có nút; thành công gửi đúng vị trí + khoảng cách + nút đổi; quá xa → khoảng cách máy chủ, Thử lại đo lại; GPS kém không gửi, bị chặn quyền → hướng dẫn). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
+
+## 2026-10-19 23:30 (+07) — Cập nhật đánh giá theo lần ghé mới (phương án A)
+
+**Bối cảnh**: supervisor chạy thử check-in và nêu vấn đề: đã đánh giá một quán, một tháng sau quay lại, check-in, thấy khác trước và muốn đánh giá mới — nhưng chỉ sửa được đánh giá cũ (1 đánh giá / người / địa điểm, D2), và sửa xong cũng không có nhãn "đã check-in" vì nhãn so với **ngày viết đầu tiên** (chốt 2026-10-12). Nhánh `feature/review-revisit` xếp trên `feature/fe-checkin` (dùng hộp thoại check-in).
+
+**Phương án đã nêu** (agent đề xuất, supervisor chọn A, ưu tiên trước Cài đặt hồ sơ):
+- **A — cập nhật theo lần ghé mới** (chọn): giữ `UNIQUE(place_id, user_id)` và một phiếu / người trong Bayesian; nhãn so với lần sửa nội dung gần nhất.
+- B — A + lịch sử các lần ghé (`review_revisions`): để sau nếu còn thời gian, xây trên A không phải làm lại.
+- C — "bình luận cập nhật" kèm số sao mới: điểm nằm hai nơi, kiểm duyệt hai nơi.
+- D — mỗi lần ghé một đánh giá (bỏ UNIQUE): không khuyến nghị — đụng ràng buộc lõi, luồng Bayesian, D2, rate limit, trust score; tăng rủi ro spam.
+
+**Quyết định kỹ thuật:**
+- **Migration mới V6** `reviews.revised_at` DATETIME(6) NULL — không sửa migration cũ; **không backfill**: NULL đúng nghĩa "chưa sửa", nhãn của mọi đánh giá hiện có giữ nguyên (`COALESCE(revised_at, created_at)` = luật cũ). Không cột NOT NULL để không phá các seed chèn review.
+- `revised_at` chỉ ghi khi số sao / nội dung / ngày đến **đổi thật** — gửi lại y nguyên không "làm mới" đánh giá để lấy nhãn. Thêm / xoá ảnh không tính (ảnh không đổi nhận xét). Không dùng `updated_at` vì cột này đổi theo cả vote / kiểm duyệt.
+- **Luật nhãn đổi** (phần chống review ảo — supervisor đồng ý khi chọn A): check-in trong hoặc trước **ngày của lần sửa gần nhất** (hoặc ngày viết nếu chưa sửa). Vẫn không "xác nhận ngược": muốn có nhãn phải có mặt ở quán (check-in kiểm GPS) rồi mới cập nhật. Sửa vẫn qua các luật cũ (trust < 30 → chờ duyệt; bị từ chối → chờ duyệt lại), Bayesian chỉ tính lại khi tập PUBLISHED / số sao đổi như trước.
+- UI: hộp check-in thành công khi đã có đánh giá → "Thấy khác lần trước?" + nút **Cập nhật đánh giá**; P04 khi hôm nay đã check-in mà đánh giá chưa có nhãn → gợi ý + nút "Đặt ngày đến là hôm nay" (không tự đổi ngày thay người dùng); đánh giá đã sửa hiện "Cập nhật dd/mm/yyyy" (P03, trang cá nhân) để người đọc biết đã được làm mới.
+- **Sửa lỗi phát hiện khi thử**: sau check-in, danh sách đánh giá của địa điểm chưa nạp lại → nhãn của đánh giá viết cùng ngày phải F5 mới hiện. Nay nạp lại danh sách + đánh giá chờ duyệt của tôi.
+
+**Tài liệu**: openapi (`Review.revisedAt`, mô tả `authorCheckedIn`), database.md (`reviews.revised_at`), plan §10 F (mục mới).
+
+**Kiểm chứng**: backend `CheckInFlowTests.revisingTheReviewAfterARevisitEarnsTheLabel` (đánh giá 1 tháng trước + check-in hôm nay → chưa nhãn; gửi lại y nguyên → vẫn chưa, `revisedAt` trống; sửa thật → `revisedAt` có, có nhãn); test luật cũ `reviewLabelMeansCheckedInOnOrBeforeTheDayOfWriting` vẫn xanh; `./mvnw verify` đầy đủ **359 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **206 test** xanh (P04 +2: gợi ý + đặt ngày hôm nay + gửi đúng; không gợi ý khi chưa check-in / đã có nhãn. P03 +1: "Cập nhật đánh giá" sau check-in; test thành công kiểm thêm danh sách nạp lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.

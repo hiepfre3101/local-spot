@@ -1992,10 +1992,11 @@ components:
         photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
         helpfulCount: { type: integer }
         votedByMe: { type: boolean }
-        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review hoặc trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
+        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review — hoặc ngày sửa nội dung gần nhất (`revisedAt`, đổi 2026-10-19) — hay trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
         commentCount: { type: integer }
         ownerReply: { oneOf: [ { $ref: '#/components/schemas/OwnerReply' }, { type: 'null' } ] }
         createdAt: { type: string, format: date-time }
+        revisedAt: { type: [string, 'null'], format: date-time, description: '*(thêm 2026-10-19)* Lần cuối tác giả sửa số sao / nội dung / ngày đến (cập nhật theo lần ghé mới); null = chưa sửa. Gửi lại y nguyên không tính' }
         updatedAt: { type: string, format: date-time }
         version: { type: integer }
     ReviewPage:

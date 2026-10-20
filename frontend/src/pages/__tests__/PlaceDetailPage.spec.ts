@@ -127,6 +127,7 @@ function review(id: number, rating: number, helpfulCount: number): Review {
     commentCount: 0,
     ownerReply: null,
     createdAt: '2026-10-02T03:00:00Z',
+    revisedAt: null,
     updatedAt: '2026-10-02T03:00:00Z',
     version: 0,
   }
@@ -263,6 +264,7 @@ describe('PlaceDetailPage (P03)', () => {
         createdAt: '2026-10-19T12:24:00Z',
       }
       const wrapper = await mountAt('pho-thin-ha-noi')
+      const reviewCallsBefore = reviews.mock.calls.length
       await button(wrapper, 'Check-in')!.trigger('click')
       await flushPromises()
       expect(checkIn).toHaveBeenCalledWith(5, { lat: 21.0179, lng: 105.8523, accuracyM: 15 })
@@ -270,6 +272,28 @@ describe('PlaceDetailPage (P03)', () => {
       expect(dialog.text()).toContain('Check-in thành công')
       expect(dialog.text()).toContain('Bạn đang cách Phở Thìn 42 m')
       expect(button(wrapper, '✓ Đã check-in hôm nay')).toBeDefined()
+      // Danh sách đánh giá nạp lại (nhãn "đã check-in" của đánh giá viết hôm nay đổi ngay)
+      expect(reviews.mock.calls.length).toBeGreaterThan(reviewCallsBefore)
+    })
+
+    it('đã có đánh giá → gợi ý "Cập nhật đánh giá" theo lần ghé này', async () => {
+      useAuthStore().$patch({ user: { ...ME }, accessToken: 'token' })
+      detail.mockResolvedValue({ ...PLACE, myReviewId: 77 })
+      checkIn.mockResolvedValue({
+        id: 2,
+        placeId: 5,
+        place: PLACE,
+        distanceM: 15,
+        checkinDate: '2026-10-19',
+        createdAt: '2026-10-19T12:24:00Z',
+      })
+      const wrapper = await mountAt('pho-thin-ha-noi', { writeReviewRoute: true })
+      await button(wrapper, 'Check-in')!.trigger('click')
+      await flushPromises()
+      const dialog = wrapper.get('dialog.ls-dialog')
+      expect(dialog.text()).toContain('Thấy khác lần trước?')
+      const link = dialog.findAll('a').find((a) => a.text() === 'Cập nhật đánh giá')!
+      expect(link.attributes('href')).toBe('/places/pho-thin-ha-noi/review')
     })
 
     it('quá xa → khoảng cách từ máy chủ + Chỉ đường / Thử lại', async () => {
