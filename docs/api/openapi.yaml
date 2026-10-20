@@ -1837,6 +1837,7 @@ components:
             owner: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
             claimable: { type: boolean, description: Chưa có chủ và người xem chưa có yêu cầu đang chờ }
             myReviewId: { type: [integer, 'null'], format: int64, description: 'Review của người xem (kể cả đã xóa → nút "Viết đánh giá" bị ẩn, D2)' }
+            checkedInToday: { type: boolean, description: '*(thêm 2026-10-19)* Người xem đã check-in địa điểm hôm nay (giờ VN) — nút Check-in P12 thành "✓ Đã check-in hôm nay". Khách = false' }
             rejectReason: { type: [string, 'null'], description: Chỉ người đề xuất / kiểm duyệt viên thấy }
             version: { type: integer, description: 'Optimistic lock — gửi lại khi sửa (owner PATCH) / ra quyết định (2026-10-04)' }
     PlaceCreateRequest:

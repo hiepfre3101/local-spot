@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/vue-query'
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { isAxiosError } from 'axios'
 import { computed, defineAsyncComponent, ref, useTemplateRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
@@ -11,6 +11,7 @@ import { collectionKeys } from '@/components/collection/collectionQueries'
 import SaveToCollectionDialog from '@/components/collection/SaveToCollectionDialog.vue'
 import LsRating from '@/components/place/LsRating.vue'
 import PlacePhoto from '@/components/place/PlacePhoto.vue'
+import CheckInDialog from '@/components/place/CheckInDialog.vue'
 import DirectionsDialog from '@/components/place/DirectionsDialog.vue'
 import ReportDialog from '@/components/place/ReportDialog.vue'
 import type { ReportTarget } from '@/components/place/reportTarget'
@@ -24,6 +25,7 @@ import { useRequireLogin } from '@/composables/useRequireLogin'
 import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFilterStore } from '@/stores/filter'
+import type { PlaceDetail } from '@/types/api'
 import { formatNumber, formatPriceRange, tagLabel } from '@/utils/format'
 import { openState, weekSchedule } from '@/utils/openingHours'
 import { scoreText } from '@/utils/rating'
@@ -45,8 +47,9 @@ import { scoreText } from '@/utils/rating'
  * Yêu cầu sở hữu (UC23, 2026-10-18): khi `claimable` (đã duyệt, chưa có chủ, người xem chưa có yêu cầu đang chờ) — liên
  * kết "Yêu cầu xác nhận sở hữu" mở form ở `/owner` với địa điểm chọn sẵn.
  *
- * Chưa có ở đợt này (không có link chết — nút chỉ hiện khi đã có route / API): Check-in (P12). Khối "Ảnh check-in"
- * bỏ: check-in không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong từng đánh giá.
+ * Check-in (UC16, P12 — 2026-10-19): nút đầu hàng thao tác mở hộp thoại kiểm tra vị trí; hôm nay đã check-in
+ * (`checkedInToday`) → "✓ Đã check-in hôm nay" (tắt). Chủ địa điểm không thấy nút. Khối "Ảnh check-in" bỏ: check-in
+ * không có ảnh trong mô hình dữ liệu (U5) — ảnh review đã hiện trong từng đánh giá.
  */
 const props = defineProps<{ slug: string }>()
 
@@ -202,6 +205,26 @@ const nearby = useQuery({
   select: (items) => items.filter((p) => p.id !== placeId.value).slice(0, 12),
 })
 
+// ─── Check-in (UC16, P12) ───────────────────────────────────────────────────
+const queryClient = useQueryClient()
+const checkInDialog = useTemplateRef<InstanceType<typeof CheckInDialog>>('checkInDialog')
+/** Địa điểm đang hiện, không phải chủ (backend 409 với chủ — ẩn nút như "Viết đánh giá"). */
+const canCheckIn = computed(() => {
+  const p = place.value
+  return !!p && p.status === 'APPROVED' && !auth.user?.ownedPlaceIds.includes(p.id)
+})
+function openCheckIn(): void {
+  if (!requireLogin()) return
+  checkInDialog.value?.open()
+}
+/** Cập nhật ngay nút + số lượt check-in, rồi nạp lại theo máy chủ. */
+function checkedIn(): void {
+  queryClient.setQueryData<PlaceDetail>(['place', props.slug], (old) =>
+    old ? { ...old, checkedInToday: true, checkinCount: old.checkinCount + 1 } : old,
+  )
+  void queryClient.invalidateQueries({ queryKey: ['place', props.slug] })
+}
+
 /** Chỉ đường trong ứng dụng (hộp thoại bản đồ lớn), không chuyển sang trang ngoài — chốt 2026-10-13. */
 const directions = useTemplateRef<InstanceType<typeof DirectionsDialog>>('directions')
 /** `null` = không hiện nút: chủ địa điểm, địa điểm chưa duyệt. Khách bấm thì guard đưa qua đăng nhập. */
@@ -321,6 +344,12 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
+        <template v-if="canCheckIn">
+          <LsButton v-if="place.checkedInToday" variant="ghost" disabled
+            >✓ Đã check-in hôm nay</LsButton
+          >
+          <LsButton v-else variant="primary" @click="openCheckIn">Check-in</LsButton>
+        </template>
         <LsButton
           v-if="reviewAction"
           :variant="reviewAction === 'write' ? 'accent' : 'ghost'"
@@ -622,6 +651,14 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
       </LsCarousel>
     </div>
     <ReportDialog ref="reportDialog" />
+    <CheckInDialog
+      v-if="canCheckIn"
+      ref="checkInDialog"
+      :place="place"
+      @checked-in="checkedIn"
+      @refresh="detail.refetch()"
+      @directions="directions?.open()"
+    />
     <SaveToCollectionDialog
       v-if="place.status === 'APPROVED'"
       ref="saveDialog"

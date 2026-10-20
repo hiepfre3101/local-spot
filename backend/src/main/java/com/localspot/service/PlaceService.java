@@ -25,6 +25,7 @@ import com.localspot.mapper.PlaceMapper;
 import com.localspot.mapper.PlaceMapper.DetailExtras;
 import com.localspot.repository.AmenityRepository;
 import com.localspot.repository.CategoryRepository;
+import com.localspot.repository.CheckInRepository;
 import com.localspot.repository.PlaceClaimRepository;
 import com.localspot.repository.PlaceFilter;
 import com.localspot.repository.PlaceKeyset;
@@ -82,6 +83,7 @@ public class PlaceService {
     private final TaggableRepository taggables;
     private final ReviewRepository reviews;
     private final PlaceClaimRepository claims;
+    private final CheckInRepository checkIns;
     private final PlaceViewRepository views;
     private final PlaceMapper mapper;
     private final PlacePhotoService photos;
@@ -98,6 +100,7 @@ public class PlaceService {
             TaggableRepository taggables,
             ReviewRepository reviews,
             PlaceClaimRepository claims,
+            CheckInRepository checkIns,
             PlaceViewRepository views,
             PlaceMapper mapper,
             PlacePhotoService photos,
@@ -112,6 +115,7 @@ public class PlaceService {
         this.taggables = taggables;
         this.reviews = reviews;
         this.claims = claims;
+        this.checkIns = checkIns;
         this.views = views;
         this.mapper = mapper;
         this.photos = photos;
@@ -166,6 +170,7 @@ public class PlaceService {
                         emptyDistribution(),
                         false,
                         null,
+                        false,
                         true,
                         null, // ảnh bìa chỉ có khi đã xử lý xong
                         stored));
@@ -278,6 +283,10 @@ public class PlaceService {
         Long myReviewId = viewer.userId() == null
                 ? null
                 : reviews.findIdIncludingDeleted(place.getId(), viewer.userId()).orElse(null);
+        // Cùng "hôm nay" với luật 1 lần / địa điểm / ngày của CheckInService (giờ VN)
+        boolean checkedInToday = viewer.userId() != null
+                && checkIns.existsByUserIdAndPlaceIdAndCheckinDate(
+                        viewer.userId(), place.getId(), LocalDate.now(clock.withZone(VIEW_DATE_ZONE)));
         return mapper.toDetail(
                 place,
                 new DetailExtras(
@@ -285,6 +294,7 @@ public class PlaceService {
                         ratingDistribution(place.getId()),
                         claimable,
                         myReviewId,
+                        checkedInToday,
                         viewer.moderator() || viewer.is(proposerId),
                         photos.cover(place.getId()),
                         photos.gallery(place.getId(), seesUnreadyPhotos)));

@@ -78,6 +78,7 @@ const PLACE: PlaceDetail = {
   owner: { id: 42, displayName: 'Minh Anh', avatarUrl: null },
   claimable: false,
   myReviewId: null,
+  checkedInToday: false,
   rejectReason: null,
   version: 3,
 }

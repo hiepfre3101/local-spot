@@ -149,6 +149,8 @@ export interface PlaceDetail extends PlaceSummary {
   owner: UserSummary | null
   claimable: boolean
   myReviewId: number | null
+  /** Người xem đã check-in hôm nay (giờ VN) — nút Check-in P12. Khách = `false`. */
+  checkedInToday: boolean
   rejectReason: string | null
   version: number
 }

@@ -8,6 +8,7 @@
 @import './stats.css';
 @import './notification.css';
 @import './moderation.css';
+@import './checkin.css';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 

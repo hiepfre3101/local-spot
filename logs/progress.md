@@ -1362,3 +1362,21 @@ Chưa commit.
 **Tài liệu**: plan §10 F (mục trang quản trị: dashboard đã code; thêm mục Check-in FE, Bảng xếp hạng).
 
 **Kiểm chứng**: frontend `vitest` **205 test** xanh (thêm `AdminDashboardPage.spec` 6: khoảng mặc định 14 ngày + đổi khoảng; KPI ▲▼ + chữ, báo cáo tăng tô xấu, hàng chờ + tuổi cũ nhất; 2 biểu đồ + bảng ẩn + xếp hạng khu vực / địa điểm có liên kết; 5 việc đầu, hàng đầu "Xử lý tiếp"; không quyền kiểm duyệt → không tải hàng chờ; lỗi → thử lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được. Không đổi backend.
+## 2026-10-19 22:20 (+07) — Checklist F: check-in ở frontend (UC16, P12)
+
+**Bối cảnh**: nhánh `feature/fe-checkin` từ `develop` (độc lập với nhánh dashboard). Backend check-in có từ E (chốt 2026-10-12: accuracy ≤ 100 m, ≤ 200 m, 1 lần / địa điểm / ngày giờ VN; P12 câu hỏi 1–3 đã chốt theo đó). Bản mẫu P12 muốn nút đổi thành "✓ Đã check-in hôm nay", nhưng `PlaceDetail` không cho biết người xem đã check-in hôm nay chưa.
+
+**Supervisor chốt (qua câu hỏi):** thêm `checkedInToday` (theo người xem, như `myReviewId`) vào `PlaceDetail`. Bị loại: chỉ frontend (nút sai sau khi tải lại trang, phải bấm lần nữa mới biết qua 409).
+
+**Quyết định kỹ thuật:**
+- Backend: một truy vấn `exists` có sẵn (`existsByUserIdAndPlaceIdAndCheckinDate`) với **cùng "hôm nay" giờ VN** như luật 1 lần / ngày của `CheckInService` — không đụng luồng kiểm tra GPS (phần lõi chống gian lận). Khách = `false`.
+- Đo vị trí **mới, độ chính xác cao** (`maximumAge: 0`, `enableHighAccuracy`, hết 10 giây như P12) bằng hàm riêng `measurePosition` — không dùng `usePlaceStore().locate()` của "tìm quanh tôi" (vị trí cũ tới 5 phút, không có `accuracy`).
+- GPS kém hơn ±100 m: **không gửi** (backend chắc chắn từ chối) — báo độ chính xác hiện tại + cách khắc phục. Ngưỡng hiển thị (200 m, ±100 m) là hằng số phía client chỉ để giải thích; kiểm thật ở máy chủ.
+- Kết quả theo `code` của máy chủ: `CHECKIN_TOO_FAR` đọc `distanceM` của problem (đúng số máy chủ tính, không tự tính lại); `CHECKIN_ALREADY_TODAY` → trạng thái "Hôm nay bạn đã check-in" + nạp lại chi tiết (nút cũ tự sửa); thêm hai trạng thái bản mẫu thiếu nhưng API có (GPS kém, đã check-in). "Cách bật" mở hướng dẫn ngay trong hộp thoại (không có trang trợ giúp — không tạo link chết). "Chỉ đường" mở hộp thoại chỉ đường có sẵn của P03.
+- Hộp thoại `<dialog>` gốc: `aria-live` cho kết quả, Esc / ✕ huỷ (bỏ qua kết quả về muộn của lần đo đang chạy), radar đứng yên khi "giảm chuyển động"; biểu tượng kết quả khác **hình** (✓ / ghim / ghim gạch chéo), không chỉ khác màu. Viền `line-strong`, không bóng, lớp phủ tối phẳng 55%.
+- Bản mẫu ghi "+2 điểm xếp hạng" — công thức điểm đóng góp (FR-29) là **+1 / check-in**, nên hiện "+1 điểm đóng góp".
+- Nút "Check-in" đầu hàng thao tác P03 (thứ tự bản mẫu: Check-in · Viết đánh giá · Lưu), ẩn với chủ địa điểm (backend 409) và địa điểm chưa duyệt; khách → đăng nhập. Thành công → nút + số lượt check-in đổi ngay rồi nạp lại theo máy chủ.
+
+**Tài liệu**: openapi (`PlaceDetail.checkedInToday`), plan §10 F (mục Check-in FE — nhánh dashboard cũng thêm mục này, gộp sau có thể phải giải xung đột 1 dòng).
+
+**Kiểm chứng**: backend `CheckInFlowTests` thêm `detailTellsTheViewerWhetherTheyCheckedInToday` (trước / sau check-in, người khác, check-in hôm qua không tính) + khách = false; `CheckInFlowTests` + `PlaceFlowTests` 26 test xanh; `./mvnw verify` đầy đủ **358 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **203 test** xanh (P03 thay test "chưa có nút check-in" bằng 5 test: khách → đăng nhập; đã check-in → nút tắt, chủ không có nút; thành công gửi đúng vị trí + khoảng cách + nút đổi; quá xa → khoảng cách máy chủ, Thử lại đo lại; GPS kém không gửi, bị chặn quyền → hướng dẫn). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch, `vite build` được.
