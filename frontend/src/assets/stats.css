@@ -1,6 +1,7 @@
 /*
- * P09 Địa điểm của tôi. `.ls-kpis` / `.ls-kpi` / `.ls-up` / `.ls-down` port từ docs/design-system/components/bundle.css
- * (dải KPI như AdminDashboard, trên trang công khai). Thêm so với bản gốc: 2 cột trên điện thoại thay vì 4 cột chật.
+ * Thống kê dùng chung: P09 Địa điểm của tôi (trang công khai) và AdminDashboard (UC33). `.ls-kpis` / `.ls-kpi` /
+ * `.ls-up` / `.ls-down` port từ docs/design-system/components/bundle.css. Thêm so với bản gốc: 2 cột trên điện thoại
+ * thay vì 4 cột chật; `.stats-split` = `.ls-split` chỉ từ màn rộng.
  */
 @layer components {
   .ls-kpis {
@@ -44,7 +45,7 @@
   }
   /* Biểu đồ | "Cần phản hồi": hai vùng tách đường kẻ dọc (`.ls-split`) từ màn rộng; điện thoại xếp chồng, không kẻ */
   @media (min-width: 1024px) {
-    .owner-split > * + * {
+    .stats-split > * + * {
       border-left: 1px solid var(--line);
       padding-left: var(--space-8);
       margin-left: var(--space-8);
