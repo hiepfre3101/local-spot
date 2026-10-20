@@ -162,6 +162,13 @@ export const routes: RouteRecordRaw[] = [
         },
       },
       {
+        // UC33 — trang đầu của quản trị viên (mục đầu sidebar → `/admin` chuyển về đây)
+        path: 'dashboard',
+        name: 'admin-dashboard',
+        component: () => import('@/pages/admin/AdminDashboardPage.vue'),
+        meta: { title: 'Tổng quan', anyPermission: [Permission.DASHBOARD_VIEW] },
+      },
+      {
         // UC27–UC30 — hàng chờ gộp FIFO; lọc loại qua `?type=` (không tách route)
         path: 'queue',
         name: 'admin-queue',
