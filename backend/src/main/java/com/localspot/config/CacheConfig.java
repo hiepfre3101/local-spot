@@ -2,6 +2,7 @@ package com.localspot.config;
 
 import com.localspot.dto.response.AmenityResponse;
 import com.localspot.dto.response.CategoryNode;
+import com.localspot.dto.response.CityResponse;
 import com.localspot.dto.response.HomeResponse;
 import com.localspot.dto.response.LeaderboardEntryResponse;
 import java.time.Duration;
@@ -35,12 +36,15 @@ public class CacheConfig implements CachingConfigurer {
     public static final String CATEGORIES = "categories";
     public static final String AMENITIES = "amenities";
     public static final String HOME = "home";
+    /** Thành phố có địa điểm (P08, thêm 2026-10-19) — đổi khi duyệt địa điểm ở thành phố mới; trễ tối đa TTL. */
+    public static final String CITIES = "cities";
     /** Bảng xếp hạng (FR-29): tính từ dữ liệu gốc, chấp nhận trễ tối đa {@link #LEADERBOARD_TTL} — không xóa khi ghi. */
     public static final String LEADERBOARD = "leaderboard";
 
     private static final Logger log = LoggerFactory.getLogger(CacheConfig.class);
     private static final Duration TTL = Duration.ofHours(1);
     private static final Duration HOME_TTL = Duration.ofMinutes(10);
+    private static final Duration CITIES_TTL = Duration.ofMinutes(10);
     private static final Duration LEADERBOARD_TTL = Duration.ofMinutes(5);
 
     /**
@@ -52,11 +56,13 @@ public class CacheConfig implements CachingConfigurer {
         JavaType categories = jsonMapper.getTypeFactory().constructCollectionType(List.class, CategoryNode.class);
         JavaType amenities = jsonMapper.getTypeFactory().constructCollectionType(List.class, AmenityResponse.class);
         JavaType home = jsonMapper.getTypeFactory().constructType(HomeResponse.class);
+        JavaType cities = jsonMapper.getTypeFactory().constructCollectionType(List.class, CityResponse.class);
         JavaType leaderboard =
                 jsonMapper.getTypeFactory().constructCollectionType(List.class, LeaderboardEntryResponse.class);
         return builder -> builder.withCacheConfiguration(CATEGORIES, typed(jsonMapper, categories, TTL))
                 .withCacheConfiguration(AMENITIES, typed(jsonMapper, amenities, TTL))
                 .withCacheConfiguration(HOME, typed(jsonMapper, home, HOME_TTL))
+                .withCacheConfiguration(CITIES, typed(jsonMapper, cities, CITIES_TTL))
                 .withCacheConfiguration(LEADERBOARD, typed(jsonMapper, leaderboard, LEADERBOARD_TTL));
     }
 

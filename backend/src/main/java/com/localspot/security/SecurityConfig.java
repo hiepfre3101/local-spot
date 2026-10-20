@@ -102,8 +102,9 @@ public class SecurityConfig {
                         // Tìm kiếm (UC08, openapi security: []) — khách tìm không cần đăng nhập
                         .requestMatchers(HttpMethod.GET, "/api/v1/search")
                         .permitAll()
-                        // Danh mục, tiện ích (openapi Catalog, security: []) — form và bộ lọc của khách
-                        .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/amenities")
+                        // Danh mục, tiện ích, thành phố (openapi Catalog, security: []) — form và bộ lọc của khách;
+                        // /cities thêm 2026-10-19 (bộ lọc khu vực P08, supervisor đồng ý sửa luật này)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/categories", "/api/v1/amenities", "/api/v1/cities")
                         .permitAll()
                         // Trang chủ (FR-08, openapi security: []) — không có dữ liệu theo người xem
                         .requestMatchers(HttpMethod.GET, "/api/v1/home")

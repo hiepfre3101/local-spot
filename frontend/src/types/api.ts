@@ -160,6 +160,21 @@ export interface SearchPage extends CursorPage<PlaceSummary> {
   degraded: boolean
 }
 
+/** openapi `City` (`GET /cities`) — `name` khớp đúng `places.city`. */
+export interface City {
+  name: string
+  placeCount: number
+}
+
+export type LeaderboardPeriod = 'WEEK' | 'MONTH' | 'ALL'
+
+/** openapi `LeaderboardEntry` — hạng kiểu thi đấu (cùng điểm cùng hạng). */
+export interface LeaderboardEntry {
+  rank: number
+  user: UserSummary
+  points: number
+}
+
 export interface PlaceRef {
   id: number
   slug: string

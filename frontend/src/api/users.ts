@@ -3,6 +3,8 @@ import type {
   CheckIn,
   CollectionSummary,
   CursorPage,
+  LeaderboardEntry,
+  LeaderboardPeriod,
   PlaceSummary,
   PublicProfile,
   Review,
@@ -24,6 +26,22 @@ export const usersApi = {
   reviews(userId: number, cursor?: string | null): Promise<CursorPage<Review>> {
     return http
       .get<CursorPage<Review>>(`/users/${userId}/reviews`, page(cursor))
+      .then((r) => r.data)
+  },
+
+  /**
+   * Bảng xếp hạng đóng góp (FR-29) — `WEEK` / `MONTH` là 7 / 30 ngày trượt; `city` khớp đúng tên thành phố của địa điểm
+   * được đóng góp. Backend cache 5 phút.
+   */
+  leaderboard(
+    period: LeaderboardPeriod,
+    city: string | null,
+    limit = 100,
+  ): Promise<LeaderboardEntry[]> {
+    return http
+      .get<LeaderboardEntry[]>('/leaderboard', {
+        params: { period, city: city ?? undefined, limit },
+      })
       .then((r) => r.data)
   },
 

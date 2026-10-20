@@ -82,6 +82,13 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: 'Quản lý địa điểm', anyPermission: [Permission.PLACE_UPDATE_OWN] },
       },
       {
+        // P08 — bộ lọc trên query: period (WEEK / MONTH / ALL), city (sitemap)
+        path: 'leaderboard',
+        name: 'leaderboard',
+        component: () => import('@/pages/LeaderboardPage.vue'),
+        meta: { title: 'Bảng xếp hạng' },
+      },
+      {
         // P05 — một trang có thanh tiến độ, cảnh báo trùng U7 (sitemap)
         path: 'propose',
         name: 'propose',

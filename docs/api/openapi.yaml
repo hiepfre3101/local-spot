@@ -393,6 +393,18 @@ paths:
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+  /cities:
+    get:
+      tags: [Catalog]
+      summary: Thành phố có địa điểm đang hiện, nhiều địa điểm trước (cache Redis 10 phút)
+      description: '*(thêm 2026-10-19)* Bộ lọc khu vực của bảng xếp hạng (P08): `name` khớp đúng `places.city`, dùng thẳng cho tham số `city` của `/leaderboard`. Không xoá cache khi duyệt địa điểm — thành phố mới xuất hiện trễ tối đa 10 phút.'
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/City' } }
   /amenities:
     get:
       tags: [Catalog]
@@ -1735,6 +1747,11 @@ components:
         description: { type: [string, 'null'] }
         icon: { type: string, description: Khóa trung tính — frontend ánh xạ sang icon của design system }
         awardedAt: { type: string, format: date-time }
+    City:
+      type: object
+      properties:
+        name: { type: string }
+        placeCount: { type: integer, description: Số địa điểm APPROVED ở thành phố }
     LeaderboardEntry:
       type: object
       properties:
