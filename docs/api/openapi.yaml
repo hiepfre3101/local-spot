@@ -1,0 +1,2378 @@
+openapi: 3.1.0
+info:
+  title: LocalSpot API
+  version: 1.0.0-draft
+  description: |
+    Đặc tả API thiết kế trước (design-first) cho LocalSpot. Nguồn: plan-v1.md §6, docs/requirements.md,
+    docs/analysis/use-cases.md, docs/design/database.md.
+
+    **Quy ước**
+    - Prefix `/api/v1`, JSON UTF-8, thời gian ISO-8601 UTC.
+    - Lỗi theo RFC 7807 (`application/problem+json`, schema `Problem`); lỗi validate có `errors[]` theo từng trường.
+      Phân loại *(chốt 2026-10-03)*: **400** `MALFORMED_REQUEST` = request không đọc được (JSON hỏng, sai kiểu / thiếu
+      tham số — client gửi đúng kiểu thì không gặp, nên không liệt kê ở từng operation); **422** = đọc được nhưng sai luật;
+      **409** `CONCURRENT_MODIFICATION` (optimistic lock) / `DUPLICATE_RESOURCE` (trùng UNIQUE); **500** `INTERNAL_ERROR`
+      không lộ chi tiết, kèm `errorId` trùng với dòng log máy chủ. Mã lỗi đầy đủ: `ErrorCode.java`.
+    - Danh sách dài phân trang **cursor**: `?cursor=&limit=` → `{ items, nextCursor }`; `nextCursor = null` là hết.
+    - Xác thực: `Authorization: Bearer <accessToken>` (15 phút). Refresh token nằm trong cookie HttpOnly
+      `refresh_token` (Path=/api/v1/auth, SameSite=Strict) — S1.
+    - Phân quyền ghi trong `x-permission` của từng operation (khớp bảng `permissions`).
+    - Nhóm đường dẫn theo vai trò: công khai / thành viên ở gốc, `/owner/*` chủ địa điểm, `/moderation/*` kiểm duyệt viên, `/admin/*` quản trị viên.
+    - Chi tiết địa điểm tra theo `slug` (`/places/{slug}`, thân thiện SEO — plan §6); mọi thao tác ghi dùng `placeId`.
+    - Realtime: STOMP qua WebSocket thuần `/ws` (không SockJS — chốt 2026-10-16), kênh cá nhân `/user/queue/notifications`
+      (FR-27). Gửi `Authorization: Bearer <accessToken>` trong khung **CONNECT** (trình duyệt không gắn được header vào
+      handshake); thiếu / sai token → ERROR rồi đóng phiên. Chỉ được SUBSCRIBE kênh cá nhân, không SEND. Mỗi khung là một
+      `Notification` vừa được ghi; mất kết nối thì đọc lại qua `GET /me/notifications`. Token chỉ kiểm lúc CONNECT.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Dev
+tags:
+  - name: Auth
+  - name: Me
+  - name: Users
+  - name: Catalog
+  - name: Places
+  - name: Search
+  - name: Reviews
+  - name: Comments
+  - name: CheckIns
+  - name: Collections
+  - name: Reports
+  - name: Owner
+  - name: Moderation
+  - name: Admin
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ───────────────────────────── Auth (UC01–UC05) ─────────────────────────────
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Đăng ký (FR-01)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { description: 'Đã tạo tài khoản, email xác thực đã được xếp hàng gửi' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Xác thực email bằng token trong link (FR-02)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '204': { description: Đã xác thực }
+        '410': { description: Token hết hạn hoặc đã dùng, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Gửi lại email xác thực
+      responses:
+        '204': { description: Đã xếp hàng gửi }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Đăng nhập (FR-03) — giới hạn 5 lần / 15 phút theo (email, IP)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Thành công. Refresh token trả qua `Set-Cookie`.
+          headers:
+            Set-Cookie: { schema: { type: string }, description: 'refresh_token=...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Tài khoản bị khóa, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Làm mới access token, xoay vòng refresh token (FR-04)
+      description: Refresh token đã dùng bị gửi lại → thu hồi toàn bộ refresh token của người dùng, trả 401 (U2).
+      security:
+        - refreshCookie: []
+      responses:
+        '200':
+          description: Access token mới + cookie refresh token mới
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Đăng xuất — thu hồi refresh token hiện tại, xóa cookie
+      security:
+        - refreshCookie: []
+      responses:
+        '204': { description: Đã đăng xuất }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Yêu cầu link đặt lại mật khẩu (FR-05)
+      description: Luôn trả 204 kể cả khi email không tồn tại (không lộ thông tin tài khoản).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '204': { description: Đã xử lý }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Đặt lại mật khẩu bằng token (hết hạn 30 phút, dùng 1 lần)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token: { type: string }
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '204': { description: 'Đã đổi mật khẩu, mọi refresh token bị thu hồi' }
+        '410': { description: Token hết hạn hoặc đã dùng }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ───────────────────────────── Me (UC06, UC19) ─────────────────────────────
+  /me:
+    get:
+      tags: [Me]
+      summary: Hồ sơ của tôi
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+    patch:
+      tags: [Me]
+      summary: Cập nhật hồ sơ (FR-07)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateProfileRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Me]
+      summary: Xóa tài khoản — xóa mềm + ẩn danh hóa (D7)
+      responses:
+        '204': { description: Đã xóa }
+  /me/avatar:
+    put:
+      tags: [Me]
+      summary: Đổi avatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MeResponse' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /me/password:
+    put:
+      tags: [Me]
+      summary: Đổi mật khẩu (FR-06) — thu hồi các refresh token khác
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { $ref: '#/components/schemas/Password' }
+      responses:
+        '204': { description: Đã đổi }
+        '422':
+          description: |
+            Dữ liệu không hợp lệ, hoặc mật khẩu hiện tại sai (`code = INVALID_CURRENT_PASSWORD`, `errors[0].field = currentPassword`).
+            *(2026-10-03: đổi từ 401 — interceptor frontend hiểu 401 là hết phiên và sẽ refresh / đăng xuất)*
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+  /me/reviews:
+    get:
+      tags: [Me]
+      summary: Review của tôi (mọi trạng thái, kèm lý do bị từ chối)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+  /me/check-ins:
+    get:
+      tags: [Me, CheckIns]
+      summary: Lịch sử check-in của tôi, mới nhất trước (UC16)
+      description: |
+        *(chốt 2026-10-12)* Chỉ chính chủ — không có `/users/{id}/check-ins` công khai vì lịch sử check-in lộ nơi và lúc
+        một người có mặt. Không trả tọa độ đã gửi (chỉ lưu để giải trình).
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInPage' } } } }
+  /me/claims:
+    get:
+      tags: [Me, Owner]
+      summary: Yêu cầu xác nhận sở hữu của tôi, mới nhất trước (UC23)
+      description: |
+        *(thêm 2026-10-18)* P09 `/owner`: người gửi theo dõi yêu cầu (đang chờ / được duyệt / bị từ chối kèm lý do) và
+        gửi lại khi bị từ chối. Không trả số điện thoại, minh chứng, người duyệt.
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/MyClaimPage' } } } }
+  /me/places:
+    get:
+      tags: [Me]
+      summary: Địa điểm tôi đã đề xuất (mọi trạng thái)
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+  /me/collections:
+    get:
+      tags: [Me, Collections]
+      summary: Bộ sưu tập của tôi — công khai lẫn riêng tư, mới tạo trước (≤ 50, không phân trang)
+      description: '*(thêm 2026-10-18)* `placeId` → mỗi bộ kèm `containsPlace` (hộp "Lưu" trên P03 tick sẵn bộ đã có địa điểm).'
+      parameters:
+        - { name: placeId, in: query, required: false, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+  /me/notifications:
+    get:
+      tags: [Me]
+      summary: Thông báo (FR-27)
+      description: '*(chốt 2026-10-16)* Mới nhất trước (keyset theo id). Loại và `data` xem schema `Notification`.'
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/NotificationPage' } } } }
+  /me/notifications/unread-count:
+    get:
+      tags: [Me]
+      summary: Số thông báo chưa đọc
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { count: { type: integer } } }
+  /me/notifications/{notificationId}/read:
+    post:
+      tags: [Me]
+      summary: Đánh dấu đã đọc
+      description: 'Idempotent — đã đọc thì giữ thời điểm đọc cũ. Thông báo của người khác → 404 `NOTIFICATION_NOT_FOUND`.'
+      parameters: [ { $ref: '#/components/parameters/NotificationId' } ]
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /me/notifications/read-all:
+    post:
+      tags: [Me]
+      summary: Đánh dấu tất cả đã đọc
+      responses:
+        '204': { description: OK }
+
+  # ───────────────────────────── Users (UC20, UC21) ─────────────────────────────
+  /users/{userId}:
+    get:
+      tags: [Users]
+      summary: Hồ sơ công khai (không lộ email — NFR-11)
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PublicProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/reviews:
+    get:
+      tags: [Users]
+      summary: Review đã công khai của người dùng
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/follow:
+    put:
+      tags: [Users]
+      summary: Theo dõi (FR-28) — idempotent
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: Đang theo dõi }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Tự theo dõi mình (`SELF_ACTION_FORBIDDEN` — cùng mã với vote review của mình; chốt 2026-10-12)' }
+    delete:
+      tags: [Users]
+      summary: Bỏ theo dõi — idempotent
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: Đã bỏ }
+  /users/{userId}/followers:
+    get:
+      tags: [Users]
+      summary: Danh sách người theo dõi — theo dõi gần nhất trước
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserSummaryPage' } } } }
+  /users/{userId}/following:
+    get:
+      tags: [Users]
+      summary: Danh sách đang theo dõi
+      security: []
+      parameters: [ { $ref: '#/components/parameters/UserId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/UserSummaryPage' } } } }
+  /leaderboard:
+    get:
+      tags: [Users]
+      summary: Bảng xếp hạng đóng góp (FR-29)
+      description: |
+        *(O3 — chốt 2026-10-12)* Điểm tính từ nội dung **đang hiển thị**: review +10 · ảnh READY trong review +2 (tối đa 5
+        ảnh / review, tính theo ngày của review) · vote hữu ích hợp lệ nhận được +1 · check-in +1 · đề xuất địa điểm được
+        duyệt +15. `WEEK` / `MONTH` = 7 / 30 ngày trượt. Hạng kiểu thi đấu (cùng điểm cùng hạng). Bỏ tài khoản bị khóa;
+        0 điểm không có mặt. Cache 5 phút.
+      security: []
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [WEEK, MONTH, ALL], default: MONTH } }
+        - { name: city, in: query, description: 'Chỉ tính đóng góp cho địa điểm ở thành phố này (khớp `places.city`) — "region" của P08', schema: { type: string, maxLength: 100 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/LeaderboardEntry' } }
+
+  # ───────────────────────────── Catalog ─────────────────────────────
+  /categories:
+    get:
+      tags: [Catalog]
+      summary: Cây danh mục (cache Redis)
+      description: |
+        Tối đa 2 cấp (chốt 2026-10-06): danh mục gốc kèm `children`, danh mục con có `children` rỗng. Sắp theo `sortOrder`
+        rồi `id`. Cache Redis (TTL 1 giờ), xóa ngay sau khi quản trị viên ghi *(E3)*.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+  /cities:
+    get:
+      tags: [Catalog]
+      summary: Thành phố có địa điểm đang hiện, nhiều địa điểm trước (cache Redis 10 phút)
+      description: '*(thêm 2026-10-19)* Bộ lọc khu vực của bảng xếp hạng (P08): `name` khớp đúng `places.city`, dùng thẳng cho tham số `city` của `/leaderboard`. Không xoá cache khi duyệt địa điểm — thành phố mới xuất hiện trễ tối đa 10 phút.'
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/City' } }
+  /amenities:
+    get:
+      tags: [Catalog]
+      summary: Danh sách tiện ích (cache Redis)
+      description: Dùng chung cho mọi danh mục (O7, chốt 2026-10-06), sắp theo `id`. Cache như `/categories`.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Amenity' } }
+  /home:
+    get:
+      tags: [Catalog]
+      summary: Dữ liệu trang chủ — nổi bật (bayesian_score), danh mục, mới nhất (FR-08, cache)
+      description: |
+        *(chốt 2026-10-12)* Một request cho cả trang chủ. `featured`: tối đa 8 địa điểm APPROVED điểm Bayesian cao nhất
+        (cùng truy vấn / thứ tự với `GET /places?sort=SCORE`), bỏ địa điểm chưa có review PUBLISHED. `latest`: 8 địa điểm
+        mới nhất (`sort=NEWEST`). `featuredReview`: review đang hiện (PUBLISHED trên địa điểm APPROVED) từ 4 sao, nhiều lượt
+        hữu ích nhất trong 30 ngày gần đây (không có thì mọi thời điểm), chỉ trả đoạn trích ≤ 180 ký tự; `null` khi chưa có.
+        Không có trường theo người xem → cache Redis dùng chung (TTL 10 phút), xóa sau commit khi duyệt / sửa địa điểm,
+        điểm đổi, tập review đang hiện đổi, sửa danh mục, đổi ảnh trang chủ (`banners` — UC34). Vote và ảnh xử lý xong
+        không xóa cache (trễ tối đa một TTL).
+      security: []
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/HomeResponse' } } } }
+
+  # ───────────────────────────── Places (UC08–UC11) ─────────────────────────────
+  /places:
+    get:
+      tags: [Places]
+      summary: Danh sách địa điểm đã duyệt + lọc + sắp xếp (FR-10)
+      description: |
+        *(chốt 2026-10-04)* Keyset theo thứ tự đã chọn, phụ thêm `id DESC` để đồng điểm không trùng / sót giữa các trang.
+        Cursor gắn với `sort` — dùng cursor của thứ tự khác → 422 `INVALID_CURSOR`.
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 }, description: Gồm cả danh mục con }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } }, description: Phải có đủ tất cả (AND) }
+        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: 'Ngân sách (VND): `priceMin ≤ priceMax`; địa điểm chưa khai giá bị loại' }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 }, description: Theo điểm Bayesian hiển thị }
+        - { name: city, in: query, schema: { type: string }, description: 'Khớp đúng tên, không phân biệt hoa thường / dấu' }
+        - { name: sort, in: query, schema: { type: string, enum: [SCORE, NEWEST, MOST_REVIEWED], default: SCORE } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceSummaryPage' } } } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Places]
+      summary: Đề xuất địa điểm mới → PENDING (FR-15, UC11)
+      description: |
+        Slug sinh từ tên + thành phố, bỏ dấu (`pho-thin-ha-noi`), trùng thì thêm `-2`, `-3`… Thẻ trùng slug gộp làm một.
+        Danh mục / tiện ích không tồn tại, `priceMin > priceMax`, khung giờ mở = đóng → 422 theo trường.
+        `photos` (không bắt buộc): JPEG/PNG, ≤ 10 ảnh/request, ≤ 5 MB và ≤ 40 MP mỗi ảnh, tổng ≤ 30 ảnh/địa điểm. Ảnh hỏng →
+        422 `INVALID_IMAGE` trường `photos[i]` (không tạo gì); quá số ảnh → 422 `PHOTO_LIMIT_EXCEEDED`; request > 55 MB → 413;
+        kho ảnh lỗi → 503. Ảnh trả về ở trạng thái `PROCESSING`, xử lý nền qua RabbitMQ *(E2, 2026-10-06)*.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [place]
+              properties:
+                place: { $ref: '#/components/schemas/PlaceCreateRequest' }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: JPEG/PNG, ≤ 5 MB mỗi ảnh }
+            encoding:
+              place: { contentType: application/json }
+      responses:
+        '201':
+          description: 'Đã tạo, chờ duyệt'
+          headers:
+            Location: { schema: { type: string }, description: '/api/v1/places/{slug}' }
+          content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /places/duplicates:
+    get:
+      tags: [Places]
+      summary: Kiểm tra nghi trùng trước khi đề xuất — tên gần giống trong 50 m (U7)
+      description: |
+        Ứng viên: địa điểm `APPROVED` + đề xuất `PENDING` **của chính người hỏi** trong 50 m (đề xuất chờ của người khác vẫn
+        riêng tư). "Gần giống" (chốt 2026-10-06): chuẩn hóa tên (chữ thường, bỏ dấu, bỏ từ chung chung như "quán",
+        "nhà hàng", "cà phê", "coffee"), rồi một tên chứa nguyên từ tên kia (≥ 4 ký tự) hoặc độ giống Levenshtein ≥ 0.8.
+        Gần nhất trước, kèm `distanceM` *(E4)*.
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+      responses:
+        '200':
+          description: Danh sách nghi trùng (rỗng nếu không có) — chỉ cảnh báo, không chặn
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /places/nearby:
+    get:
+      tags: [Places]
+      summary: Địa điểm trong bán kính, sắp theo khoảng cách (FR-11, UC09)
+      description: |
+        Chỉ địa điểm `APPROVED`; `categoryId` gồm cả danh mục con. Lọc thô `MBRContains` trên spatial index
+        (`FORCE INDEX` — NFR-03) rồi lọc chính xác `ST_Distance_Sphere`; gần nhất trước, kèm `distanceM` (mét). Ngoài khoảng
+        `radius` / `limit` / tọa độ → 422 theo trường; thiếu `lat` / `lng` → 400 *(E4)*.
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/Lat' }
+        - { $ref: '#/components/parameters/Lng' }
+        - { name: radius, in: query, schema: { type: integer, minimum: 100, maximum: 20000, default: 2000 }, description: Mét (U8) }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 } }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /places/{slug}:
+    get:
+      tags: [Places]
+      summary: Chi tiết địa điểm theo slug (FR-13) — ghi nhận lượt xem theo ngày
+      description: |
+        Địa điểm chưa duyệt chỉ người đề xuất, chủ và kiểm duyệt viên xem được — người khác nhận 404 như không tồn tại.
+        Lượt xem (+1 / request, gộp theo ngày giờ Việt Nam) chỉ tính cho địa điểm APPROVED và không tính khi chủ tự xem.
+        Gửi kèm token (không bắt buộc) để nhận `myReviewId`, `claimable` theo người xem.
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Search (UC08) ─────────────────────────────
+  /search:
+    get:
+      tags: [Search]
+      summary: Tìm kiếm tiếng Việt qua Meilisearch, fallback MySQL LIKE (FR-09, U9)
+      description: |
+        *(chốt 2026-10-08)* Meilisearch v1.54 tự bỏ dấu và đổi `đ → d` ("pho" ra "Phở", "dong do" ra "Đông Đô"); thêm
+        synonym (`backend/src/main/resources/search/synonyms.json` — "cafe" ↔ "cà phê"), typo từ 4 ký tự,
+        `matchingStrategy = last`. Trước khi gửi, bỏ từ chỉ loại hình quán ("quán", "quán ăn", "tiệm", "nhà hàng",
+        "cửa hàng", "shop" — giữ "cà phê", giữ "quan" trước số = quận); bỏ hết thì giữ nguyên.
+        Tìm trên tên, thẻ, danh mục (+ danh mục cha), địa chỉ, thành phố, mô tả — ưu tiên theo thứ tự đó. Meilisearch chỉ
+        trả id; thẻ địa điểm nạp lại từ MySQL và chỉ giữ địa điểm **đang** APPROVED.
+        Phân trang theo vị trí (cursor mờ, gắn với `sort`, tối đa 1000 kết quả); cursor của thứ tự khác → 422 `INVALID_CURSOR`.
+        Meilisearch lỗi → `degraded = true`: tên chứa mọi từ khóa (`LIKE`, không phân biệt dấu), `RELEVANCE` xếp như `SCORE`;
+        không gọi lại Meilisearch trong 30 giây sau lỗi.
+        Lọc theo khoảng cách không có ở đây — UC08 2a chuyển sang `/places/nearby` (UC09).
+      security: []
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 100 } }
+        - { name: categoryId, in: query, schema: { type: integer, format: int64 }, description: Gồm cả danh mục con }
+        - { name: amenityIds, in: query, style: form, explode: false, schema: { type: array, items: { type: integer, format: int64 } }, description: Phải có đủ tất cả (AND) }
+        - { name: priceMax, in: query, schema: { type: integer, minimum: 0 }, description: 'Như `/places`: địa điểm chưa khai giá bị loại' }
+        - { name: minRating, in: query, schema: { type: number, minimum: 1, maximum: 5 }, description: Theo điểm Bayesian }
+        - { name: sort, in: query, schema: { type: string, enum: [RELEVANCE, SCORE, NEWEST, MOST_REVIEWED], default: RELEVANCE }, description: 'RELEVANCE: độ liên quan, cùng mức thì điểm Bayesian cao hơn trước' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK. `degraded = true` khi đang dùng fallback.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/PlaceSummaryPage' }
+                  - type: object
+                    properties:
+                      degraded: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ───────────────────────────── Reviews (UC12–UC14) ─────────────────────────────
+  /places/{placeId}/reviews:
+    get:
+      tags: [Reviews]
+      summary: Review đã công khai của địa điểm (FR-14)
+      description: |
+        *(chốt 2026-10-08)* Chỉ `PUBLISHED`. NEWEST: keyset theo id; HELPFUL: keyset `(helpfulCount, id)` — cursor của
+        thứ tự này dùng cho thứ tự kia → 422 `INVALID_CURSOR`. Địa điểm không tồn tại / chưa duyệt → 404.
+        Gửi kèm token để nhận `votedByMe`. `photos`: người khác chỉ thấy ảnh `READY`, tác giả thấy cả `PROCESSING` /
+        `FAILED`. Ảnh review không gộp vào gallery của địa điểm (chốt 2026-10-09).
+      security: []
+      parameters:
+        - { $ref: '#/components/parameters/PlaceId' }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: sort, in: query, schema: { type: string, enum: [NEWEST, HELPFUL], default: NEWEST } }
+        - { name: rating, in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Lọc theo số sao }
+        - { name: unreplied, in: query, schema: { type: boolean, default: false }, description: '*(thêm 2026-10-18)* Chỉ review chưa có phản hồi của chủ — cột "Cần phản hồi" của P09. Không giới hạn cho chủ: phản hồi vốn công khai' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReviewPage' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Reviews]
+      summary: Viết review kèm ảnh — một request multipart (FR-17/19/23, UC12, S2)
+      description: |
+        *(chốt 2026-10-08)* Kiểm tra theo thứ tự: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → validate (422; nội dung
+        ≥ 20 ký tự sau khi bỏ khoảng trắng hai đầu, `visitedAt` ≤ hôm nay theo giờ Việt Nam) → địa điểm APPROVED (404) →
+        không phải chủ địa điểm (409 `SELF_ACTION_FORBIDDEN`) → chưa có review, kể cả đã xóa (409 `REVIEW_ALREADY_EXISTS`,
+        D2) → ≤ 5 review / 24 h, đếm cả review đã xóa (429 + `Retry-After`) → trust ≥ 30 và địa điểm chưa nhận ≥ 3 review
+        từ cùng dải IP (IPv4 /24, IPv6 /64) trong 24 h ⇒ `PUBLISHED`, ngược lại `PENDING` (dải IP: gắn cờ `ipFlagged` — U3).
+        Ảnh (`photos`, tùy chọn): kiểm tra cả lô trước khi ghi gì (một ảnh hỏng → 422 đúng `photos[i]`, review không được
+        tạo), xử lý nền như ảnh địa điểm; response trả ảnh `PROCESSING`. Tối đa 10 ảnh mỗi review, kể cả thêm sau.
+      x-permission: review:create
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [review]
+              properties:
+                review: { $ref: '#/components/schemas/ReviewCreateRequest' }
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary }, description: 'JPEG/PNG (chữ ký file + đuôi tệp khớp), ≤ 5 MB, ≤ 40 MP mỗi ảnh — WebP/HEIC: frontend xuất JPEG từ canvas (chốt 2026-10-06)' }
+            encoding:
+              review: { contentType: application/json }
+      responses:
+        '201': { description: Đã tạo — xem `status`, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '403': { description: Chưa xác thực email, content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /reviews/{reviewId}:
+    get:
+      tags: [Reviews]
+      summary: Một review — nạp màn sửa (P04, UC13)
+      description: |
+        *(thêm 2026-10-17 — màn sửa cần nạp đúng review, chưa có endpoint đọc một review)* Cần đăng nhập. Tác giả thấy
+        review của mình ở mọi trạng thái (kèm `rejectReason`); người khác chỉ thấy review đang hiện công khai (PUBLISHED
+        trên địa điểm APPROVED), như vote / bình luận. Review đã xóa / không thấy → 404 `REVIEW_NOT_FOUND`.
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '401': { description: Chưa đăng nhập }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Reviews]
+      summary: Sửa review của mình (FR-18) — tác giả trust < 30 thì review về PENDING
+      description: |
+        *(chốt 2026-10-08)* `HIDDEN` (bị ẩn sau báo cáo) → 409 `REVIEW_LOCKED`. `REJECTED` → gửi lại: luôn về `PENDING`,
+        xóa `rejectReason`. `PUBLISHED` / `PENDING`: tác giả trust < 30 → `PENDING`, ngược lại giữ nguyên (review đang chờ
+        không tự được đăng vì sửa). `version` lệch → 409 `CONCURRENT_MODIFICATION`.
+      x-permission: review:update-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewUpdateRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Review' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Reviews]
+      summary: Xóa mềm review của mình — không viết lại được cho địa điểm này (D2)
+      x-permission: review:delete-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '204': { description: Đã xóa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /reviews/{reviewId}/photos:
+    post:
+      tags: [Reviews]
+      summary: Thêm ảnh vào review của mình (FR-19 — chốt 2026-10-09)
+      description: |
+        Tổng ≤ 10 ảnh mỗi review (ảnh `FAILED` không tính) → vượt: 422 `PHOTO_LIMIT_EXCEEDED`. Không đổi trạng thái review
+        (ảnh không duyệt lại). Review `HIDDEN` → 409 `REVIEW_LOCKED`.
+      x-permission: review:update-own
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: binary } }
+      responses:
+        '201': { description: 'Ảnh vừa nhận, `PROCESSING`', content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Photo' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /reviews/{reviewId}/photos/{photoId}:
+    delete:
+      tags: [Reviews]
+      summary: Xóa một ảnh của review của mình (chốt 2026-10-09)
+      x-permission: review:update-own
+      parameters:
+        - { $ref: '#/components/parameters/ReviewId' }
+        - { name: photoId, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '204': { description: Đã xóa — object trong kho xóa sau commit }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review hoặc ảnh không tồn tại (`PHOTO_NOT_FOUND` — ảnh không thuộc review này)' }
+        '409': { description: 'Review `HIDDEN` → `REVIEW_LOCKED`' }
+  /reviews/{reviewId}/vote:
+    put:
+      tags: [Reviews]
+      summary: Vote "hữu ích" — idempotent (FR-20)
+      description: >-
+        Mọi thành viên đăng nhập (không cần email đã xác thực). `counted` = trust người vote ≥ 30 tại thời điểm vote —
+        chỉ vote `counted` cộng vào `users.helpful_votes_count` của tác giả (trust); `helpfulCount` đếm mọi vote. Vote
+        lần hai không đổi gì. Chỉ vote review đang hiện (`PUBLISHED`, địa điểm `APPROVED`). Chốt 2026-10-11.
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+        '409': { description: 'Vote review của chính mình → `SELF_ACTION_FORBIDDEN`' }
+    delete:
+      tags: [Reviews]
+      summary: Bỏ vote — idempotent
+      description: Chưa vote vẫn 200. Bỏ vote `counted` thì trừ lại trust của tác giả.
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/VoteResult' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+
+  # ───────────────────────────── Comments (UC15) ─────────────────────────────
+  /reviews/{reviewId}/comments:
+    get:
+      tags: [Comments]
+      summary: Bình luận của review — bình luận gốc kèm trả lời (2 cấp)
+      description: >-
+        Phân trang theo bình luận gốc, cũ trước; mỗi gốc kèm toàn bộ trả lời đang hiện, cũ trước. Gốc đã xóa / bị ẩn
+        nhưng còn trả lời → placeholder `deleted = true` (không `author` / `content`). Chốt 2026-10-11.
+      security: []
+      parameters: [ { $ref: '#/components/parameters/ReviewId' }, { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CommentPage' } } } }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+        '422': { description: 'Cursor / limit sai (`INVALID_CURSOR`, `VALIDATION_FAILED`)' }
+    post:
+      tags: [Comments]
+      summary: Bình luận / trả lời (FR-21) — `parentId` phải là bình luận gốc
+      description: >-
+        Thứ tự kiểm tra: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → nội dung không rỗng sau khi bỏ khoảng trắng hai
+        đầu, ≤ 2000 ký tự (422) → review đang hiện (404) → `parentId` là bình luận gốc đang hiện của cùng review (422
+        trường `parentId`; trả lời một trả lời → `COMMENT_DEPTH_EXCEEDED`) → ≤ 20 bình luận / 10 phút / tài khoản (429
+        `TOO_MANY_REQUESTS` + `Retry-After`; chỉ tính lần đã qua mọi kiểm tra; Redis sập thì cho qua — chốt 2026-10-17).
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentCreateRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Comment' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
+        '404': { description: 'Review không tồn tại / không hiện (`REVIEW_NOT_FOUND`)' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /comments/{commentId}:
+    delete:
+      tags: [Comments]
+      summary: Xóa mềm bình luận của mình
+      description: Xóa gốc không xóa các trả lời — gốc thành placeholder khi còn trả lời (chốt 2026-10-11).
+      x-permission: comment:delete-own
+      parameters: [ { name: commentId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: Đã xóa }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Không tồn tại / đã xóa (`COMMENT_NOT_FOUND`)' }
+
+  # ───────────────────────────── Check-in (UC16) ─────────────────────────────
+  /places/{placeId}/check-in:
+    post:
+      tags: [CheckIns]
+      summary: Check-in — accuracy ≤ 100 m, cách địa điểm ≤ 200 m, 1 lần / ngày (FR-24, U5)
+      description: |
+        *(chốt 2026-10-12)* Kiểm tra theo thứ tự: email đã xác thực (403 `EMAIL_NOT_VERIFIED`) → validate (422
+        `VALIDATION_FAILED`) → `accuracyM` ≤ 100 (422 `GPS_INACCURATE`, trường `accuracyM`) → địa điểm `APPROVED` (404
+        `PLACE_NOT_FOUND`) → không phải chủ địa điểm (409 `SELF_ACTION_FORBIDDEN`) → chưa check-in địa điểm này hôm nay
+        theo giờ Việt Nam (409 `CHECKIN_ALREADY_TODAY`) → cách ≤ 200 m theo `ST_Distance_Sphere` (422 `CHECKIN_TOO_FAR`,
+        problem có `distanceM` làm tròn lên). Thành công → `checkinCount` của địa điểm +1.
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CheckInRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CheckInResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: 'Email chưa xác thực (`EMAIL_NOT_VERIFIED`)' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Đã check-in hôm nay (`CHECKIN_ALREADY_TODAY`) hoặc là chủ địa điểm (`SELF_ACTION_FORBIDDEN`)' }
+        '422': { description: 'GPS không đủ chính xác (`GPS_INACCURATE`) hoặc quá xa (`CHECKIN_TOO_FAR`, problem có `distanceM`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+
+  # ───────────────────────────── Collections (UC18) ─────────────────────────────
+  /collections:
+    post:
+      tags: [Collections]
+      summary: Tạo bộ sưu tập (FR-26)
+      description: |
+        *(chốt 2026-10-12)* Công khai = hiện ở `GET /users/{id}/collections` (tab trên trang cá nhân) và mở được qua
+        `/shared/collections/{shareSlug}`; riêng tư = chỉ chủ. `shareSlug` = tên bỏ dấu (≤ 30 ký tự) + 6 ký tự ngẫu nhiên.
+        Tối đa 50 bộ / người (422 `COLLECTION_LIMIT_EXCEEDED`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '422': { description: 'Validate hoặc quá 50 bộ (`COLLECTION_LIMIT_EXCEEDED`)', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  /collections/{collectionId}:
+    get:
+      tags: [Collections]
+      summary: Chi tiết bộ sưu tập (chủ sở hữu hoặc công khai)
+      description: |
+        Bộ riêng tư của người khác → 404 `COLLECTION_NOT_FOUND` (không tiết lộ có tồn tại). Địa điểm bị ẩn sau khi thêm:
+        chủ thấy kèm `place.status` để tự bỏ ra; người khác không thấy, không tính vào `placeCount` (chốt 2026-10-12).
+        Thêm gần nhất trước.
+      security: [ {}, { bearerAuth: [] } ]
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Collections]
+      summary: Sửa tên / mô tả / công khai — bật công khai thì sinh `shareSlug`
+      description: |
+        Gửi lại đủ form (tên bắt buộc; `isPublic` vắng = riêng tư). Về riêng tư thu hồi `shareSlug`; công khai lại sinh
+        slug mới — link cũ không mở lại được. Sửa tên khi vẫn công khai giữ slug. Bộ của người khác → 404.
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CollectionRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Collections]
+      summary: Xóa bộ sưu tập — xóa hẳn kèm danh sách địa điểm (không xóa địa điểm)
+      parameters: [ { $ref: '#/components/parameters/CollectionId' } ]
+      responses:
+        '204': { description: Đã xóa }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /collections/{collectionId}/places/{placeId}:
+    put:
+      tags: [Collections]
+      summary: Thêm địa điểm vào bộ sưu tập — idempotent
+      description: |
+        Đã có trong bộ → chỉ cập nhật ghi chú (khi có body). Địa điểm mới phải `APPROVED` (404 `PLACE_NOT_FOUND`); tối đa
+        100 địa điểm / bộ (422 `COLLECTION_LIMIT_EXCEEDED`). Bộ của người khác → 404 `COLLECTION_NOT_FOUND`.
+      parameters: [ { $ref: '#/components/parameters/CollectionId' }, { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { note: { type: string, maxLength: 500 } } }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: 'Ghi chú quá dài hoặc bộ đã đủ 100 địa điểm (`COLLECTION_LIMIT_EXCEEDED`)' }
+    delete:
+      tags: [Collections]
+      summary: Bỏ địa điểm khỏi bộ sưu tập — idempotent
+      parameters: [ { $ref: '#/components/parameters/CollectionId' }, { $ref: '#/components/parameters/PlaceId' } ]
+      responses:
+        '204': { description: OK }
+  /shared/collections/{shareSlug}:
+    get:
+      tags: [Collections]
+      summary: Xem bộ sưu tập công khai qua link chia sẻ
+      description: Luôn là góc nhìn công khai (kể cả khi chủ tự mở link). Bộ đã về riêng tư / slug cũ → 404.
+      security: []
+      parameters: [ { name: shareSlug, in: path, required: true, schema: { type: string } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CollectionDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/collections:
+    get:
+      tags: [Collections]
+      summary: Bộ sưu tập công khai của một người — tab trên trang cá nhân P06 (chốt 2026-10-12)
+      security: []
+      parameters: [ { name: userId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CollectionSummary' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ───────────────────────────── Reports (UC17) ─────────────────────────────
+  /reports:
+    post:
+      tags: [Reports]
+      summary: Báo cáo vi phạm — 1 báo cáo / người / đối tượng (FR-25, U10)
+      description: |
+        Chỉ báo cáo được nội dung đang hiện công khai: địa điểm APPROVED, review PUBLISHED trên địa điểm APPROVED, bình
+        luận VISIBLE trên review như vậy, người dùng chưa xóa. Không báo cáo review / bình luận của mình hay chính mình;
+        địa điểm thì được, kể cả người đề xuất — tên / vị trí / danh mục không ai sửa được (O5, O8) *(chốt 2026-10-14)*.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportCreateRequest' }
+      responses:
+        '201': { description: Đã ghi nhận }
+        '403': { description: '`EMAIL_NOT_VERIFIED` — cần email đã xác thực (như viết review / bình luận)' }
+        '404': { description: 'Đối tượng không tồn tại / không hiện công khai — `PLACE_NOT_FOUND`, `REVIEW_NOT_FOUND`, `COMMENT_NOT_FOUND`, `USER_NOT_FOUND`' }
+        '409':
+          description: '`REPORT_ALREADY_EXISTS` (đã báo cáo, kể cả khi đã được xử lý — U10), `SELF_ACTION_FORBIDDEN` (nội dung của mình)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Thiếu `detail` với lý do `WRONG_INFO` / `OTHER` }
+
+  # ───────────────────────────── Owner (UC23–UC26) ─────────────────────────────
+  /places/{placeId}/claims:
+    post:
+      tags: [Owner]
+      summary: Yêu cầu xác nhận sở hữu kèm minh chứng (FR-31, UC23)
+      description: |
+        *(chốt 2026-10-16)* Cần email đã xác thực. Minh chứng: 1–5 ảnh JPEG / PNG (≤ 5 MB, ≤ 40 MP — cùng kiểm tra với
+        ảnh địa điểm), lưu nguyên bản ở kho **riêng tư**, chỉ kiểm duyệt viên xem qua link tạm. Người khác đang chờ cho
+        cùng địa điểm không chặn — duyệt một yêu cầu thì các yêu cầu còn lại tự bị từ chối.
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [claim, evidence]
+              properties:
+                claim:
+                  type: object
+                  required: [contactPhone]
+                  properties:
+                    contactPhone: { type: string, maxLength: 20, description: 'Chữ số và + ( ) . - khoảng trắng, 6–20 ký tự' }
+                    note: { type: string, maxLength: 1000 }
+                evidence: { type: array, minItems: 1, maxItems: 5, items: { type: string, format: binary } }
+            encoding:
+              claim: { contentType: application/json }
+      responses:
+        '201': { description: 'Đã gửi, chờ duyệt' }
+        '403': { description: '`EMAIL_NOT_VERIFIED`' }
+        '404': { description: 'Địa điểm không tồn tại / chưa duyệt — `PLACE_NOT_FOUND`' }
+        '409':
+          description: '`PLACE_ALREADY_OWNED` (đã có chủ — UC23 3a), `CLAIM_ALREADY_PENDING` (bạn đã có yêu cầu đang chờ — 3b)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: 'Thiếu / quá 5 ảnh (`evidence`), ảnh hỏng (`evidence[i]`), số điện thoại sai (`contactPhone`)' }
+        '503': { description: Kho file tạm thời không khả dụng — không có gì được lưu }
+  /owner/places:
+    get:
+      tags: [Owner]
+      summary: Địa điểm tôi đang sở hữu
+      x-permission: place:update-own
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+  /owner/places/{placeId}:
+    patch:
+      tags: [Owner]
+      summary: Chủ cập nhật thông tin địa điểm (FR-32)
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceUpdateRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceDetail' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: '`version` lệch (`CONCURRENT_MODIFICATION`)' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /owner/places/{placeId}/photos:
+    post:
+      tags: [Owner]
+      summary: Chủ thêm ảnh địa điểm
+      description: |
+        Cùng quy tắc ảnh như `POST /places` (JPEG/PNG, ≤ 10 ảnh/request, tổng ≤ 30 ảnh/địa điểm — ảnh `FAILED` không tính).
+        Ảnh đầu tiên của địa điểm chưa có bìa thành ảnh bìa.
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [photos]
+              properties:
+                photos: { type: array, maxItems: 10, items: { type: string, format: binary } }
+      responses:
+        '201':
+          description: 'Đã nhận, đang xử lý nền — các ảnh vừa thêm, `status: PROCESSING`'
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Photo' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { description: Request vượt 55 MB / ảnh vượt 5 MB (`PAYLOAD_TOO_LARGE`) }
+        '422': { description: '`INVALID_IMAGE` (theo trường `photos[i]`) / `PHOTO_LIMIT_EXCEEDED`', content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+        '503': { description: Kho ảnh không khả dụng (`SERVICE_UNAVAILABLE`) }
+  /owner/places/{placeId}/photos/{photoId}:
+    delete:
+      tags: [Owner]
+      summary: Chủ xóa ảnh
+      description: Xóa bản ghi và các object trên kho (sau commit). Xóa ảnh bìa → ảnh chưa lỗi kế tiếp thành bìa. Ảnh không thuộc địa điểm → 404 `PHOTO_NOT_FOUND`.
+      x-permission: place:update-own
+      parameters: [ { $ref: '#/components/parameters/PlaceId' }, { name: photoId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /owner/places/{placeId}/stats:
+    get:
+      tags: [Owner]
+      summary: Thống kê địa điểm — lượt xem, check-in, phân bố sao (FR-34)
+      description: |
+        *(chốt 2026-10-17)* Chỉ chủ **hiện tại** (403 / 404 như sửa địa điểm); địa điểm đang bị ẩn vẫn xem được.
+        `[from, to]` tính cả hai đầu theo ngày giờ Việt Nam, mặc định 30 ngày đến hôm nay, tối đa 366 ngày.
+        Chuỗi theo ngày đủ mọi ngày (ngày trống = 0). `ratingDistribution`, `bayesianScore`, `reviewCount` là hiện trạng,
+        cùng số với trang chi tiết.
+      x-permission: place:stats-own
+      parameters:
+        - { $ref: '#/components/parameters/PlaceId' }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/PlaceStats' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: '`PLACE_NOT_FOUND`' }
+        '422': { description: '`from` sau `to`, hoặc khoảng quá 366 ngày' }
+  /reviews/{reviewId}/reply:
+    put:
+      tags: [Owner]
+      summary: Chủ phản hồi review — tạo hoặc sửa, 1 phản hồi / review (FR-33, D6)
+      description: |
+        *(chốt 2026-10-16)* Chỉ chủ **hiện tại** của địa điểm chứa review; chỉ review đang hiện công khai (PUBLISHED trên
+        địa điểm APPROVED) — review khác → 404. `content` cắt khoảng trắng hai đầu. Chủ hiện tại sửa phản hồi của chủ trước
+        → phản hồi đứng tên chủ hiện tại. Phản hồi hiện ở `Review.ownerReply`.
+      x-permission: review:reply-own-place
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/OwnerReply' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review không tồn tại / không đang hiện — `REVIEW_NOT_FOUND`' }
+        '422': { description: '`content` trống hoặc quá 2000 ký tự' }
+    delete:
+      tags: [Owner]
+      summary: Chủ xóa phản hồi
+      description: |
+        *(chốt 2026-10-16)* Xóa hẳn (bảng không có xóa mềm). Idempotent — chưa có phản hồi vẫn 204. Xóa được cả khi review
+        đã bị ẩn sau đó.
+      x-permission: review:reply-own-place
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '204': { description: OK }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: 'Review không tồn tại / đã xóa — `REVIEW_NOT_FOUND`' }
+
+  # ───────────────────────────── Moderation (UC27–UC30) — MODERATOR, ADMIN ─────────────────────────────
+  /moderation/queue:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ gộp 4 loại việc, FIFO — cũ nhất trước, không đổi thứ tự
+      description: |
+        Chỉ gồm các loại người gọi có quyền (`place:approve`, `review:moderate`, `report:handle`, `claim:approve`).
+        Sắp xếp cố định `(submittedAt, type, id)` tăng dần (`type` theo thứ tự PLACE, REVIEW, REPORT, CLAIM; nhóm báo cáo
+        xếp theo báo cáo đầu tiên); cursor mã hóa bộ ba này (keyset, không OFFSET).
+        Xử lý từng mục qua endpoint `decision` của loại tương ứng.
+
+        *(chốt 2026-10-17)* Mỗi loại dùng **đúng điều kiện** của hàng chờ riêng (`/moderation/places`, `/reviews`,
+        `/reports`, `/claims`) — review trên địa điểm đã ẩn không vào. `position` tính lại theo hàng chờ hiện tại: mục
+        phía trước được xử lý thì trang sau đánh số lùi lên. `type` là loại không có quyền → 403 (không trả rỗng).
+      x-permission: 'any of: place:approve, review:moderate, report:handle, claim:approve'
+      parameters:
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/ModerationItemType' }, description: Lọc theo loại; bỏ trống = tất cả }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationQueuePage' } } } }
+        '403': { description: 'Không có quyền kiểm duyệt nào, hoặc `type` là loại không có quyền — `FORBIDDEN`' }
+        '422': { description: '`INVALID_CURSOR`; `limit` ngoài 1–50' }
+  /moderation/places:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ địa điểm
+      description: |
+        *(2026-10-04)* Bỏ trống `status` = PENDING, xếp FIFO (cũ nhất trước); trạng thái đã xử lý xếp mới nhất trước.
+        *(2026-10-07)* Mỗi mục PENDING kèm `possibleDuplicates`: tên gần giống trong 50 m (cùng luật U7 của
+        `/places/duplicates`) nhưng xét cả đề xuất chờ **của mọi người** — người đề xuất không thấy đề xuất chờ của nhau,
+        nên đây là nơi bắt trùng giữa hai người dùng. Trạng thái khác: `possibleDuplicates` rỗng.
+      x-permission: place:approve
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PlaceStatus' } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationPlacePage' } } } }
+  /moderation/places/{placeId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một địa điểm (UC27) — chi tiết đầy đủ, người đề xuất, nghi trùng
+      description: |
+        *(thêm 2026-10-19 — sitemap có route `/admin/moderation/places/:id`; hàng chờ chỉ có id, `/places/{slug}` cần
+        slug và không có nghi trùng)* Mọi trạng thái (mục vừa được người khác xử lý vẫn mở được để hiện kết quả), như
+        `/moderation/reviews/{id}`, `/moderation/claims/{id}`. Không tính lượt xem. `possibleDuplicates` chỉ khi còn
+        PENDING — cùng luật với hàng chờ.
+      x-permission: place:approve
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationPlaceDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /moderation/places/{placeId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt / từ chối địa điểm (FR-35) — ghi activity_log (PLACE_APPROVE / PLACE_REJECT)
+      description: |
+        *(chốt 2026-10-04)* Chỉ áp dụng cho địa điểm PENDING (không đảo quyết định); kiểm duyệt viên không duyệt đề xuất
+        của chính mình.
+      x-permission: place:approve
+      parameters: [ { $ref: '#/components/parameters/PlaceId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `PLACE_ALREADY_MODERATED` (không còn PENDING), `CONCURRENT_MODIFICATION` (`version` lệch / người khác vừa xử
+            lý), `SELF_ACTION_FORBIDDEN` (tự duyệt đề xuất của mình)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
+  /moderation/reviews:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ review — kèm trust tác giả, cờ nghi ngờ IP (FR-36, UC28)
+      description: |
+        *(chốt 2026-10-15)* Review PENDING trên địa điểm APPROVED, FIFO theo id (= thứ tự viết; review gửi lại sau khi bị
+        từ chối giữ vị trí cũ). Review trên địa điểm đã bị ẩn không vào hàng chờ.
+      x-permission: review:moderate
+      parameters:
+        - { name: ipFlagged, in: query, schema: { type: boolean }, description: Lọc theo cờ nghi ngờ IP; bỏ trống = tất cả }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationReviewPage' } } } }
+  /moderation/reviews/{reviewId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một review — lịch sử tác giả, review cùng dải IP (UC28 bước 2)
+      description: |
+        *(thêm 2026-10-15 — sitemap có route `/admin/moderation/reviews/:id`)* Mọi trạng thái (review vừa được người khác
+        xử lý vẫn mở được để hiện kết quả); review đã xóa → 404.
+      x-permission: review:moderate
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ModerationReviewDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /moderation/reviews/{reviewId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt / từ chối review — từ chối ghi 1 vi phạm cho tác giả (UC28) — ghi activity_log (REVIEW_APPROVE / REVIEW_REJECT)
+      description: |
+        *(chốt 2026-10-15)* Chỉ áp dụng cho review PENDING. Duyệt → PUBLISHED, tính lại điểm Bayesian. Từ chối → REJECTED
+        kèm lý do (tác giả thấy ở `/me/reviews`) và **một vi phạm** cho tác giả (25 điểm phạt, hết hạn sau 30 ngày —
+        requirements §5.1). Kiểm duyệt viên không duyệt review của mình hay review về địa điểm mình sở hữu.
+      x-permission: review:moderate
+      parameters: [ { $ref: '#/components/parameters/ReviewId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `REVIEW_ALREADY_MODERATED` (không còn PENDING), `CONCURRENT_MODIFICATION` (`version` lệch / người khác vừa xử
+            lý — optimistic lock), `SELF_ACTION_FORBIDDEN` (review của mình / về địa điểm mình sở hữu)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
+  /moderation/reports:
+    get:
+      tags: [Moderation]
+      summary: Hàng đợi báo cáo gom theo đối tượng (FR-37, UC29)
+      x-permission: report:handle
+      parameters:
+        - { name: targetType, in: query, schema: { $ref: '#/components/schemas/ReportTargetType' } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReportGroupPage' } } } }
+  /moderation/reports/{targetType}/{targetId}:
+    get:
+      tags: [Moderation]
+      summary: Chi tiết một nhóm — từng báo cáo đang mở kèm mô tả, người sẽ bị ghi vi phạm *(thêm 2026-10-14)*
+      x-permission: report:handle
+      parameters:
+        - { name: targetType, in: path, required: true, schema: { $ref: '#/components/schemas/ReportTargetType' } }
+        - { name: targetId, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReportGroupDetail' } } } }
+        '404': { description: '`REPORT_NOT_FOUND` — không còn báo cáo nào đang mở về đối tượng này' }
+  /moderation/reports/decision:
+    post:
+      tags: [Moderation]
+      summary: Xử lý mọi báo cáo về một đối tượng — HIDE (ẩn + ghi vi phạm) hoặc DISMISS
+      description: |
+        Không có thao tác sửa nội dung (O8). Ai bị ghi vi phạm khi HIDE (O9, chốt 2026-10-14): tác giả review / bình
+        luận; người bị báo cáo (USER: không có gì để ẩn, chỉ ghi vi phạm — khóa tài khoản là `POST /admin/users/{id}/lock`);
+        địa điểm: người đề xuất, **chỉ khi** `confirmedReason` là SPAM / FAKE / OFFENSIVE — không bao giờ chủ hay người
+        đã check-in. Đối tượng đã bị xóa → báo cáo đóng RESOLVED, không ghi vi phạm (UC29 3c). Ghi `activity_log`
+        `REPORT_HIDE` / `REPORT_DISMISS` với loại / id của đối tượng.
+      x-permission: report:handle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReportDecision' }
+      responses:
+        '204': { description: OK }
+        '409':
+          description: '`REPORT_ALREADY_HANDLED` (người khác vừa xử lý / không còn báo cáo mở), `SELF_ACTION_FORBIDDEN` (nội dung của mình, địa điểm mình sở hữu)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: 'Thiếu `confirmedReason` khi ẩn địa điểm, hoặc lý do không có trong các báo cáo đang mở' }
+  /moderation/claims:
+    get:
+      tags: [Moderation]
+      summary: Hàng chờ yêu cầu sở hữu (FR-40)
+      description: '*(2026-10-16)* PENDING, FIFO theo id (= thứ tự gửi)'
+      x-permission: claim:approve
+      parameters: [ { $ref: '#/components/parameters/Cursor' }, { $ref: '#/components/parameters/Limit' } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ClaimPage' } } } }
+  /moderation/claims/{claimId}:
+    get:
+      tags: [Moderation]
+      summary: Màn duyệt một yêu cầu sở hữu (UC30)
+      description: |
+        *(thêm 2026-10-16 — sitemap có route `/admin/moderation/claims/:id`)* Mọi trạng thái (yêu cầu vừa được người khác
+        xử lý vẫn mở được để hiện kết quả).
+      x-permission: claim:approve
+      parameters: [ { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Claim' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /moderation/claims/{claimId}/evidence/{index}:
+    get:
+      tags: [Moderation]
+      summary: Link tạm (presigned, 5 phút) xem file minh chứng trong bucket riêng tư
+      description: |
+        *(đổi 2026-10-16: 302 → 200 JSON)* Access token chỉ nằm trong bộ nhớ và gửi bằng header (S1), nên `<img src>` trỏ
+        thẳng vào endpoint này không xác thực được, còn axios theo 302 thì JavaScript không đọc được `Location`. Client
+        gọi bằng axios, gán `url` vào ảnh; quá `expiresAt` thì gọi lại — mỗi lần gọi ký một link mới.
+      x-permission: claim:approve
+      parameters:
+        - { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } }
+        - { name: index, in: path, required: true, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: '`Cache-Control: no-store` — mỗi lần mở ký link mới'
+          content: { application/json: { schema: { $ref: '#/components/schemas/EvidenceLink' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /moderation/claims/{claimId}/decision:
+    post:
+      tags: [Moderation]
+      summary: Duyệt → gán owner + role OWNER, tự từ chối các yêu cầu khác cùng địa điểm (UC30) — ghi activity_log (CLAIM_APPROVE / CLAIM_REJECT)
+      description: |
+        *(chốt 2026-10-16)* Chỉ áp dụng cho yêu cầu PENDING; không tự duyệt yêu cầu của mình.
+        **Duyệt**: khóa dòng địa điểm (hai duyệt đồng thời trên cùng địa điểm → chỉ một thành công, không bao giờ hai chủ —
+        U6); gán `places.owner_id`, thêm role OWNER nếu chưa có (có hiệu lực ngay, không cần đăng nhập lại); các yêu cầu
+        đang chờ khác của địa điểm → REJECTED kèm lý do tự động. **Review sẵn có của chủ mới** trên địa điểm → HIDDEN
+        (không ghi vi phạm) và tính lại điểm — chủ không chấm điểm địa điểm của mình.
+        **Từ chối**: `reason` bắt buộc; **không** ghi vi phạm (requirements §5.1); người dùng gửi lại được.
+      x-permission: claim:approve
+      parameters: [ { name: claimId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModerationDecision' }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            `CLAIM_ALREADY_MODERATED` (không còn PENDING — kể cả bị tự từ chối vì yêu cầu khác vừa được duyệt),
+            `PLACE_ALREADY_OWNED`, `CONCURRENT_MODIFICATION` (`version` lệch), `SELF_ACTION_FORBIDDEN` (yêu cầu của mình)
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+        '422': { description: Từ chối mà thiếu `reason` }
+
+  # ───────────────────────────── Admin (UC31–UC33) — chỉ ADMIN ─────────────────────────────
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Tìm kiếm người dùng (FR-38)
+      x-permission: user:view
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: role, in: query, schema: { $ref: '#/components/schemas/RoleName' } }
+        - { name: locked, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AdminUserPage' } } } }
+        '422': { description: '`role` không tồn tại, `limit` ngoài 1–50, hoặc cursor hỏng (`INVALID_CURSOR`)' }
+  /admin/users/{userId}/lock:
+    post:
+      tags: [Admin]
+      summary: Khóa tài khoản — thu hồi mọi refresh token (UC29 luồng 3b)
+      description: |
+        Khóa lại người đang bị khóa = cập nhật thời hạn / lý do. Access token đang giữ bị chặn ngay ở request kế tiếp
+        (quyền đọc từ CSDL mỗi request). Admin không tự khóa mình *(2026-10-03)*.
+      x-permission: user:lock
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [until, reason]
+              properties:
+                until: { type: string, format: date-time, description: Phải ở tương lai }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Tự khóa chính mình (`SELF_ACTION_FORBIDDEN`)' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Admin]
+      summary: Mở khóa (idempotent)
+      x-permission: user:lock
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/users/{userId}/roles:
+    put:
+      tags: [Admin]
+      summary: Gán danh sách role (thay toàn bộ)
+      description: |
+        Luật *(chốt 2026-10-03, đóng O6)*:
+        - Danh sách phải có `USER` → thiếu thì 422 `ROLE_USER_REQUIRED`.
+        - `OWNER` không gán / gỡ ở đây (chỉ cấp qua duyệt yêu cầu sở hữu UC30): có `OWNER` trong danh sách khác với hiện
+          trạng → 422 `OWNER_ROLE_MANAGED_BY_CLAIM`. Gửi lại nguyên danh sách lấy từ `GET /admin/users` là hợp lệ.
+        - Admin không tự gỡ `ADMIN` của mình → 409 `SELF_ACTION_FORBIDDEN`. Gỡ `ADMIN` của admin khác được phép.
+        Có hiệu lực ngay ở request kế tiếp của người bị đổi quyền, không cần đăng nhập lại.
+      x-permission: user:assign-role
+      parameters: [ { $ref: '#/components/parameters/UserId' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: array, minItems: 1, items: { $ref: '#/components/schemas/RoleName' } }
+      responses:
+        '204': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Tự gỡ ADMIN của mình (`SELF_ACTION_FORBIDDEN`)' }
+        '422': { description: 'Rỗng / role không tồn tại (`VALIDATION_FAILED`), thiếu USER, đổi OWNER' }
+  /admin/categories:
+    post:
+      tags: [Admin]
+      summary: Tạo danh mục (FR-39)
+      x-permission: category:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+        '409': { description: '`SLUG_TAKEN` (trường `slug`)' }
+        '422': { description: 'Validate / cha không tồn tại (`VALIDATION_FAILED`), cha không phải gốc (`CATEGORY_DEPTH_EXCEEDED`, trường `parentId`)' }
+  /admin/categories/{categoryId}:
+    put:
+      tags: [Admin]
+      summary: Sửa danh mục
+      x-permission: category:manage
+      parameters: [ { name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/CategoryNode' } } } }
+        '404': { description: '`CATEGORY_NOT_FOUND`' }
+        '409': { description: '`SLUG_TAKEN`' }
+        '422': { description: '`CATEGORY_DEPTH_EXCEEDED`: cha không phải gốc / danh mục đang có con được gắn làm con / tự làm cha của mình' }
+    delete:
+      tags: [Admin]
+      summary: Xóa danh mục — chỉ khi không còn địa điểm / danh mục con (không xóa dữ liệu kéo theo)
+      x-permission: category:manage
+      parameters: [ { name: categoryId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '404': { description: '`CATEGORY_NOT_FOUND`' }
+        '409': { description: '`CATEGORY_IN_USE` — còn danh mục con hoặc địa điểm (kể cả địa điểm đã xóa mềm)' }
+  /admin/amenities:
+    post:
+      tags: [Admin]
+      summary: Tạo tiện ích
+      x-permission: amenity:manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AmenityRequest' }
+      responses:
+        '201': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+        '409': { description: '`SLUG_TAKEN` (trường `slug`)' }
+  /admin/amenities/{amenityId}:
+    put:
+      tags: [Admin]
+      summary: Sửa tiện ích
+      x-permission: amenity:manage
+      parameters: [ { name: amenityId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AmenityRequest' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Amenity' } } } }
+        '404': { description: '`AMENITY_NOT_FOUND`' }
+        '409': { description: '`SLUG_TAKEN`' }
+    delete:
+      tags: [Admin]
+      summary: Xóa tiện ích — chỉ khi không địa điểm nào dùng
+      x-permission: amenity:manage
+      parameters: [ { name: amenityId, in: path, required: true, schema: { type: integer, format: int64 } } ]
+      responses:
+        '204': { description: OK }
+        '404': { description: '`AMENITY_NOT_FOUND`' }
+        '409': { description: '`AMENITY_IN_USE` — đang gắn với địa điểm (kể cả đã xóa mềm). Bắt buộc chặn ở API: khóa ngoại `place_amenity` là CASCADE' }
+  /admin/dashboard:
+    get:
+      tags: [Admin]
+      summary: Thống kê — người dùng mới, review theo ngày, địa điểm hot (FR-41)
+      description: |
+        *(chốt 2026-10-17 — gộp openapi gốc với AdminDashboard)* `[from, to]` cả hai đầu, ngày giờ Việt Nam, mặc định
+        14 ngày đến hôm nay, tối đa 366 ngày; `previousTotals` là kỳ liền trước cùng số ngày. Đếm thẳng trên bảng gốc,
+        không cache. Không có xuất CSV (không có trong FR / UC).
+
+        - `newUsersByDay`, `reviewsByDay`, `totals`: lượng **hoạt động** — mọi tài khoản / review được gửi / báo cáo nhận,
+          kể cả bị xóa / ẩn / từ chối sau đó (số liệu quá khứ không đổi theo thời gian).
+        - `reviewsByCity`, `hotPlaces`: chỉ review **đang hiện** (PUBLISHED trên địa điểm APPROVED, chưa xóa) viết trong
+          khoảng. Hot = nhiều review như vậy nhất, cùng số thì điểm Bayesian cao hơn trước.
+        - `pendingCounts`: việc tồn hiện tại, cùng định nghĩa với `/moderation/queue`.
+      x-permission: dashboard:view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: '`from` sau `to`, hoặc khoảng quá 366 ngày' }
+  /admin/activity-log:
+    get:
+      tags: [Admin]
+      summary: Nhật ký thao tác quản trị (FR-42)
+      description: |
+        *(chốt 2026-10-17)* Mới nhất trước (keyset theo id). `action` so khớp chính xác (vd. `REVIEW_REJECT`).
+        Người thao tác đã xóa tài khoản vẫn hiện (tên đã ẩn danh hóa). Không trả `ip_address`.
+      x-permission: dashboard:view
+      parameters:
+        - { name: actorId, in: query, schema: { type: integer, format: int64 } }
+        - { name: action, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ActivityLogPage' } } } }
+  /admin/banners:
+    get:
+      tags: [Admin]
+      summary: Ảnh trang chủ — đủ 3 ô cố định (UC34, FR-43)
+      description: |
+        *(thêm 2026-10-17 — mở lại Q4, phạm vi tối thiểu)* Ô cố định theo bố cục HomePage: `HERO` (nền hero — chỉ đổi ảnh,
+        tiêu đề + ô tìm kiếm giữ nguyên), `SIGNUP_BAND` (băng mời đăng ký), `COMMUNITY` (khối thành viên). Không có lịch
+        chạy, link hay đếm lượt bấm. Ô chưa có ảnh vẫn trả về (`image: null`) — trang chủ dùng hình minh hoạ mặc định.
+      x-permission: banner:manage
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Banner' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/banners/{slot}/image:
+    put:
+      tags: [Admin]
+      summary: Thay ảnh một ô (tạo nếu chưa có — mặc định bật)
+      description: |
+        Xử lý ngay trong request (không qua hàng đợi): kiểm tra như ảnh địa điểm (JPEG / PNG, chữ ký file + đuôi, ≤ 5 MB,
+        ≤ 40 MP), sinh 3 bản JPEG bỏ EXIF ở `banners/…` (đọc công khai); ảnh gốc không lưu. Ảnh cũ xóa sau commit; lưu
+        thất bại thì ảnh mới bị dọn. `altText` bỏ trống = giữ mô tả cũ. Xóa cache `GET /home` sau commit; ghi
+        `activity_log` `BANNER_IMAGE_REPLACE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+                altText: { type: string, maxLength: 200, description: Mô tả ảnh; rỗng = ảnh trang trí }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Banner' } } } }
+        '400': { description: '`slot` không phải ô hợp lệ' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: 'Trường `image`: thiếu / sai định dạng / quá cỡ (`INVALID_IMAGE`); `altText` > 200 ký tự' }
+        '503': { description: 'Kho ảnh lỗi — `SERVICE_UNAVAILABLE`, không lưu gì' }
+  /admin/banners/{slot}:
+    patch:
+      tags: [Admin]
+      summary: Sửa mô tả / bật tắt ảnh một ô (không đổi ảnh)
+      description: Tắt thì trang chủ về hình minh hoạ, ảnh vẫn giữ. Ghi `activity_log` `BANNER_UPDATE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                altText: { type: string, maxLength: 200 }
+                active: { type: boolean }
+                version: { type: integer }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Banner' } } } }
+        '404': { description: 'Ô chưa có ảnh — `BANNER_NOT_FOUND`' }
+        '409': { description: '`version` lệch — `CONCURRENT_MODIFICATION`' }
+        '422': { description: '`altText` > 200 ký tự' }
+    delete:
+      tags: [Admin]
+      summary: Gỡ ảnh — ô về hình minh hoạ mặc định
+      description: Object trên kho xóa sau commit. Ghi `activity_log` `BANNER_REMOVE`.
+      x-permission: banner:manage
+      parameters: [ { $ref: '#/components/parameters/BannerSlot' } ]
+      responses:
+        '204': { description: Đã gỡ }
+        '404': { description: 'Ô chưa có ảnh — `BANNER_NOT_FOUND`' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+
+  parameters:
+    Cursor: { name: cursor, in: query, schema: { type: string }, description: Cursor mờ (opaque) từ `nextCursor` }
+    BannerSlot: { name: slot, in: path, required: true, schema: { $ref: '#/components/schemas/BannerSlot' } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+    PlaceId: { name: placeId, in: path, required: true, schema: { type: integer, format: int64 } }
+    ReviewId: { name: reviewId, in: path, required: true, schema: { type: integer, format: int64 } }
+    UserId: { name: userId, in: path, required: true, schema: { type: integer, format: int64 } }
+    CollectionId: { name: collectionId, in: path, required: true, schema: { type: integer, format: int64 } }
+    NotificationId: { name: notificationId, in: path, required: true, schema: { type: integer, format: int64 } }
+    Lat: { name: lat, in: query, required: true, schema: { type: number, minimum: -90, maximum: 90 } }
+    Lng: { name: lng, in: query, required: true, schema: { type: number, minimum: -180, maximum: 180 } }
+
+  responses:
+    BadRequest:
+      description: Request không đọc được — JSON hỏng, sai kiểu / thiếu tham số (`MALFORMED_REQUEST`)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    ValidationError:
+      description: Dữ liệu không hợp lệ
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Unauthorized:
+      description: Chưa xác thực / token không hợp lệ
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Forbidden:
+      description: Không có quyền
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    NotFound:
+      description: Không tìm thấy
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    Conflict:
+      description: Xung đột trạng thái (trùng, đã xử lý...)
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+    TooManyRequests:
+      description: |
+        Vượt giới hạn tần suất (`code = TOO_MANY_REQUESTS`, NFR-10) — cửa sổ trượt *(chốt 2026-10-04)*: đăng nhập 5 lần sai /
+        15 phút theo (email, IP); đăng ký 10 / giờ / IP; quên mật khẩu 3 / giờ / email và 20 / giờ / IP; gửi lại mail xác
+        thực 3 / giờ / tài khoản; viết review 5 / 24 giờ / tài khoản.
+      headers:
+        Retry-After: { schema: { type: integer }, description: Giây }
+      content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } }
+
+  schemas:
+    # ── Chung ──
+    Problem:
+      type: object
+      description: RFC 7807 ProblemDetail (Spring 6)
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string, description: 'Mã lỗi ổn định cho frontend, ví dụ REVIEW_ALREADY_EXISTS, EMAIL_NOT_VERIFIED' }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+        errorId:
+          type: string
+          format: uuid
+          description: Chỉ có ở lỗi 5xx — mã tra cứu trùng với dòng log máy chủ (người dùng gửi mã này khi báo lỗi)
+    Password: { type: string, minLength: 8, maxLength: 72, pattern: '^(?=.*[A-Za-z])(?=.*\d).+$', description: '≥ 8 ký tự, có chữ và số (U1); tối đa 72 byte do giới hạn BCrypt' }
+    TokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    RoleName: { type: string, enum: [USER, OWNER, MODERATOR, ADMIN] }
+    PlaceStatus: { type: string, enum: [PENDING, APPROVED, REJECTED, HIDDEN] }
+    ReviewStatus: { type: string, enum: [PENDING, PUBLISHED, REJECTED, HIDDEN] }
+    PhotoStatus: { type: string, enum: [PROCESSING, READY, FAILED] }
+    ReportTargetType: { type: string, enum: [PLACE, REVIEW, COMMENT, USER] }
+    Photo:
+      type: object
+      description: |
+        URL chỉ có khi `READY` (bucket đọc công khai, URL ổn định — chốt 2026-10-06): thumb ≤ 320 px, medium ≤ 960 px,
+        large ≤ 1920 px theo cạnh dài, JPEG, không EXIF. Người ngoài chỉ thấy ảnh `READY`; người đề xuất / chủ / kiểm duyệt
+        viên thấy cả `PROCESSING` / `FAILED`.
+      properties:
+        id: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/PhotoStatus' }
+        thumbUrl: { type: [string, 'null'], format: uri }
+        mediumUrl: { type: [string, 'null'], format: uri }
+        largeUrl: { type: [string, 'null'], format: uri }
+    GeoPoint:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+
+    # ── Auth / user ──
+    RegisterRequest:
+      type: object
+      required: [email, password, displayName]
+      properties:
+        email: { type: string, format: email, maxLength: 191 }
+        password: { $ref: '#/components/schemas/Password' }
+        displayName: { type: string, minLength: 2, maxLength: 100 }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: Giây (900) }
+        user: { $ref: '#/components/schemas/MeResponse' }
+    UserSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+    MeResponse:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            email: { type: string, format: email }
+            bio: { type: [string, 'null'] }
+            emailVerified: { type: boolean }
+            roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            permissions: { type: array, items: { type: string }, description: 'Gộp từ các role, sắp theo tên — frontend ẩn / chặn route theo permission (2026-10-05)' }
+            trustScore: { type: integer, minimum: 0, maximum: 100, description: 'Chỉ trả cho chính chủ — giải thích vì sao review vào hàng chờ' }
+            ownedPlaceIds: { type: array, items: { type: integer, format: int64 } }
+    UpdateProfileRequest:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 2, maxLength: 100 }
+        bio: { type: string, maxLength: 500 }
+    PublicProfile:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            bio: { type: [string, 'null'] }
+            joinedAt: { type: string, format: date-time }
+            reviewCount: { type: integer }
+            followerCount: { type: integer }
+            followingCount: { type: integer }
+            contributionPoints: { type: integer, description: Tổng toàn thời gian — tính lại sau mỗi đóng góp (nền) và hằng đêm }
+            badges: { type: array, items: { $ref: '#/components/schemas/Badge' }, description: Theo thứ tự đạt được; đã trao không thu hồi }
+            followedByMe: { type: boolean }
+    Badge:
+      type: object
+      properties:
+        code: { type: string, description: 'REVIEWER_1..5, EXPLORER, PHOTOGRAPHER, HELPFUL (V4__seed_badges.sql)' }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        icon: { type: string, description: Khóa trung tính — frontend ánh xạ sang icon của design system }
+        awardedAt: { type: string, format: date-time }
+    City:
+      type: object
+      properties:
+        name: { type: string }
+        placeCount: { type: integer, description: Số địa điểm APPROVED ở thành phố }
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank: { type: integer }
+        user: { $ref: '#/components/schemas/UserSummary' }
+        points: { type: integer }
+    UserSummaryPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/UserSummary' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Catalog / place ──
+    CategoryNode:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        icon: { type: [string, 'null'] }
+        children: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+    CategoryRequest:
+      type: object
+      description: PUT thay toàn bộ — `parentId` rỗng = danh mục gốc, `icon` rỗng = bỏ icon, `sortOrder` rỗng = 0.
+      required: [name, slug]
+      properties:
+        parentId: { type: [integer, 'null'], format: int64 }
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
+        icon: { type: string, maxLength: 100 }
+        sortOrder: { type: integer }
+    Amenity:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+        icon: { type: [string, 'null'] }
+    AmenityRequest:
+      type: object
+      required: [name, slug]
+      properties:
+        name: { type: string, maxLength: 100 }
+        slug: { type: string, maxLength: 120, pattern: '^[a-z0-9-]+$' }
+        icon: { type: string, maxLength: 100 }
+    OpeningHour:
+      type: object
+      required: [dayOfWeek, openTime, closeTime]
+      properties:
+        dayOfWeek: { type: integer, minimum: 1, maximum: 7, description: 1 = Thứ Hai }
+        openTime: { type: string, pattern: '^\d{2}:\d{2}$' }
+        closeTime: { type: string, pattern: '^\d{2}:\d{2}$', description: Nhỏ hơn openTime = mở qua đêm }
+    PlaceSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/CategoryRef' }
+        address: { type: string }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+        priceMin: { type: [integer, 'null'] }
+        priceMax: { type: [integer, 'null'] }
+        bayesianScore: { type: number, description: 'Điểm xếp hạng Bayesian (FR-22), 3 chữ số thập phân; 0 khi chưa có review PUBLISHED ("Chưa có đánh giá"). Tính lại bất đồng bộ sau khi review đổi — có thể trễ vài trăm ms' }
+        avgRating: { type: number, description: Trung bình thô }
+        reviewCount: { type: integer }
+        status: { $ref: '#/components/schemas/PlaceStatus' }
+        distanceM: { type: [integer, 'null'], description: 'Mét tới tâm tìm kiếm — chỉ có ở /places/nearby, /places/duplicates và possibleDuplicates của hàng chờ duyệt' }
+        tags: { type: array, items: { type: string }, description: 'Thẻ của địa điểm theo bảng chữ cái, đủ cả (giao diện SpotCard hiện tối đa 3) — nạp một truy vấn cho cả trang (chốt 2026-10-12)' }
+    CategoryRef:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        slug: { type: string }
+    PlaceDetail:
+      allOf:
+        - { $ref: '#/components/schemas/PlaceSummary' }
+        - type: object
+          properties:
+            description: { type: [string, 'null'] }
+            city: { type: string }
+            phone: { type: [string, 'null'] }
+            website: { type: [string, 'null'] }
+            photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
+            openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+            amenities: { type: array, items: { $ref: '#/components/schemas/Amenity' } }
+            tags: { type: array, items: { type: string } }
+            ratingDistribution:
+              type: object
+              description: Số review PUBLISHED theo sao
+              properties:
+                '1': { type: integer }
+                '2': { type: integer }
+                '3': { type: integer }
+                '4': { type: integer }
+                '5': { type: integer }
+            checkinCount: { type: integer }
+            owner: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
+            claimable: { type: boolean, description: Chưa có chủ và người xem chưa có yêu cầu đang chờ }
+            myReviewId: { type: [integer, 'null'], format: int64, description: 'Review của người xem (kể cả đã xóa → nút "Viết đánh giá" bị ẩn, D2)' }
+            checkedInToday: { type: boolean, description: '*(thêm 2026-10-19)* Người xem đã check-in địa điểm hôm nay (giờ VN) — nút Check-in P12 thành "✓ Đã check-in hôm nay". Khách = false' }
+            rejectReason: { type: [string, 'null'], description: Chỉ người đề xuất / kiểm duyệt viên thấy }
+            version: { type: integer, description: 'Optimistic lock — gửi lại khi sửa (owner PATCH) / ra quyết định (2026-10-04)' }
+    PlaceCreateRequest:
+      type: object
+      required: [name, categoryId, address, city, location]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 200 }
+        categoryId: { type: integer, format: int64 }
+        description: { type: string, maxLength: 5000 }
+        address: { type: string, maxLength: 300 }
+        city: { type: string, maxLength: 100 }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        priceMin: { type: integer, minimum: 0 }
+        priceMax: { type: integer, minimum: 0 }
+        phone: { type: string, maxLength: 20 }
+        website: { type: string, format: uri, maxLength: 300 }
+        openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+        amenityIds: { type: array, items: { type: integer, format: int64 } }
+        tags: { type: array, maxItems: 10, items: { type: string, maxLength: 50 } }
+    PlaceUpdateRequest:
+      description: |
+        Chủ không đổi được vị trí và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý.
+        Ngữ nghĩa PATCH *(2026-10-04)*: trường vắng / null = giữ nguyên; chuỗi rỗng xóa `description` / `phone` / `website`;
+        `openingHours`, `amenityIds` gửi lên là thay toàn bộ (mảng rỗng = xóa hết).
+      type: object
+      properties:
+        description: { type: string, maxLength: 5000 }
+        address: { type: string, maxLength: 300 }
+        priceMin: { type: integer, minimum: 0 }
+        priceMax: { type: integer, minimum: 0 }
+        phone: { type: string, maxLength: 20 }
+        website: { type: string, format: uri, maxLength: 300 }
+        openingHours: { type: array, items: { $ref: '#/components/schemas/OpeningHour' } }
+        amenityIds: { type: array, items: { type: integer, format: int64 } }
+        version: { type: integer, description: Optimistic lock }
+    PlaceSummaryPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        nextCursor: { type: [string, 'null'] }
+    ModerationPlace:
+      type: object
+      properties:
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        possibleDuplicates:
+          type: array
+          description: Gần nhất trước, kèm `distanceM` tới `place`
+          items: { $ref: '#/components/schemas/PlaceSummary' }
+    ModerationPlaceDetail:
+      type: object
+      description: '*(thêm 2026-10-19)* Màn duyệt một địa điểm'
+      properties:
+        place: { $ref: '#/components/schemas/PlaceDetail' }
+        proposer: { $ref: '#/components/schemas/UserSummary' }
+        submittedAt: { type: string, format: date-time }
+        possibleDuplicates:
+          type: array
+          description: Gần nhất trước, kèm `distanceM`; rỗng khi đã xử lý
+          items: { $ref: '#/components/schemas/PlaceSummary' }
+    ModerationPlacePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationPlace' } }
+        nextCursor: { type: [string, 'null'] }
+    HomeResponse:
+      type: object
+      properties:
+        featured: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        latest: { type: array, items: { $ref: '#/components/schemas/PlaceSummary' } }
+        categories: { type: array, items: { $ref: '#/components/schemas/CategoryNode' } }
+        featuredReview: { oneOf: [ { $ref: '#/components/schemas/HomeReview' }, { type: 'null' } ] }
+        banners:
+          type: array
+          description: '*(UC34)* Ảnh đang bật theo ô; ô không có trong mảng → hình minh hoạ mặc định'
+          items: { $ref: '#/components/schemas/HomeBanner' }
+    BannerSlot:
+      type: string
+      enum: [HERO, SIGNUP_BAND, COMMUNITY]
+    HomeBanner:
+      type: object
+      properties:
+        slot: { $ref: '#/components/schemas/BannerSlot' }
+        image: { $ref: '#/components/schemas/Photo' }
+        altText: { type: string, description: Rỗng = ảnh trang trí }
+    Banner:
+      type: object
+      description: Một ô ảnh trang chủ ở màn quản trị — ô chưa có ảnh thì `id`, `image`, `version`, `updatedAt`, `updatedBy` là null
+      properties:
+        slot: { $ref: '#/components/schemas/BannerSlot' }
+        id: { type: [integer, 'null'], format: int64 }
+        image: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
+        altText: { type: string }
+        active: { type: boolean }
+        version: { type: [integer, 'null'] }
+        updatedAt: { type: [string, 'null'], format: date-time }
+        updatedBy: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ] }
+    HomeReview:
+      type: object
+      description: Đánh giá nổi bật trên trang chủ (ReviewCard) — đoạn trích, không phải toàn văn (2026-10-12)
+      properties:
+        id: { type: integer, format: int64 }
+        excerpt: { type: string, maxLength: 180, description: 'Gộp khoảng trắng; dài hơn thì cắt ở ranh giới từ + "…"' }
+        rating: { type: integer }
+        helpfulCount: { type: integer }
+        author: { $ref: '#/components/schemas/UserSummary' }
+        place: { $ref: '#/components/schemas/PlaceRef' }
+        createdAt: { type: string, format: date-time }
+    PlaceRef:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        slug: { type: string }
+        name: { type: string }
+    PlaceStats:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        viewsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        checkinsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        ratingDistribution: { type: object, additionalProperties: { type: integer } }
+        bayesianScore: { type: number }
+        reviewCount: { type: integer }
+
+    # ── Review / comment ──
+    ReviewCreateRequest:
+      type: object
+      required: [rating, content, visitedAt]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, minLength: 20, maxLength: 5000 }
+        visitedAt: { type: string, format: date, description: '≤ hôm nay' }
+    ReviewUpdateRequest:
+      type: object
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        content: { type: string, minLength: 20, maxLength: 5000 }
+        visitedAt: { type: string, format: date }
+        version: { type: integer }
+    Review:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        placeId: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceRef', description: '*(thêm 2026-10-18)* Tên + slug — danh sách ngoài trang địa điểm (trang cá nhân P06) hiện và dẫn tới địa điểm' }
+        author: { $ref: '#/components/schemas/UserSummary' }
+        rating: { type: integer }
+        content: { type: string }
+        visitedAt: { type: string, format: date }
+        status: { $ref: '#/components/schemas/ReviewStatus' }
+        rejectReason: { type: [string, 'null'], description: Chỉ tác giả thấy }
+        photos: { type: array, items: { $ref: '#/components/schemas/Photo' } }
+        helpfulCount: { type: integer }
+        votedByMe: { type: boolean }
+        authorCheckedIn: { type: boolean, description: 'Nhãn "đã check-in" (P04) — tác giả có check-in tại địa điểm vào ngày viết review — hoặc ngày sửa nội dung gần nhất (`revisedAt`, đổi 2026-10-19) — hay trước đó, so theo ngày giờ Việt Nam (chốt 2026-10-12)' }
+        commentCount: { type: integer }
+        ownerReply: { oneOf: [ { $ref: '#/components/schemas/OwnerReply' }, { type: 'null' } ] }
+        createdAt: { type: string, format: date-time }
+        revisedAt: { type: [string, 'null'], format: date-time, description: '*(thêm 2026-10-19)* Lần cuối tác giả sửa số sao / nội dung / ngày đến (cập nhật theo lần ghé mới); null = chưa sửa. Gửi lại y nguyên không tính' }
+        updatedAt: { type: string, format: date-time }
+        version: { type: integer }
+    ReviewPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Review' } }
+        nextCursor: { type: [string, 'null'] }
+    VoteResult:
+      type: object
+      properties:
+        helpfulCount: { type: integer }
+        votedByMe: { type: boolean }
+    OwnerReply:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        owner: { $ref: '#/components/schemas/UserSummary' }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CommentCreateRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1, maxLength: 2000 }
+        parentId: { type: [integer, 'null'], format: int64, description: 'Phải là bình luận gốc (Q5: 2 cấp)' }
+    Comment:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        author: { oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ], description: '`null` khi `deleted`' }
+        content: { type: [string, 'null'], description: '`null` khi `deleted`' }
+        parentId: { type: [integer, 'null'], format: int64 }
+        deleted: { type: boolean, description: 'Placeholder của bình luận gốc đã xóa / bị ẩn nhưng còn trả lời' }
+        replies: { type: [array, 'null'], items: { $ref: '#/components/schemas/Comment' }, description: 'Chỉ có ở bình luận gốc (trả lời: `null`)' }
+        createdAt: { type: string, format: date-time }
+    CommentPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Comment' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Check-in / collection / report ──
+    CheckInRequest:
+      type: object
+      required: [lat, lng, accuracyM]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        accuracyM: { type: number, minimum: 0, description: 'Từ Geolocation API; > 100 → 422' }
+    CheckInResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        placeId: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        distanceM: { type: integer }
+        checkinDate: { type: string, format: date, description: Ngày theo giờ Việt Nam }
+        createdAt: { type: string, format: date-time }
+    CheckInPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CheckInResponse' } }
+        nextCursor: { type: [string, 'null'] }
+    MyClaim:
+      type: object
+      description: '*(thêm 2026-10-18)* Yêu cầu sở hữu nhìn từ người gửi'
+      properties:
+        id: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceRef' }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        rejectReason: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        reviewedAt: { type: [string, 'null'], format: date-time }
+    MyClaimPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/MyClaim' } }
+        nextCursor: { type: [string, 'null'] }
+    CollectionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        isPublic: { type: boolean, default: false }
+    CollectionSummary:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        isPublic: { type: boolean }
+        shareSlug: { type: [string, 'null'] }
+        placeCount: { type: integer, description: Theo người xem — người khác chỉ tính địa điểm đang hiện }
+        coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ], description: Ảnh bìa của địa điểm thêm gần nhất mà người xem thấy }
+        containsPlace: { type: [boolean, 'null'], description: 'Chỉ có ở `GET /me/collections?placeId=` — bộ đã có địa điểm đó; còn lại null / vắng' }
+    CollectionDetail:
+      allOf:
+        - { $ref: '#/components/schemas/CollectionSummary' }
+        - type: object
+          properties:
+            description: { type: [string, 'null'] }
+            owner: { $ref: '#/components/schemas/UserSummary' }
+            places:
+              type: array
+              items:
+                type: object
+                properties:
+                  place: { $ref: '#/components/schemas/PlaceSummary' }
+                  note: { type: [string, 'null'] }
+                  addedAt: { type: string, format: date-time }
+    ReportCreateRequest:
+      type: object
+      required: [targetType, targetId, reason]
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        reason: { type: string, enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER] }
+        detail: { type: string, maxLength: 1000, description: 'Bắt buộc với `WRONG_INFO` / `OTHER` (chốt 2026-10-14)' }
+
+    # ── Notification ──
+    Notification:
+      type: object
+      description: |
+        *(chốt 2026-10-16 — chỉ các sự kiện trong UC)* `data` là ảnh chụp lúc gửi; mọi loại về địa điểm có `placeId`,
+        `placeName`, `placeSlug`.
+        | `type` | Người nhận | `data` thêm |
+        |---|---|---|
+        | `PLACE_APPROVED` / `PLACE_REJECTED` | người đề xuất | `reason` (từ chối) |
+        | `REVIEW_PUBLISHED` / `REVIEW_REJECTED` | tác giả (review từ hàng chờ) | `reviewId`, `reason` (từ chối) |
+        | `NEW_REVIEW_ON_MY_PLACE` | chủ địa điểm | `reviewId`, `rating`, `authorName` |
+        | `OWNER_REPLIED` | tác giả review (chỉ lần phản hồi đầu) | `reviewId` |
+        | `REPORT_ACTION_TAKEN` | tác giả / người đề xuất / chủ / người bị báo cáo | `targetType`, `targetId`, `preview`, `confirmedReason`, `violation` |
+        | `REPORT_RESOLVED` | người báo cáo (khi ẩn; bỏ qua không gửi) | `targetType`, `targetId`, `preview` |
+        | `CLAIM_SUBMITTED` | mọi kiểm duyệt viên trừ người gửi | `claimId` |
+        | `CLAIM_APPROVED` / `CLAIM_REJECTED` | người yêu cầu (gồm tự từ chối) | `claimId`, `reason`, `hiddenReviewId` (nếu có) |
+      properties:
+        id: { type: integer, format: int64 }
+        type:
+          type: string
+          enum: [PLACE_APPROVED, PLACE_REJECTED, REVIEW_PUBLISHED, REVIEW_REJECTED, NEW_REVIEW_ON_MY_PLACE, OWNER_REPLIED,
+                 REPORT_ACTION_TAKEN, REPORT_RESOLVED, CLAIM_SUBMITTED, CLAIM_APPROVED, CLAIM_REJECTED]
+        data: { type: object, additionalProperties: true }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    NotificationPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Notification' } }
+        nextCursor: { type: [string, 'null'] }
+
+    # ── Moderation / admin ──
+    ModerationDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [APPROVE, REJECT] }
+        reason: { type: string, maxLength: 500, description: Bắt buộc khi REJECT }
+        version: { type: integer, description: 'Optimistic lock — lệch → 409' }
+    ModerationReview:
+      type: object
+      description: '*(2026-10-15)* Lồng `review` thay vì `allOf` — cùng khuôn với `ModerationPlace`'
+      properties:
+        review: { $ref: '#/components/schemas/Review' }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        authorTrustScore: { type: integer }
+        authorActiveViolations: { type: integer, description: Số vi phạm còn hiệu lực (chưa quá 30 ngày) }
+        ipFlagged: { type: boolean }
+        sameSubnetReviewCount24h:
+          type: integer
+          description: Số review khác cùng địa điểm, cùng dải IP (U3), viết trong 24 giờ trước hoặc sau review này — kể cả đã xóa, như luật gắn cờ
+    ModerationReviewDetail:
+      type: object
+      properties:
+        item: { $ref: '#/components/schemas/ModerationReview' }
+        authorJoinedAt: { type: string, format: date-time }
+        authorReviewCounts:
+          type: object
+          description: Số review của tác giả theo trạng thái (đủ 4 khóa, không tính review đã xóa)
+          additionalProperties: { type: integer }
+          examples: [ { PUBLISHED: 12, PENDING: 1, REJECTED: 2, HIDDEN: 0 } ]
+        sameSubnetReviews:
+          type: array
+          description: Review khác cùng địa điểm, cùng dải IP trong 24 giờ trước / sau (chưa xóa, tối đa 20, cũ nhất trước)
+          items: { $ref: '#/components/schemas/Review' }
+    ModerationReviewPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationReview' } }
+        nextCursor: { type: [string, 'null'] }
+    ModerationItemType:
+      type: string
+      enum: [PLACE, REVIEW, REPORT, CLAIM]
+    ModerationQueueItem:
+      type: object
+      required: [position, type, id, submittedAt, flags]
+      properties:
+        position: { type: integer, description: Thứ tự xử lý (1 = cũ nhất) trong bộ lọc hiện tại }
+        type: { $ref: '#/components/schemas/ModerationItemType' }
+        id: { type: integer, format: int64, description: 'id của place / review / claim; với REPORT là id đối tượng bị báo cáo (nhóm theo targetType + targetId)' }
+        reportTargetType: { $ref: '#/components/schemas/ReportTargetType' }
+        title:
+          type: [string, 'null']
+          description: |
+            PLACE, CLAIM: tên địa điểm · REVIEW: "tên địa điểm — trích đoạn" · REPORT: mô tả đối tượng như
+            `ReportGroup.targetPreview` (`null` khi đối tượng đã bị xóa)
+        submittedBy: { type: [string, 'null'], description: Tên người gửi (báo cáo nhóm → người báo cáo đầu tiên); `null` khi tài khoản đã xóa }
+        submittedAt: { type: string, format: date-time, description: Thời điểm gửi — khóa sắp xếp FIFO }
+        flags: { type: array, items: { type: string, enum: [IP_FLAGGED, LOW_TRUST] }, description: 'Chỉ với REVIEW — lý do bị giữ lại (FR-23): cờ IP, trust tác giả dưới ngưỡng đăng ngay' }
+        reportCount: { type: [integer, 'null'], description: Chỉ với REPORT }
+    ModerationQueuePage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModerationQueueItem' } }
+        nextCursor: { type: [string, 'null'] }
+    ReportGroup:
+      type: object
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        targetPreview: { type: string, description: Tóm tắt nội dung bị báo cáo }
+        reportCount: { type: integer }
+        reasons: { type: object, additionalProperties: { type: integer } }
+        firstReportedAt: { type: string, format: date-time }
+        targetStatus:
+          type: string
+          description: |
+            Trạng thái hiện tại của đối tượng (PlaceStatus / ReviewStatus / CommentStatus; người dùng `ACTIVE` / `LOCKED`)
+            hoặc `DELETED` — khi đó `targetPreview` là null
+    ReportItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        reporter: { $ref: '#/components/schemas/UserSummary' }
+        reason: { type: string, enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER] }
+        detail: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+    ReportGroupDetail:
+      type: object
+      properties:
+        group: { $ref: '#/components/schemas/ReportGroup' }
+        author:
+          description: Người đề xuất địa điểm / tác giả review, bình luận / chính người bị báo cáo; null khi đối tượng đã xóa
+          oneOf: [ { $ref: '#/components/schemas/UserSummary' }, { type: 'null' } ]
+        reports: { type: array, items: { $ref: '#/components/schemas/ReportItem' }, description: Đang mở, cũ trước }
+    ReportGroupPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ReportGroup' } }
+        nextCursor: { type: [string, 'null'] }
+    ReportDecision:
+      type: object
+      required: [targetType, targetId, decision]
+      properties:
+        targetType: { $ref: '#/components/schemas/ReportTargetType' }
+        targetId: { type: integer, format: int64 }
+        decision: { type: string, enum: [HIDE, DISMISS], description: 'HIDE: ẩn nội dung + ghi 1 vi phạm theo luật O9' }
+        confirmedReason:
+          type: string
+          enum: [SPAM, FAKE, OFFENSIVE, WRONG_INFO, OTHER]
+          description: |
+            Bắt buộc khi HIDE địa điểm (O9 — quyết định người đề xuất có bị ghi vi phạm không); phải là một lý do có trong
+            các báo cáo đang mở. Loại khác: tùy chọn, chỉ ghi nhật ký *(thêm 2026-10-14)*
+        note: { type: string, maxLength: 500 }
+    Claim:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        place: { $ref: '#/components/schemas/PlaceSummary' }
+        claimant: { $ref: '#/components/schemas/UserSummary' }
+        contactPhone: { type: string }
+        note: { type: [string, 'null'] }
+        evidenceCount: { type: integer, description: 'Xem file thứ i qua `/moderation/claims/{id}/evidence/{i}`' }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        rejectReason: { type: [string, 'null'] }
+        otherPendingClaimCount: { type: integer, description: 'Số yêu cầu đang chờ khác cho cùng địa điểm — tự bị từ chối nếu duyệt yêu cầu này (2026-10-16)' }
+        createdAt: { type: string, format: date-time }
+        version: { type: integer }
+    EvidenceLink:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri, description: Link presigned tới object riêng tư — ai có link đọc được tới khi hết hạn }
+        expiresAt: { type: string, format: date-time, description: 'Không muộn hơn hạn thật của link (tính trước khi ký)' }
+    ClaimPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Claim' } }
+        nextCursor: { type: [string, 'null'] }
+    AdminUser:
+      allOf:
+        - { $ref: '#/components/schemas/UserSummary' }
+        - type: object
+          properties:
+            email: { type: string }
+            emailVerified: { type: boolean, description: 'Badge "● Chưa xác thực" ở P10 (2026-10-05)' }
+            roles: { type: array, items: { $ref: '#/components/schemas/RoleName' } }
+            trustScore: { type: integer }
+            lockedUntil: { type: [string, 'null'], format: date-time }
+            createdAt: { type: string, format: date-time }
+    AdminUserPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        nextCursor: { type: [string, 'null'] }
+    DailyCount:
+      type: object
+      description: Một ngày (giờ Việt Nam); chuỗi luôn đủ mọi ngày trong khoảng, ngày trống = 0
+      properties:
+        date: { type: string, format: date }
+        count: { type: integer }
+    DashboardTotals:
+      type: object
+      properties:
+        newUsers: { type: integer }
+        reviews: { type: integer, description: Review được gửi (mọi trạng thái) }
+        reports: { type: integer, description: Báo cáo nhận được (mọi trạng thái) }
+    Dashboard:
+      type: object
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        generatedAt: { type: string, format: date-time }
+        totals: { $ref: '#/components/schemas/DashboardTotals' }
+        previousTotals: { $ref: '#/components/schemas/DashboardTotals', description: Kỳ liền trước cùng số ngày — để vẽ ▲▼ }
+        newUsersByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        reviewsByDay: { type: array, items: { $ref: '#/components/schemas/DailyCount' } }
+        reviewsByCity:
+          type: array
+          description: Tối đa 5 thành phố — "Khu vực nhiều đánh giá"
+          items: { type: object, properties: { city: { type: string }, reviewCount: { type: integer } } }
+        hotPlaces:
+          type: array
+          description: Tối đa 10
+          items:
+            type: object
+            properties:
+              place: { $ref: '#/components/schemas/PlaceSummary' }
+              newReviewCount: { type: integer, description: Review đang hiện viết trong khoảng — tiêu chí xếp hạng }
+        pendingCounts:
+          type: object
+          properties:
+            places: { type: integer }
+            reviews: { type: integer }
+            reports: { type: integer, description: Số đối tượng có báo cáo mở — bằng số mục REPORT của hàng chờ }
+            claims: { type: integer }
+            oldestSubmittedAt: { type: [string, 'null'], format: date-time, description: Việc tồn cũ nhất (mọi loại); `null` khi hàng chờ trống }
+    ActivityLogEntry:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        actor: { $ref: '#/components/schemas/UserSummary' }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: integer, format: int64 }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+    ActivityLogPage:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ActivityLogEntry' } }
+        nextCursor: { type: [string, 'null'] }

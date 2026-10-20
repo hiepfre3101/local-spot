@@ -1,0 +1,151 @@
+name: localspot
+
+# Hạ tầng hỗ trợ (mục 2 - Hạ tầng trong plan-v1.md).
+#   Dev (mặc định):  docker compose up -d                → chỉ hạ tầng; backend/frontend chạy trên host
+#   Full stack:      docker compose --profile app up -d --build
+#                    → thêm backend + nginx (SPA + proxy /api, /ws) tại http://localhost:${APP_PORT:-8088}
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: localspot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Chỉ chạy khi volume còn trống: đổi tài khoản quản trị 'root'@'%' → 'localspot_root'@'%'
+      - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ulocalspot_root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: localspot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: localspot-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI (thay Horizon)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.54
+    container_name: localspot-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
+      MEILI_ENV: development
+    ports:
+      - "7700:7700"
+    volumes:
+      - meilisearch_data:/meili_data
+
+  minio:
+    image: quay.io/minio/minio:latest
+    container_name: localspot-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Console
+    volumes:
+      - minio_data:/data
+
+  # Hộp thư giả cho dev: bắt mọi mail SMTP, xem tại http://localhost:8025 (không gửi ra ngoài)
+  mailpit:
+    image: axllent/mailpit:v1.27
+    container_name: localspot-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+
+  backend:
+    profiles: [app]
+    build: ./backend
+    container_name: localspot-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      MYSQL_HOST: mysql
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      REDIS_HOST: redis
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      # Không dùng ${JWT_SECRET:?...}: Compose nội suy cả service đang tắt → `docker compose up -d` (chỉ hạ tầng) sẽ
+      # lỗi. Thiếu biến thì backend prod tự từ chối khởi động (@NotBlank trên localspot.security.jwt.secret).
+      JWT_SECRET: ${JWT_SECRET:-}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://localhost:8088}
+      # Mặc định gửi vào Mailpit; deploy thật đặt SMTP trong .env
+      MAIL_HOST: ${MAIL_HOST:-mailpit}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
+      MAIL_STARTTLS: ${MAIL_STARTTLS:-false}
+      MAIL_FROM: ${MAIL_FROM:-LocalSpot <no-reply@localspot.test>}
+      # Kho ảnh: mặc định MinIO trong compose (bucket tự tạo); deploy R2/S3 đặt STORAGE_* trong .env
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-http://minio:9000}
+      STORAGE_REGION: ${STORAGE_REGION:-us-east-1}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:-localspot}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      STORAGE_PATH_STYLE: ${STORAGE_PATH_STYLE:-true}
+      STORAGE_PUBLIC_URL: ${STORAGE_PUBLIC_URL:-http://localhost:9000/localspot}
+      STORAGE_CREATE_BUCKET: ${STORAGE_CREATE_BUCKET:-true}
+      # Tìm kiếm: mặc định Meilisearch trong compose với master key; deploy thật nên tạo khóa API riêng (MEILI_API_KEY)
+      MEILI_HOST: ${MEILI_HOST:-http://meilisearch:7700}
+      MEILI_API_KEY: ${MEILI_API_KEY:-${MEILI_MASTER_KEY}}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+      meilisearch:
+        condition: service_started
+
+  nginx:
+    profiles: [app]
+    build: ./frontend
+    container_name: localspot-nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8088}:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
+  meilisearch_data:
+  minio_data:

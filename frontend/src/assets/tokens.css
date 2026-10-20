@@ -1,0 +1,65 @@
+/*
+ * Design tokens màu — chép từ design system LocalSpot (docs/design-system/tokens.css, bản xuất Claude Design,
+ * không commit). Đổi màu thì sửa ở design system trước rồi chép lại đây, không sửa lẻ.
+ * Theme: mặc định Sáng; Tối khi <html data-theme="dark">.
+ * 2026-10-13 (supervisor): nền theme Sáng đổi từ kem sang trắng — surface / surface-raised #ffffff (raised phân tách
+ * bằng viền `line`, không bằng màu nền), surface-sunk xám trung tính #f2f2ef. Đã kiểm lại tương phản: ink 16.4:1,
+ * ink-muted 7.1:1 trên trắng, ≥6.3:1 trên sunk; line-strong ≥3.4:1. Theme Tối giữ nguyên.
+ */
+:root,
+[data-theme='light'] {
+  --surface: #ffffff; /* Nền trang (trắng — trước 2026-10-13 là kem #f3efe2) */
+  --surface-raised: #ffffff; /* Sidebar quản trị, ô nhập, dòng bảng — tách bằng viền line. Không lồng raised trong raised */
+  --surface-sunk: #f2f2ef; /* Đầu bảng, hàng đang hover, vùng tải tệp, khung chờ tải */
+  --ink: #1f201a; /* Chữ chính (≥12.7:1) */
+  --ink-muted: #5a594d; /* Chữ phụ, chú thích, nhãn trục (≥5.5:1) */
+  --line: #d6d0bc; /* Kẻ phân tách. Không dùng làm viền control */
+  --line-strong: #86826e; /* Viền control (≥3.3:1) */
+  --olive: #55543a; /* Ô tính năng, nút chính công khai, sidebar đang chọn */
+  --on-olive: #f3efe2; /* Chữ trên olive (≥6.2:1) */
+  --sun: #f1dd3f; /* Nhấn: thẻ đánh giá nổi bật, điểm Rating. Chữ trên đó dùng on-accent */
+  --coral: #e0612c; /* Băng CTA, nút hành động nổi bật. Không làm màu chữ trên surface (3.1:1) */
+  --on-accent: #1a1a14; /* Chữ trên sun/coral, cố định tối ở cả hai theme */
+  --sea: #2c6a6e; /* Liên kết, trạng thái thông tin, cột biểu đồ */
+  --sand: #e2c49a; /* Khối ảnh giữ chỗ. Chỉ trang trí, không đặt chữ */
+  --focus: #2451b8; /* Vòng focus 2px, offset 2px */
+  --success: #2b7a4b; /* Đã duyệt, số tăng — luôn kèm ✓ + chữ */
+  --warning: #8a5d00; /* Chờ duyệt — luôn kèm chữ */
+  --danger: #b3261e; /* Lỗi, bị báo cáo, xoá — luôn kèm ✕ + chữ */
+}
+
+[data-theme='dark'] {
+  --surface: #1a1b15;
+  --surface-raised: #23241d;
+  --surface-sunk: #2d2e26;
+  --ink: #f2eee1;
+  --ink-muted: #b3b0a1;
+  --line: #3a3b30;
+  --line-strong: #7f7c69;
+  --olive: #5a5940;
+  --on-olive: #f3efe2;
+  --sun: #e8d43a;
+  --coral: #ec7040;
+  --on-accent: #1a1a14;
+  --sea: #6fb3b6;
+  --sand: #8a7456;
+  --focus: #8fb0ff;
+  --success: #6cc596;
+  --warning: #e2b54a;
+  --danger: #f28b82;
+}
+
+/*
+ * Khoảng cách — chép từ design system (lưới 4px). Lớp thành phần (components.css) dùng var(--space-*); trong template
+ * dùng tiện ích Tailwind tương đương (p-4 = 16px = space-4). Bo góc và font là biến theme Tailwind (main.css).
+ */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+}

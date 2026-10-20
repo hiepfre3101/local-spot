@@ -1,0 +1,22 @@
+# Env / secrets
+.env
+
+# Backend (Maven/Java)
+backend/target/
+*.class
+
+# Frontend (Node/Vite)
+frontend/node_modules/
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Design system (bản xuất từ Claude Design — nguồn gốc nằm trên claude.ai)
+docs/design-system/

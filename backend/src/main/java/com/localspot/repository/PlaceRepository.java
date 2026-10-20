@@ -1,0 +1,175 @@
+package com.localspot.repository;
+
+import com.localspot.entity.Place;
+import com.localspot.entity.PlaceStatus;
+import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+/** Truy vấn mặc định bỏ qua địa điểm đã xóa mềm ({@code @SQLRestriction} trên {@link Place}). */
+public interface PlaceRepository extends JpaRepository<Place, Long>, PlaceSearchRepository {
+
+    /** {@code MeResponse.ownedPlaceIds} — dùng index {@code ix_places_owner_id}. */
+    @Query("SELECT p.id FROM Place p WHERE p.owner.id = :ownerId ORDER BY p.id")
+    List<Long> findIdsByOwnerId(@Param("ownerId") Long ownerId);
+
+    /**
+     * Rỗng = địa điểm không tồn tại / đã xóa; {@code false} = có nhưng không thuộc người dùng (kể cả chưa có chủ —
+     * {@code LEFT JOIN} để không mất dòng).
+     */
+    @Query("""
+            SELECT CASE WHEN o.id = :userId THEN TRUE ELSE FALSE END
+            FROM Place p LEFT JOIN p.owner o
+            WHERE p.id = :placeId
+            """)
+    Optional<Boolean> isOwnedBy(@Param("placeId") Long placeId, @Param("userId") Long userId);
+
+    /**
+     * Slug đã dùng bằng đúng {@code base} hoặc dạng {@code base-<n>}, <b>kể cả địa điểm đã xóa mềm</b> (native — UNIQUE
+     * ở CSDL tính cả dòng đã xóa). {@code base} chỉ gồm {@code [a-z0-9-]} nên không chứa ký tự đại diện của LIKE.
+     */
+    @Query(value = "SELECT slug FROM places WHERE slug = :base OR slug LIKE CONCAT(:base, '-%')", nativeQuery = true)
+    List<String> findSlugsLike(@Param("base") String base);
+
+    /** Trang chi tiết: kèm danh mục, chủ, tiện ích (giờ mở cửa nạp lười trong cùng transaction — tránh tích Descartes). */
+    @EntityGraph(attributePaths = {"category", "owner", "amenities"})
+    Optional<Place> findDetailBySlug(String slug);
+
+    @EntityGraph(attributePaths = {"category", "owner", "amenities"})
+    Optional<Place> findDetailById(Long id);
+
+    /**
+     * Khóa dòng địa điểm ({@code SELECT … FOR UPDATE}) khi thêm ảnh: hai lần upload đồng thời phải lần lượt đếm ảnh,
+     * không cùng thấy "còn chỗ" rồi cùng vượt giới hạn mỗi địa điểm.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Place p WHERE p.id = :id")
+    Optional<Place> findByIdForUpdate(@Param("id") Long id);
+
+    /** {@code GET /me/places}: địa điểm tôi đề xuất, mọi trạng thái, mới nhất trước — keyset theo id. */
+    @Query("""
+            SELECT p FROM Place p JOIN FETCH p.category
+            WHERE p.createdBy.id = :userId AND (:afterId IS NULL OR p.id < :afterId)
+            ORDER BY p.id DESC
+            """)
+    List<Place> findCreatedBy(@Param("userId") Long userId, @Param("afterId") Long afterId, Limit limit);
+
+    /** {@code GET /owner/places}: số địa điểm một chủ sở hữu nhỏ → trả hết, không phân trang. */
+    /** Nạp địa điểm theo danh sách id từ truy vấn không gian (thứ tự do service sắp lại theo khoảng cách). */
+    /**
+     * Mỗi dòng {@code [id, slug, name]} — tham chiếu gọn cho danh sách review (một truy vấn cho cả trang). Native để lấy
+     * cả địa điểm đã xóa mềm: review vẫn cần biết mình thuộc địa điểm nào.
+     */
+    @Query(value = "SELECT id, slug, name FROM places WHERE id IN (:ids)", nativeQuery = true)
+    List<Object[]> findRefRowsByIdIn(@Param("ids") Collection<Long> ids);
+
+    @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.id IN :ids")
+    List<Place> findWithCategoryByIdIn(@Param("ids") Collection<Long> ids);
+
+    /**
+     * Dữ liệu dựng tài liệu tìm kiếm: danh mục + danh mục cha + tiện ích nạp một lần cho cả lô (≤ 100 id) — không N+1.
+     * Địa điểm đã xóa mềm không có trong kết quả ({@code @SQLRestriction}) → consumer xóa khỏi index.
+     */
+    @Query("""
+            SELECT DISTINCT p FROM Place p
+            JOIN FETCH p.category c LEFT JOIN FETCH c.parent LEFT JOIN FETCH p.amenities
+            WHERE p.id IN :ids
+            """)
+    List<Place> findForSearchIndexByIdIn(@Param("ids") Collection<Long> ids);
+
+    /** Toàn bộ id đã duyệt — đồng bộ lại index khi khởi động (vài nghìn id, nhẹ). */
+    @Query("SELECT p.id FROM Place p WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED ORDER BY p.id")
+    List<Long> findApprovedIds();
+
+    /** Địa điểm đã duyệt thuộc danh mục hoặc danh mục con của nó — đổi tên / cha danh mục thì đồng bộ lại. */
+    @Query("""
+            SELECT p.id FROM Place p
+            WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED
+              AND (p.category.id = :categoryId OR p.category.parent.id = :categoryId)
+            """)
+    List<Long> findApprovedIdsInCategoryTree(@Param("categoryId") Long categoryId);
+
+    @Query("SELECT p FROM Place p JOIN FETCH p.category WHERE p.owner.id = :ownerId ORDER BY p.id DESC")
+    List<Place> findOwnedBy(@Param("ownerId") Long ownerId);
+
+    /** Hàng chờ PENDING: FIFO — cũ nhất trước, cùng thứ tự với hàng chờ gộp {@code /moderation/queue}. */
+    @Query("""
+            SELECT p FROM Place p JOIN FETCH p.category
+            WHERE p.status = :status AND (:afterId IS NULL OR p.id > :afterId)
+            ORDER BY p.id ASC
+            """)
+    List<Place> findByStatusOldestFirst(
+            @Param("status") PlaceStatus status, @Param("afterId") Long afterId, Limit limit);
+
+    /** Lịch sử đã xử lý (APPROVED / REJECTED / HIDDEN): mới nhất trước. */
+    @Query("""
+            SELECT p FROM Place p JOIN FETCH p.category
+            WHERE p.status = :status AND (:afterId IS NULL OR p.id < :afterId)
+            ORDER BY p.id DESC
+            """)
+    List<Place> findByStatusNewestFirst(
+            @Param("status") PlaceStatus status, @Param("afterId") Long afterId, Limit limit);
+
+    // ─── Tính lại rating (FR-22) — cột điểm chỉ ghi ở đây, không qua entity ────
+
+    /**
+     * Khóa dòng địa điểm và đọc điểm hiện tại — dòng {@code [status, review_count, avg_rating, bayesian_score]}. Khóa
+     * <b>trước</b> khi đếm review: hai lần tính lại cùng địa điểm chạy nối tiếp, lần sau luôn đọc dữ liệu ít nhất mới
+     * bằng lần trước nên không ghi đè điểm mới bằng điểm cũ. Rỗng = không tồn tại / đã xóa mềm.
+     */
+    @Query(value = """
+            SELECT status, review_count, avg_rating, bayesian_score FROM places
+            WHERE id = :id AND deleted_at IS NULL FOR UPDATE
+            """, nativeQuery = true)
+    List<Object[]> lockRatingById(@Param("id") Long id);
+
+    @Modifying
+    @Query(value = """
+            UPDATE places SET review_count = :reviewCount, avg_rating = :avgRating, bayesian_score = :bayesianScore
+            WHERE id = :id
+            """, nativeQuery = true)
+    void updateRating(
+            @Param("id") Long id,
+            @Param("reviewCount") long reviewCount,
+            @Param("avgRating") BigDecimal avgRating,
+            @Param("bayesianScore") BigDecimal bayesianScore);
+
+    /** Mọi địa điểm chưa xóa (kể cả chưa duyệt / bị ẩn — được hiện lại thì điểm đã đúng), tăng dần cho job đêm. */
+    @Query(value = "SELECT id FROM places WHERE deleted_at IS NULL ORDER BY id", nativeQuery = true)
+    List<Long> findAllIdsForRating();
+
+    // ─── Check-in (FR-24, U5) ───────────────────────────────────────────────
+
+    /**
+     * Khoảng cách (m, mặt cầu) từ địa điểm tới {@code point} — WKT {@code POINT(lat lng)} theo thứ tự trục của SRID 4326
+     * trong MySQL 8, như truy vấn bán kính ({@code PlaceSearchRepositoryImpl}). Tính trong CSDL bằng cùng hàm với
+     * {@code /places/nearby} → "trong 200 m" ở check-in và ở danh sách gần tôi luôn khớp nhau.
+     */
+    @Query(value = """
+            SELECT ST_Distance_Sphere(location, ST_PointFromText(:point, 4326)) FROM places WHERE id = :id
+            """, nativeQuery = true)
+    double distanceMeters(@Param("id") Long id, @Param("point") String point);
+
+    /** Đếm nguyên tử, không qua entity (cột {@code insertable/updatable = false}) — như bộ đếm vote ở E8. */
+    @Modifying
+    @Query(value = "UPDATE places SET checkin_count = checkin_count + 1 WHERE id = :id", nativeQuery = true)
+    void incrementCheckinCount(@Param("id") Long id);
+
+    /** Mỗi dòng {@code [city, count]}: thành phố có địa điểm APPROVED (chưa xóa mềm — {@code @SQLRestriction}). */
+    @Query("""
+            SELECT p.city, COUNT(p) FROM Place p
+            WHERE p.status = com.localspot.entity.PlaceStatus.APPROVED
+            GROUP BY p.city
+            ORDER BY COUNT(p) DESC, p.city ASC
+            """)
+    List<Object[]> countApprovedByCity();
+}
