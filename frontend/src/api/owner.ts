@@ -12,12 +12,11 @@ import type {
 
 /**
  * openapi `PlaceUpdateRequest` (UC24) — ngữ nghĩa PATCH: trường vắng = giữ nguyên. Xoá mô tả / điện thoại / web bằng
- * chuỗi rỗng; `openingHours` / `amenityIds` là thay toàn bộ. Không có tên, vị trí, danh mục (đổi phải báo cáo
- * WRONG_INFO); giá chỉ đặt được, không xoá được (`null` = giữ nguyên). `version` lệch → 409.
+ * chuỗi rỗng; `openingHours` / `amenityIds` là thay toàn bộ. Không có tên, vị trí, địa chỉ (chốt 2026-10-21), danh mục
+ * (đổi phải báo cáo WRONG_INFO); giá chỉ đặt được, không xoá được (`null` = giữ nguyên). `version` lệch → 409.
  */
 export interface PlaceUpdate {
   description?: string
-  address?: string
   priceMin?: number
   priceMax?: number
   phone?: string

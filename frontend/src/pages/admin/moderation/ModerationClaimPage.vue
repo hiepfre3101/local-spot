@@ -9,7 +9,7 @@ import LsAdminButton from '@/components/ui/LsAdminButton.vue'
 import LsBadge from '@/components/ui/LsBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { ModerationClaim } from '@/types/api'
-import { formatDateTime, formatNumber } from '@/utils/format'
+import { formatDateTime, formatNumber, fullAddress } from '@/utils/format'
 
 import EvidenceImage from './EvidenceImage.vue'
 import ModerationHead from './ModerationHead.vue'
@@ -149,7 +149,7 @@ async function reject(): Promise<void> {
           </div>
           <div class="col-span-full">
             <dt>Địa chỉ</dt>
-            <dd>{{ claim.place.address }}</dd>
+            <dd>{{ fullAddress(claim.place) }}</dd>
           </div>
         </dl>
       </section>

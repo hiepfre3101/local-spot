@@ -10,6 +10,7 @@ import PhotoPicker from '@/components/review/PhotoPicker.vue'
 import { releaseDraft, type DraftPhoto } from '@/components/review/draftPhoto'
 import LsButton from '@/components/ui/LsButton.vue'
 import type { PlaceDetail, PlaceSummary } from '@/types/api'
+import { fullAddress } from '@/utils/format'
 
 /**
  * Yêu cầu xác nhận sở hữu (UC23, FR-31). Chọn địa điểm: có sẵn từ nút trên trang địa điểm (`initialSlug`), hoặc tìm theo
@@ -135,7 +136,7 @@ async function submit(): Promise<void> {
             :to="{ name: 'place', params: { slug: place.slug } }"
             >{{ place.name }}</RouterLink
           >
-          <p class="m-0 text-caption text-ink-muted">{{ place.address }}, {{ place.city }}</p>
+          <p class="m-0 text-caption text-ink-muted">{{ fullAddress(place) }}</p>
         </div>
         <button type="button" class="ls-act" @click="changePlace">Chọn địa điểm khác</button>
       </div>
@@ -177,7 +178,7 @@ async function submit(): Promise<void> {
             @click="choose(p)"
           >
             <b>{{ p.name }}</b>
-            <span class="block text-caption text-ink-muted">{{ p.address }}</span>
+            <span class="block text-caption text-ink-muted">{{ fullAddress(p) }}</span>
           </button>
         </li>
       </ul>

@@ -68,3 +68,27 @@ export function relativeTime(iso: string, now: number = Date.now()): string {
 export function formatShortDateTime(iso: string): string {
   return dayjs(iso).format('DD/MM HH:mm')
 }
+
+/** So khớp không phân biệt dấu / hoa thường / dấu câu cuối: "TP. Hồ Chí Minh" ≈ "tp. ho chi minh". */
+function looseText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/đ/gi, 'd')
+    .toLowerCase()
+    .replace(/[\s,.;]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Địa chỉ hiển thị kèm thành phố (chốt 2026-10-21): "48 Cách Mạng Tháng Tám, TP. Hồ Chí Minh". Người đề xuất đôi khi gõ
+ * sẵn thành phố cuối địa chỉ ("12 Lê Lợi, Phường 3, Đà Lạt") → không ghép lần nữa.
+ */
+export function fullAddress(place: { address: string; city?: string | null }): string {
+  const address = place.address.trim()
+  const city = place.city?.trim()
+  if (!city) return address
+  if (!address) return city
+  return looseText(address).endsWith(looseText(city)) ? address : `${address}, ${city}`
+}

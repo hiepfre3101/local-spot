@@ -105,6 +105,7 @@ function place(id: number, status: PlaceSummary['status']): PlaceSummary {
     name: `Quán số ${id}`,
     category: { id: 11, name: 'Phở & bún', slug: 'pho-bun' },
     address: `${id} Hàng Gà`,
+    city: 'Hà Nội',
     location: { lat: 21, lng: 105 },
     coverPhoto: null,
     priceMin: null,
