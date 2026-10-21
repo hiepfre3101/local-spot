@@ -132,6 +132,7 @@ package "Đánh giá & tương tác" {
     - rating : int
     - content : String
     - visitedAt : LocalDate
+    - revisedAt : Instant
     - status : ReviewStatus
     - ipAddress : String
     - ipPrefix : String
@@ -201,6 +202,13 @@ package "Cộng đồng & vận hành" {
     - data : Map<String, Object>
     - readAt : Instant
   }
+  class HomeBanner {
+    - slot : BannerSlot
+    - storageKey : String
+    - altText : String
+    - active : boolean
+    - version : int
+  }
   class ActivityLog {
     - action : String
     - targetType : String
@@ -258,6 +266,7 @@ User "1" *-- "*" Collection
 Collection "1" *-- "*" CollectionPlace
 CollectionPlace "*" --> "1" Place
 User "1" -- "*" Follow : follower / following
+HomeBanner "*" --> "1" User : updatedBy
 User "1" -- "*" UserBadge
 UserBadge "*" --> "1" Badge
 Report "*" --> "1" User : reporter

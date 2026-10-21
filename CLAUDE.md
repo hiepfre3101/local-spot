@@ -59,7 +59,7 @@ Nguồn chuẩn cho mọi việc liên quan UI nằm ở `docs/design-system/`. 
 - `docs/design-system/tokens.css` (và `tokens.json`) — design tokens, dùng `var(--...)`, không hard-code màu/cỡ chữ
 - `docs/design-system/components/<Tên>/README.md` — API & quy tắc từng thành phần; `preview.html` là bản xem mẫu
 - `docs/design-system/api/` — tham chiếu tokens và props của các thành phần
-- `docs/design-system/use-cases.md` — bảng UC → màn hình → thành phần (33 UC, 5 tác nhân)
+- `docs/design-system/use-cases.md` — bảng UC → màn hình → thành phần (34 UC, 5 tác nhân)
 - `docs/design-system/DECISIONS.md` — quyết định đã chốt & câu hỏi còn chờ quyết (29/09/2026)
 
 Quy tắc cốt lõi: không gradient, không đổ bóng, không card lồng card; trạng thái không chỉ bằng màu;

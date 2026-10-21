@@ -1,0 +1,56 @@
+@startuml architecture
+' Kiến trúc tổng thể — plan-v1.md §3. Các dịch vụ hạ tầng chạy bằng Docker Compose (docker-compose.yml)
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam shadowing false
+skinparam rectangle {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+skinparam database {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+skinparam queue {
+  BackgroundColor #FDFDFD
+  BorderColor #555555
+}
+
+actor "Người dùng\n(trình duyệt)" as User
+
+rectangle "Vue 3 SPA\nTypeScript · Pinia · Vue Router\nVue Query · Leaflet" as SPA
+rectangle "Nginx\nreverse proxy · HTTPS" as Nginx
+
+rectangle "Spring Boot API (Java 21)" as API {
+  rectangle "Controller\n(@RestController)" as Ctl
+  rectangle "Service\n(@Transactional)" as Svc
+  rectangle "Repository\n(Spring Data JPA)" as Repo
+  rectangle "Security\nJWT · RBAC" as Sec
+  rectangle "Event / Listener\n(tính lại rating,\nthông báo)" as Evt
+  rectangle "WebSocket\nSTOMP" as Ws
+}
+
+database "MySQL 8\ndữ liệu chính\nspatial index" as DB
+database "Redis\ncache · rate limit" as Redis
+rectangle "Meilisearch\nchỉ mục tìm kiếm" as Meili
+queue "RabbitMQ\nảnh · mail · reindex" as MQ
+rectangle "MinIO / S3\nlưu ảnh" as S3
+rectangle "Mailpit / SMTP" as Mail
+
+User --> SPA
+SPA --> Nginx : REST /api/v1\n(JSON, JWT)
+SPA ..> Nginx : WebSocket /ws
+Nginx --> Ctl
+Ctl --> Sec
+Ctl --> Svc
+Svc --> Repo
+Svc --> Evt
+Evt --> Ws
+Repo --> DB
+Svc --> Redis
+Svc --> Meili
+Svc --> MQ
+MQ --> S3
+MQ --> Mail
+SPA ..> S3 : tải ảnh đã xử lý
+@enduml

@@ -74,6 +74,7 @@ rectangle "LocalSpot" {
     usecase "UC31 Quản lý người dùng & vai trò" as UC31
     usecase "UC32 Quản lý danh mục & tiện ích" as UC32
     usecase "UC33 Xem dashboard thống kê" as UC33
+    usecase "UC34 Quản lý ảnh trang chủ" as UC34
   }
 }
 
@@ -119,6 +120,7 @@ Mod --> UC30
 Admin --> UC31
 Admin --> UC32
 Admin --> UC33
+Admin --> UC34
 
 ' Quan hệ include / extend
 UC01 ..> UC02 : <<include>>

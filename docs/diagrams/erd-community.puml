@@ -90,6 +90,19 @@ entity notifications {
   * created_at : DATETIME
 }
 
+entity home_banners {
+  * id : BIGINT <<PK>>
+  --
+  * slot : VARCHAR(20) <<UK>>
+  * storage_key : VARCHAR(200)
+  * alt_text : VARCHAR(200)
+  * is_active : BOOLEAN
+  * updated_by : BIGINT <<FK>>
+  * version : INT
+  * created_at : DATETIME
+  * updated_at : DATETIME
+}
+
 entity activity_log {
   * id : BIGINT <<PK>>
   --
@@ -113,6 +126,7 @@ users ||--o{ reports : gửi
 users |o--o{ reports : xử lý
 users ||--o{ notifications
 users ||--o{ activity_log
+users ||--o{ home_banners : cập nhật
 
 note bottom of reports
   target_type + target_id: quan hệ đa hình
