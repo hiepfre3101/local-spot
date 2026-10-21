@@ -1423,3 +1423,25 @@ Chưa commit.
 **Tài liệu**: openapi (`Review.revisedAt`, mô tả `authorCheckedIn`), database.md (`reviews.revised_at`), plan §10 F (mục mới).
 
 **Kiểm chứng**: backend `CheckInFlowTests.revisingTheReviewAfterARevisitEarnsTheLabel` (đánh giá 1 tháng trước + check-in hôm nay → chưa nhãn; gửi lại y nguyên → vẫn chưa, `revisedAt` trống; sửa thật → `revisedAt` có, có nhãn); test luật cũ `reviewLabelMeansCheckedInOnOrBeforeTheDayOfWriting` vẫn xanh; `./mvnw verify` đầy đủ **359 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **206 test** xanh (P04 +2: gợi ý + đặt ngày hôm nay + gửi đúng; không gợi ý khi chưa check-in / đã có nhãn. P03 +1: "Cập nhật đánh giá" sau check-in; test thành công kiểm thêm danh sách nạp lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.
+
+## 2026-10-21 (+07) — Chuẩn bị báo cáo thực tập (Word)
+
+**Bối cảnh**: supervisor gửi tài nguyên của trường để làm báo cáo Word: logo HOU, mẫu bìa + mục lục, file "Mẫu báo cáo thực tập", 12 slide "Cấu trúc báo cáo thực tập" và yêu cầu minh chứng tuần 2–15. Lưu tại `docs/report/assets/` (ảnh gốc chỉ có trong thư mục tạm của phiên).
+
+**Quyết định (supervisor chốt):**
+- Loại báo cáo: **báo cáo thực tập**, theo khung 11 mục của Viện (không phải 6 chương ở plan §8). Nội dung plan §8 và `docs/` được ánh xạ vào khung 11 mục.
+- Bìa ghi **Viện Đào tạo và Phát triển học tập suốt đời** (không ghi "Trung tâm đào tạo E-learning" như mẫu cũ).
+- Làm **theo nhóm**. Đề tài: **"Nền tảng đánh giá địa điểm du lịch địa phương"**. Để trống ô GVHD. Đơn vị thực tập: Công ty TNHH Du lịch Khách sạn Hana (HANA).
+- Độ dài **30–40 trang**, Times New Roman 13.
+- Timeline và phân công dựng từ dữ liệu thật (git log, progress.md, plan §9). Những giấy tờ do doanh nghiệp phát hành (xác nhận, phiếu đánh giá, nhận xét mentor, biên bản họp) **không tự soạn thay**, chỉ để khung trống cho HANA điền — tránh làm giả hồ sơ nộp trường.
+
+## 2026-10-21 (+07) — Đồng bộ sơ đồ với V5 / V6, chốt 34 UC
+
+**Bối cảnh**: rà soát trước khi chèn sơ đồ vào báo cáo Word thì thấy sơ đồ lệch so với migration V5 (`home_banners`, UC34) và V6 (`reviews.revised_at`). Ngoài ra `class-review-module.png` cũ hơn file nguồn của nó. Supervisor đồng ý cập nhật.
+
+**Thay đổi** (chỉ tài liệu, không đụng code hay migration):
+- `use-case-overview.puml`: thêm UC34 "Quản lý ảnh trang chủ" (Quản trị viên). Số UC chính thức là **34**, khớp `docs/analysis/use-cases.md`, openapi và database.md.
+- `sitemap.puml`: thêm `/admin/banners`.
+- `erd-place-review.puml`: thêm `reviews.revised_at`. `erd-community.puml`: thêm bảng `home_banners` (FK `updated_by` → users).
+- `class-domain.puml`: thêm `Review.revisedAt` và lớp `HomeBanner`.
+- Render lại 6 PNG (smetana). Sửa số "33 UC" thành 34 ở CLAUDE.md, diagrams/README.md và design-system/use-cases.md. DECISIONS.md giữ số gốc ngày 29/09 và chú thích thêm UC34.
