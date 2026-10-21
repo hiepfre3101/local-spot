@@ -52,6 +52,7 @@ function place(id: number, name: string, extra: Partial<PlaceSummary> = {}): Pla
     name,
     category: { id: 11, name: 'Phở & bún', slug: 'pho-bun' },
     address: '1 Phố Huế',
+    city: 'Hà Nội',
     location: { lat: 21.03, lng: 105.85 },
     coverPhoto: null,
     priceMin: 50000,

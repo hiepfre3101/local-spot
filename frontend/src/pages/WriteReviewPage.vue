@@ -21,6 +21,7 @@ import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useNotify } from '@/plugins/toast'
 import { useAuthStore } from '@/stores/auth'
 import type { Review, ReviewStatus } from '@/types/api'
+import { fullAddress } from '@/utils/format'
 import {
   REVIEW_CONTENT_MAX,
   reviewSchema,
@@ -394,7 +395,7 @@ function isStatus(error: unknown, status: number): boolean {
           <h2 class="mt-3 mb-1 text-title">{{ place.name }}</h2>
           <LsRating :score="place.bayesianScore" :count="place.reviewCount" />
           <p class="mt-1 text-caption text-ink-muted">
-            {{ place.address }} · {{ place.category.name }}
+            {{ fullAddress(place) }} · {{ place.category.name }}
           </p>
         </div>
         <div>

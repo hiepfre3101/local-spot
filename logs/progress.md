@@ -1424,6 +1424,37 @@ Chưa commit.
 
 **Kiểm chứng**: backend `CheckInFlowTests.revisingTheReviewAfterARevisitEarnsTheLabel` (đánh giá 1 tháng trước + check-in hôm nay → chưa nhãn; gửi lại y nguyên → vẫn chưa, `revisedAt` trống; sửa thật → `revisedAt` có, có nhãn); test luật cũ `reviewLabelMeansCheckedInOnOrBeforeTheDayOfWriting` vẫn xanh; `./mvnw verify` đầy đủ **359 test** xanh, Spotless + SpotBugs sạch. Frontend `vitest` **206 test** xanh (P04 +2: gợi ý + đặt ngày hôm nay + gửi đúng; không gợi ý khi chưa check-in / đã có nhãn. P03 +1: "Cập nhật đánh giá" sau check-in; test thành công kiểm thêm danh sách nạp lại). `vue-tsc`, `eslint --no-cache`, `prettier --check` sạch.
 
+## 2026-10-21 11:15 (+07) — Chủ địa điểm không sửa địa chỉ (UC24)
+
+**Bối cảnh**: supervisor đề nghị cho chủ chọn địa chỉ bằng bản đồ (như hộp thoại check-in) ở tab Thông tin của `/owner/places/:id`. Mâu thuẫn với O5 / O8 (tên, vị trí, danh mục không sửa được sau khi tạo) → hỏi lại trước khi làm.
+
+**Supervisor chốt (qua câu hỏi):**
+- **Chủ không đổi vị trí, và cũng không đổi địa chỉ** — trước đây chủ sửa được chữ địa chỉ. Lý do của supervisor: địa điểm do thành viên đề xuất và kiểm duyệt viên duyệt; nếu địa chỉ không phải quán của mình thì báo cáo, đề xuất đúng địa điểm rồi gửi yêu cầu sở hữu. Bị loại: cho kéo ghim trong 200 m; kéo tự do; đổi ghim qua kiểm duyệt; chỉ hiện bản đồ đọc.
+- **Không tự điền địa chỉ từ bản đồ** (không thêm dịch vụ đổi toạ độ ↔ địa chỉ — giữ chốt 2026-10-17). Ô địa chỉ hiện ở trạng thái tắt.
+
+**Quyết định kỹ thuật:**
+- Khoá cả ở backend, không chỉ tắt ô: bỏ `address` khỏi `PlaceUpdateRequest` và `PlaceService.updateByOwner` — gọi API trực tiếp cũng không đổi được. Gửi `address` bị bỏ qua (200, không đổi), cùng cách với `name` / `categoryId` đã có — không đổi hợp đồng thành 422 cho client cũ.
+- Form: ô địa chỉ `disabled`, có dòng giải thích (gắn `aria-describedby`) chỉ đường đề xuất + yêu cầu sở hữu; không còn kiểm tra / gửi địa chỉ.
+- Dữ liệu cũ giữ nguyên (địa chỉ chủ đã sửa trước đây không đổi lại).
+
+**Tài liệu**: openapi `PlaceUpdateRequest`, sitemap O5, requirements FR-32.
+
+**Kiểm chứng**: `PlaceFlowTests.ownerUpdatesInfoHoursAndAmenities` gửi kèm `address` → địa chỉ không đổi (bỏ kiểm tra 422 địa chỉ rỗng — không còn áp dụng); `PlaceFlowTests` xanh. Frontend `OwnerPlacePage.spec`: ô địa chỉ tắt, hiện đúng giá trị, PATCH không còn `address`.
+
+## 2026-10-21 11:38 (+07) — Hiện địa chỉ kèm thành phố ở frontend
+
+**Bối cảnh**: supervisor yêu cầu mọi chỗ hiện địa chỉ trên frontend đều ghép thành phố phía sau. Trước đó chỉ `PlaceDetail` có `city`; các danh sách (`PlaceSummary` — trang cá nhân, nghi trùng, hàng chờ, yêu cầu sở hữu, "Địa điểm của tôi") không có.
+
+**Quyết định kỹ thuật:**
+- **Thêm `city` vào `PlaceSummary`** (backend `PlaceSummaryResponse`, MapStruct tự ánh xạ từ `places.city`): thay đổi bổ sung, không đổi schema / migration, client cũ không ảnh hưởng. Bị loại: chỉ ghép ở trang có `PlaceDetail` (danh sách vẫn thiếu thành phố — không đúng yêu cầu "mọi chỗ").
+- **Một hàm `fullAddress`** (`utils/format.ts`) cho mọi chỗ hiện địa chỉ (11 chỗ): "địa chỉ, thành phố". Địa chỉ đã **kết thúc** bằng tên thành phố (người đề xuất gõ kèm — dữ liệu thật có "166 Nguyễn Chí Thanh, Đà Lạt") thì không ghép lần nữa; so sánh bỏ dấu / hoa thường / dấu câu cuối. Chỉ xét phần cuối: "10 Đường Huế" ở Hà Nội vẫn ghép.
+- Màn duyệt địa điểm: gộp "Địa chỉ" + "Tỉnh / thành" thành một dòng (không hiện thành phố hai lần). Ô địa chỉ (tắt) ở form của chủ cũng hiện kèm thành phố.
+- Form đề xuất (P05) giữ hai ô nhập riêng địa chỉ / thành phố — đây là chỗ nhập, không phải hiển thị.
+
+**Tài liệu**: openapi `PlaceSummary.city`.
+
+**Kiểm chứng**: `fullAddress.spec` (4: ghép, không lặp khi đã có — kể cả khác dấu / hoa thường, chỉ xét phần cuối, thiếu một phần); `PlaceFlowTests` kiểm `items[0].city` của danh sách; `./mvnw verify` **360 test** xanh; frontend `vitest` **221 test** xanh, `vue-tsc`, `eslint`, `prettier --check` sạch, `vite build` được. API dev trả `city` trong danh sách.
+
 ## 2026-10-21 (+07) — Chuẩn bị báo cáo thực tập (Word)
 
 **Bối cảnh**: supervisor gửi tài nguyên của trường để làm báo cáo Word: logo HOU, mẫu bìa + mục lục, file "Mẫu báo cáo thực tập", 12 slide "Cấu trúc báo cáo thực tập" và yêu cầu minh chứng tuần 2–15. Lưu tại `docs/report/assets/` (ảnh gốc chỉ có trong thư mục tạm của phiên).

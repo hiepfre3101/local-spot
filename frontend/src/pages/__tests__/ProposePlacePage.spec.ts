@@ -80,6 +80,7 @@ const DUPLICATE: PlaceSummary = {
   name: 'Phở Thìn Lò Đúc',
   category: { id: 11, name: 'Phở & bún', slug: 'pho-bun' },
   address: '13 Lò Đúc',
+  city: 'Hà Nội',
   location: { lat: 21.0176, lng: 105.8524 },
   coverPhoto: null,
   priceMin: null,

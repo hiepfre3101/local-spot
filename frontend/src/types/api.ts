@@ -123,6 +123,8 @@ export interface PlaceSummary {
   name: string
   category: CategoryRef
   address: string
+  /** Thành phố (thêm 2026-10-21) — hiện cùng địa chỉ qua `fullAddress`. */
+  city: string
   location: GeoPoint
   coverPhoto: Photo | null
   priceMin: number | null
@@ -138,7 +140,6 @@ export interface PlaceSummary {
 /** openapi `PlaceDetail` = `PlaceSummary` + chi tiết; `myReviewId`, `claimable` theo người xem. */
 export interface PlaceDetail extends PlaceSummary {
   description: string | null
-  city: string
   phone: string | null
   website: string | null
   photos: Photo[]

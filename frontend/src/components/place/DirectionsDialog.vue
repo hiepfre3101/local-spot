@@ -8,6 +8,7 @@ import { usePlaceStore } from '@/stores/place'
 import type { PlaceDetail } from '@/types/api'
 import { distanceM, formatDistance } from '@/utils/geo'
 import { RouteNotFoundError, fetchRoute, formatDuration, type TravelMode } from '@/utils/routing'
+import { fullAddress } from '@/utils/format'
 
 /**
  * Hộp thoại chỉ đường của P03 (chốt 2026-10-13 — không chuyển sang trang ngoài): bản đồ lớn, ghim địa điểm, vị trí người
@@ -160,7 +161,7 @@ const MODES: { value: TravelMode; label: string }[] = [
               <span>
                 <b>{{ place.name }}</b>
                 <br />
-                <span class="text-ink-muted">{{ place.address }}</span>
+                <span class="text-ink-muted">{{ fullAddress(place) }}</span>
               </span>
             </li>
           </ol>

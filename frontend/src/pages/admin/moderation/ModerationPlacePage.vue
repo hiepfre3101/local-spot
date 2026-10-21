@@ -11,7 +11,13 @@ import LsAdminButton from '@/components/ui/LsAdminButton.vue'
 import LsBadge from '@/components/ui/LsBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { PlaceStatus } from '@/types/api'
-import { formatDateTime, formatNumber, formatPriceRange, tagLabel } from '@/utils/format'
+import {
+  formatDateTime,
+  formatNumber,
+  formatPriceRange,
+  fullAddress,
+  tagLabel,
+} from '@/utils/format'
 import { weekSchedule } from '@/utils/openingHours'
 
 import ModerationHead from './ModerationHead.vue'
@@ -193,11 +199,7 @@ async function reject(): Promise<void> {
           <dl class="ls-dl fs__grid">
             <div class="col-span-full">
               <dt>Địa chỉ</dt>
-              <dd>{{ place.address }}</dd>
-            </div>
-            <div>
-              <dt>Tỉnh / thành</dt>
-              <dd>{{ place.city }}</dd>
+              <dd>{{ fullAddress(place) }}</dd>
             </div>
             <div>
               <dt>Số điện thoại</dt>
@@ -255,7 +257,7 @@ async function reject(): Promise<void> {
                     "
                     >{{ other.name }}</RouterLink
                   >
-                  <div class="text-caption text-ink-muted">{{ other.address }}</div>
+                  <div class="text-caption text-ink-muted">{{ fullAddress(other) }}</div>
                 </td>
                 <td>
                   <LsBadge :tone="STATUS[other.status].tone">{{

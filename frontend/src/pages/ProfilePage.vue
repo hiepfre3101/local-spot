@@ -20,7 +20,7 @@ import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useNotify } from '@/plugins/toast'
 import { useAuthStore } from '@/stores/auth'
 import type { CollectionDetail, CollectionSummary, PlaceStatus, PublicProfile } from '@/types/api'
-import { formatDate, formatNumber } from '@/utils/format'
+import { formatDate, formatNumber, fullAddress } from '@/utils/format'
 
 /**
  * P06 Trang cá nhân (UC18, UC20, UC21; UC11 — theo dõi đề xuất). Đầu trang: ảnh đại diện, tên, ngày tham gia, giới
@@ -391,7 +391,7 @@ async function toggleFollow(): Promise<void> {
             >
               {{ p.name }}
             </RouterLink>
-            <p class="m-0 text-caption text-ink-muted">{{ p.address }}</p>
+            <p class="m-0 text-caption text-ink-muted">{{ fullAddress(p) }}</p>
           </div>
           <LsBadge :tone="PLACE_STATUS[p.status].tone">{{ PLACE_STATUS[p.status].text }}</LsBadge>
         </li>

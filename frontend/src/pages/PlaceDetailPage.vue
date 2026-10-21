@@ -26,7 +26,7 @@ import NotFoundPage from '@/pages/errors/NotFoundPage.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useFilterStore } from '@/stores/filter'
 import type { PlaceDetail } from '@/types/api'
-import { formatNumber, formatPriceRange, tagLabel } from '@/utils/format'
+import { formatNumber, formatPriceRange, fullAddress, tagLabel } from '@/utils/format'
 import { openState, weekSchedule } from '@/utils/openingHours'
 import { scoreText } from '@/utils/rating'
 
@@ -335,7 +335,7 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
           <LsRating :score="place.bayesianScore" :count="place.reviewCount" size="lg" />
           <LsBadge v-if="place.owner" tone="info">✓ Đã xác nhận sở hữu</LsBadge>
         </div>
-        <p class="mt-3 mb-2 text-ink-muted">{{ place.category.name }} · {{ place.address }}</p>
+        <p class="mt-3 mb-2 text-ink-muted">{{ place.category.name }} · {{ fullAddress(place) }}</p>
         <ul v-if="place.tags.length" class="ls-tags text-caption!" aria-label="Thẻ">
           <li v-for="tag in place.tags" :key="tag">{{ tagLabel(tag) }}</li>
         </ul>
@@ -427,7 +427,7 @@ const reviewAction = computed<'write' | 'edit' | null>(() => {
               <circle cx="12" cy="9" r="2.5" />
             </svg>
             <span>
-              {{ place.address }} ·
+              {{ fullAddress(place) }} ·
               <button
                 type="button"
                 class="ls-link cursor-pointer border-0 bg-transparent p-0"
