@@ -204,7 +204,8 @@ class PlaceFlowTests {
                 .andExpect(jsonPath("$.rejectReason").isEmpty());
         mvc.perform(get(PLACES).param("city", city))
                 .andExpect(jsonPath("$.items.length()").value(1))
-                .andExpect(jsonPath("$.items[0].slug").value(slug));
+                .andExpect(jsonPath("$.items[0].slug").value(slug))
+                .andExpect(jsonPath("$.items[0].city").value(city));
         Map<String, Object> place =
                 jdbc.queryForMap("SELECT status, moderated_by, moderated_at FROM places WHERE id = ?", placeId);
         assertThat(((Number) place.get("moderated_by")).longValue()).isEqualTo(moderator.id());

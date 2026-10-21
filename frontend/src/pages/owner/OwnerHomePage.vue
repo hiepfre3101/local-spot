@@ -12,7 +12,7 @@ import LsButton from '@/components/ui/LsButton.vue'
 import { useNotify } from '@/plugins/toast'
 import { useAuthStore } from '@/stores/auth'
 import type { ClaimStatus, PlaceDetail } from '@/types/api'
-import { formatDate } from '@/utils/format'
+import { formatDate, fullAddress } from '@/utils/format'
 
 /**
  * P09 · Địa điểm của tôi — `/owner` (sitemap). Ba khối:
@@ -109,7 +109,7 @@ function submitted(place: PlaceDetail): void {
               :to="{ name: 'owner-place', params: { id: p.id } }"
               >{{ p.name }}</RouterLink
             >
-            <p class="m-0 text-caption text-ink-muted">{{ p.address }}</p>
+            <p class="m-0 text-caption text-ink-muted">{{ fullAddress(p) }}</p>
             <LsRating class="mt-1" :score="p.bayesianScore" :count="p.reviewCount" />
           </div>
           <LsButton variant="ghost" size="sm" :to="{ name: 'owner-place', params: { id: p.id } }"

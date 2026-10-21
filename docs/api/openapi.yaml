@@ -1812,6 +1812,7 @@ components:
         name: { type: string }
         category: { $ref: '#/components/schemas/CategoryRef' }
         address: { type: string }
+        city: { type: string, description: '*(thêm 2026-10-21)* Thành phố — giao diện hiện "địa chỉ, thành phố"' }
         location: { $ref: '#/components/schemas/GeoPoint' }
         coverPhoto: { oneOf: [ { $ref: '#/components/schemas/Photo' }, { type: 'null' } ] }
         priceMin: { type: [integer, 'null'] }

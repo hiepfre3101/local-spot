@@ -194,7 +194,7 @@ describe('OwnerPlacePage (P09 /owner/places/:id)', () => {
     expect(description.value).toBe('Phở bò tái lăn')
     // Địa chỉ chỉ để đối chiếu — không sửa, không gửi (chốt 2026-10-21)
     const address = wrapper.get('input[disabled]').element as HTMLInputElement
-    expect(address.value).toBe('13 Lò Đúc')
+    expect(address.value).toBe('13 Lò Đúc, Hà Nội')
 
     await wrapper.get('input[type="tel"]').setValue('')
     const boxes = wrapper.findAll('input[type="checkbox"]')

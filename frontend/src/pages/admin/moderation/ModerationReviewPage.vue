@@ -10,7 +10,7 @@ import LsAdminButton from '@/components/ui/LsAdminButton.vue'
 import LsBadge from '@/components/ui/LsBadge.vue'
 import { useAuthStore } from '@/stores/auth'
 import type { ReviewStatus } from '@/types/api'
-import { formatDate, formatDateTime, formatNumber } from '@/utils/format'
+import { formatDate, formatDateTime, formatNumber, fullAddress } from '@/utils/format'
 
 import ModerationHead from './ModerationHead.vue'
 import RejectReason from './RejectReason.vue'
@@ -162,7 +162,7 @@ async function reject(): Promise<void> {
               :to="{ name: 'place', params: { slug: item.place.slug } }"
               >{{ item.place.name }}</RouterLink
             >
-            · {{ item.place.address }}
+            · {{ fullAddress(item.place) }}
           </p>
         </div>
         <div class="grid max-w-[720px] gap-6">

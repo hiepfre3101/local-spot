@@ -9,6 +9,7 @@ import LsButton from '@/components/ui/LsButton.vue'
 import { useAmenities } from '@/composables/catalogQueries'
 import { useNotify } from '@/plugins/toast'
 import type { PlaceDetail } from '@/types/api'
+import { fullAddress } from '@/utils/format'
 import {
   PHONE,
   WEBSITE,
@@ -207,7 +208,7 @@ onBeforeUnmount(() => newPhotos.value.forEach(releaseDraft))
             <label :for="`${uid}-address`">Địa chỉ</label>
             <input
               :id="`${uid}-address`"
-              :value="place.address"
+              :value="fullAddress(place)"
               class="ls-input"
               disabled
               :aria-describedby="`${uid}-address-hint`"

@@ -20,6 +20,7 @@ import { useAuthStore } from '@/stores/auth'
 import type { GeoPoint, PlaceDetail } from '@/types/api'
 import { clearDraft, draftKey, loadDraft, saveDraft } from '@/utils/draft'
 import { formatDistance } from '@/utils/geo'
+import { fullAddress } from '@/utils/format'
 import {
   TAGS_MAX,
   WEEKDAYS,
@@ -323,7 +324,7 @@ function proposeAnother(): void {
                   target="_blank"
                   >{{ c.name }}</RouterLink
                 >
-                — {{ c.address
+                — {{ fullAddress(c)
                 }}<template v-if="c.distanceM != null">
                   · cách {{ formatDistance(c.distanceM) }}</template
                 ><template v-if="c.status === 'PENDING'">

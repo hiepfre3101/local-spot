@@ -68,6 +68,7 @@ public class PlaceSummaries {
                 s.name(),
                 s.category(),
                 s.address(),
+                s.city(),
                 s.location(),
                 cover,
                 s.priceMin(),
