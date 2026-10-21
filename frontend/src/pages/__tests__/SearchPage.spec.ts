@@ -106,9 +106,12 @@ describe('SearchPage (P02)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     list.mockReset().mockResolvedValue({ items: [place(1, 'Phở Thìn')], nextCursor: null })
-    search
-      .mockReset()
-      .mockResolvedValue({ items: [place(2, 'Phở Bát Đàn')], nextCursor: null, degraded: false })
+    search.mockReset().mockResolvedValue({
+      items: [place(2, 'Phở Bát Đàn')],
+      nextCursor: null,
+      degraded: false,
+      relaxedAccents: false,
+    })
     nearby.mockReset().mockResolvedValue([place(3, 'Bún chả Hương Liên', { distanceM: 350 })])
   })
   afterEach(() => vi.unstubAllGlobals())
@@ -136,7 +139,12 @@ describe('SearchPage (P02)', () => {
   })
 
   it('có từ khóa: gọi /search (RELEVANCE) và báo chế độ dự phòng', async () => {
-    search.mockResolvedValue({ items: [place(2, 'Phở Bát Đàn')], nextCursor: null, degraded: true })
+    search.mockResolvedValue({
+      items: [place(2, 'Phở Bát Đàn')],
+      nextCursor: null,
+      degraded: true,
+      relaxedAccents: false,
+    })
     const { wrapper } = await mountAt('/search?q=pho%20bat%20dan')
 
     await vi.waitFor(() => expect(search).toHaveBeenCalled())
@@ -145,6 +153,21 @@ describe('SearchPage (P02)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Kết quả cho “pho bat dan”')
     expect(wrapper.text()).toContain('chế độ dự phòng')
+  })
+
+  it('gõ có dấu nhưng không có kết quả đúng dấu: báo đang hiện kết quả không phân biệt dấu', async () => {
+    search.mockResolvedValue({
+      items: [place(2, 'Phở Bát Đàn')],
+      nextCursor: null,
+      degraded: false,
+      relaxedAccents: true,
+    })
+    const { wrapper } = await mountAt('/search?q=ph%E1%BB%9B')
+
+    await vi.waitFor(() => expect(search).toHaveBeenCalled())
+    await flushPromises()
+    expect(wrapper.text()).toContain('Không có địa điểm khớp đúng dấu với “phớ”')
+    expect(wrapper.text()).not.toContain('chế độ dự phòng')
   })
 
   it('quanh tôi: hỏi vị trí rồi gọi /places/nearby chỉ với danh mục + bán kính; tắt bộ lọc khác', async () => {

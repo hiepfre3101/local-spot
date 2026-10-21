@@ -54,7 +54,7 @@ export function useSearchResults(inputs: Ref<SearchInputs>) {
           )
         : placesApi
             .list(filter.value, (sort.value ?? 'SCORE') as PlaceSort, pageParam, PAGE_SIZE)
-            .then((page) => ({ ...page, degraded: false })),
+            .then((page) => ({ ...page, degraded: false, relaxedAccents: false })),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: computed(() => ready.value && mode.value !== 'nearby'),
@@ -93,6 +93,10 @@ export function useSearchResults(inputs: Ref<SearchInputs>) {
     items,
     degraded: computed(
       () => mode.value === 'search' && (paged.data.value?.pages.some((p) => p.degraded) ?? false),
+    ),
+    /** Trang đầu quyết định chế độ dấu, các trang sau giữ nguyên (cursor) — đọc trang đầu là đủ. */
+    relaxedAccents: computed(
+      () => mode.value === 'search' && (paged.data.value?.pages[0]?.relaxedAccents ?? false),
     ),
     isPending: computed(() => !ready.value || active.value.isPending.value),
     isFetching: computed(() => active.value.isFetching.value),

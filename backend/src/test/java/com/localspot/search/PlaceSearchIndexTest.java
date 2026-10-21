@@ -25,14 +25,16 @@ class PlaceSearchIndexTest {
     void filterMatchesPlaceListSemantics() {
         PlaceFilter filter = new PlaceFilter(7L, List.of(3L, 5L, 3L), 50000, new BigDecimal("4.5"), "Hà Nội");
 
-        assertThat(PlaceSearchIndex.filterOf(filter))
+        assertThat(PlaceSearchIndex.filterOf(filter, List.of("pho_8_3", "pho_8_3", "d_9o_6ng")))
                 .containsExactly(
                         "categoryIds = 7", // gồm danh mục con (tài liệu mang cả id danh mục cha)
                         "amenityIds = 3", // đủ tất cả tiện ích, không lặp
                         "amenityIds = 5",
                         "priceMin <= 50000",
-                        "bayesianScore >= 4.5");
-        assertThat(PlaceSearchIndex.filterOf(new PlaceFilter(null, null, null, null, null)))
+                        "bayesianScore >= 4.5",
+                        "accentKeys = \"pho_8_3\"", // mỗi từ có dấu một điều kiện, không lặp (chốt 2026-10-21)
+                        "accentKeys = \"d_9o_6ng\"");
+        assertThat(PlaceSearchIndex.filterOf(new PlaceFilter(null, null, null, null, null), List.of()))
                 .isEmpty();
     }
 

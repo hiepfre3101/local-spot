@@ -554,6 +554,9 @@ paths:
         Tìm trên tên, thẻ, danh mục (+ danh mục cha), địa chỉ, thành phố, mô tả — ưu tiên theo thứ tự đó. Meilisearch chỉ
         trả id; thẻ địa điểm nạp lại từ MySQL và chỉ giữ địa điểm **đang** APPROVED.
         Phân trang theo vị trí (cursor mờ, gắn với `sort`, tối đa 1000 kết quả); cursor của thứ tự khác → 422 `INVALID_CURSOR`.
+        *(chốt 2026-10-21)* Từ khóa **có dấu** → kết quả phải chứa đúng các từ có dấu đó ("phở" không ra "phố"); từ gõ
+        không dấu vẫn khớp mọi dấu ("pho" ra cả hai). Từ chung chung bị bỏ không ràng buộc. Trang đầu không có kết quả đúng
+        dấu (gõ nhầm dấu) → tìm lại không phân biệt dấu, `relaxedAccents = true`; cursor giữ chế độ đó cho các trang sau.
         Meilisearch lỗi → `degraded = true`: tên chứa mọi từ khóa (`LIKE`, không phân biệt dấu), `RELEVANCE` xếp như `SCORE`;
         không gọi lại Meilisearch trong 30 giây sau lỗi.
         Lọc theo khoảng cách không có ở đây — UC08 2a chuyển sang `/places/nearby` (UC09).
@@ -569,7 +572,7 @@ paths:
         - { $ref: '#/components/parameters/Limit' }
       responses:
         '200':
-          description: OK. `degraded = true` khi đang dùng fallback.
+          description: OK. `degraded = true` khi đang dùng fallback; `relaxedAccents = true` khi không có kết quả đúng dấu.
           content:
             application/json:
               schema:
@@ -578,6 +581,7 @@ paths:
                   - type: object
                     properties:
                       degraded: { type: boolean }
+                      relaxedAccents: { type: boolean, description: '*(2026-10-21)* Từ khóa có dấu nhưng không có kết quả đúng dấu — đang hiện kết quả không phân biệt dấu' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '422': { $ref: '#/components/responses/ValidationError' }
 

@@ -92,6 +92,19 @@ public class PlaceIndexingService {
                 place.getAmenities().stream().map(Amenity::getId).sorted().toList(),
                 place.getPriceMin(),
                 place.getBayesianScore(),
-                place.getReviewCount());
+                place.getReviewCount(),
+                accentKeysOf(place.getName(), tags, categoryNames, place));
+    }
+
+    /** Cùng các trường được tìm ({@code PlaceSearchIndex.SEARCHABLE}) — tìm đúng dấu xét đúng những chữ người dùng thấy. */
+    private static List<String> accentKeysOf(String name, List<String> tags, List<String> categoryNames, Place place) {
+        List<String> texts = new ArrayList<>();
+        texts.add(name);
+        texts.addAll(tags);
+        texts.addAll(categoryNames);
+        texts.add(place.getAddress());
+        texts.add(place.getCity());
+        texts.add(place.getDescription());
+        return AccentKeys.ofTexts(texts);
     }
 }

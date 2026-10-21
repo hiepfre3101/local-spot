@@ -41,8 +41,11 @@ public final class PlaceSearchIndex {
     /** Thứ tự = mức ưu tiên khi xếp hạng (luật {@code attributeRank}): khớp ở tên hơn khớp ở mô tả. */
     static final String[] SEARCHABLE = {"name", "tags", "categoryNames", "address", "city", "description"};
 
-    /** {@code id} để xóa theo bộ lọc ({@code id IN [...]}) — cách xóa theo lô cũ của client đã deprecated. */
-    static final String[] FILTERABLE = {"id", "categoryIds", "amenityIds", "priceMin", "bayesianScore"};
+    /**
+     * {@code id} để xóa theo bộ lọc ({@code id IN [...]}) — cách xóa theo lô cũ của client đã deprecated.
+     * {@code accentKeys} để tìm đúng dấu (chốt 2026-10-21) — chỉ lọc, không nằm trong {@link #SEARCHABLE}.
+     */
+    static final String[] FILTERABLE = {"id", "categoryIds", "amenityIds", "priceMin", "bayesianScore", "accentKeys"};
 
     static final String[] SORTABLE = {"bayesianScore", "reviewCount", "id"};
 
@@ -119,7 +122,7 @@ public final class PlaceSearchIndex {
     /** Id địa điểm theo thứ tự kết quả. Không gọi {@link #applySettings()} — đường đọc phải nhanh, lỗi thì fallback. */
     public List<Long> search(PlaceSearchQuery query) {
         SearchRequest request = new SearchRequest(query.q())
-                .setFilter(filterOf(query.filter()))
+                .setFilter(filterOf(query.filter(), query.accentKeys()))
                 .setSort(sortOf(query.sort()))
                 .setOffset(query.offset())
                 .setLimit(query.limit())
@@ -133,8 +136,11 @@ public final class PlaceSearchIndex {
         return ids;
     }
 
-    /** Biểu thức lọc Meilisearch; các phần tử của mảng được AND với nhau. Giá trị đều là số — không có chuỗi người dùng. */
-    static String[] filterOf(PlaceFilter filter) {
+    /**
+     * Biểu thức lọc Meilisearch; các phần tử của mảng được AND với nhau. Giá trị số, trừ khóa dấu — chỉ gồm chữ / số / dấu
+     * {@code _} (tách từ theo ký tự không phải chữ / số) nên không thể chứa nháy kép; vẫn thoát cho chắc.
+     */
+    static String[] filterOf(PlaceFilter filter, List<String> accentKeys) {
         List<String> clauses = new ArrayList<>();
         if (filter.categoryId() != null) {
             clauses.add("categoryIds = " + filter.categoryId());
@@ -147,6 +153,9 @@ public final class PlaceSearchIndex {
         }
         if (filter.minRating() != null) {
             clauses.add("bayesianScore >= " + filter.minRating().toPlainString());
+        }
+        for (String key : new LinkedHashSet<>(accentKeys)) {
+            clauses.add("accentKeys = \"" + key.replace("\\", "\\\\").replace("\"", "\\\"") + "\""); // đủ mọi từ (AND)
         }
         return clauses.toArray(String[]::new);
     }

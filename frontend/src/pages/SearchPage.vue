@@ -390,6 +390,14 @@ watch(
           ● Tìm kiếm đang chạy chế độ dự phòng: chỉ khớp theo tên địa điểm, kết quả có thể chưa đầy
           đủ.
         </p>
+        <p
+          v-else-if="results.relaxedAccents.value"
+          class="mt-4 text-caption text-ink-muted"
+          role="status"
+        >
+          ● Không có địa điểm khớp đúng dấu với “{{ state.q }}” — đang hiện kết quả không phân biệt
+          dấu.
+        </p>
 
         <!-- Vị trí -->
         <div v-if="state.near === 'me' && locateStatus !== 'ready'" class="py-12" role="status">

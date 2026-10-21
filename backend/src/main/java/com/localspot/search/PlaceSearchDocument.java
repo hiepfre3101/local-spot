@@ -10,6 +10,8 @@ import java.util.List;
  * @param categoryNames danh mục và danh mục cha ("Phở &amp; bún", "Quán ăn") — gõ "quan an" ra cả danh mục con
  * @param categoryIds tương tự, để lọc theo danh mục cha gồm cả con như {@code GET /places}
  * @param priceMin {@code null} khi chưa khai giá — Meilisearch coi như thiếu trường, lọc giá loại ra như MySQL
+ * @param accentKeys khóa giữ dấu của mọi từ có dấu trong các trường được tìm ({@code AccentKeys}) — <b>chỉ để lọc</b>
+ *     khi người dùng gõ có dấu, không nằm trong thuộc tính tìm (thêm 2026-10-21)
  */
 public record PlaceSearchDocument(
         long id,
@@ -23,12 +25,14 @@ public record PlaceSearchDocument(
         List<Long> amenityIds,
         Integer priceMin,
         BigDecimal bayesianScore,
-        int reviewCount) {
+        int reviewCount,
+        List<String> accentKeys) {
 
     public PlaceSearchDocument {
         tags = List.copyOf(tags);
         categoryNames = List.copyOf(categoryNames);
         categoryIds = List.copyOf(categoryIds);
         amenityIds = List.copyOf(amenityIds);
+        accentKeys = List.copyOf(accentKeys);
     }
 }

@@ -35,6 +35,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li><b>Fallback (U9)</b>: Meilisearch lỗi → MySQL {@code LIKE} trên tên, {@code degraded = true}, log WARN. Sau mỗi
  *       lần lỗi, ngừng gọi Meilisearch trong {@code retry-after-failure} (mặc định 30 s) — client không cho đặt timeout
  *       (mặc định 10 s), máy chủ treo sẽ làm mọi request chờ nếu cứ thử lại ngay.
+ *   <li><b>Đúng dấu khi gõ có dấu</b> (chốt 2026-10-21): mỗi từ có dấu (sau khi bỏ từ chung chung) thành một điều kiện
+ *       lọc {@code accentKeys} — "phở" không ra "phố"; từ gõ không dấu vẫn khớp mọi dấu. Trang đầu không có kết quả đúng
+ *       dấu (gõ nhầm dấu) → tìm lại không phân biệt dấu, {@code relaxedAccents = true}, cursor giữ chế độ này cho các trang
+ *       sau. Fallback MySQL không phân biệt dấu (chỉ dùng lúc sự cố, đã báo {@code degraded}).
  *   <li>Không mở transaction trong lúc gọi Meilisearch — chỉ mở khi nạp từ MySQL.
  * </ul>
  */
@@ -72,21 +76,32 @@ public class PlaceSearchService {
 
     public SearchPage search(String q, PlaceFilter filter, SearchSort sort, String cursor, Integer limit) {
         int pageSize = KeysetCursor.limit(limit);
-        int offset = SearchCursor.decode(cursor, sort);
+        SearchCursor.Position position = SearchCursor.decode(cursor, sort);
+        int offset = position.offset();
+        boolean relaxed = position.relaxedAccents();
         // Lấy dư một kết quả để biết còn trang sau, trong cửa sổ tối đa của Meilisearch
         int window = Math.min(pageSize + 1, PlaceSearchIndex.MAX_TOTAL_HITS - offset);
+        String searched = SearchQueries.withoutGenericWords(q);
+        List<String> accentKeys = AccentKeys.ofQuery(q, searched);
         PlaceSearchQuery query =
-                new PlaceSearchQuery(SearchQueries.withoutGenericWords(q), filter, sort, offset, window);
+                new PlaceSearchQuery(searched, filter, relaxed ? List.of() : accentKeys, sort, offset, window);
 
         List<Long> ids = searchMeilisearch(query);
+        if (ids != null && ids.isEmpty() && offset == 0 && !query.accentKeys().isEmpty()) {
+            // Không địa điểm nào khớp đúng dấu (thường là gõ nhầm dấu) → không phân biệt dấu thay vì trang trống
+            relaxed = true;
+            query = new PlaceSearchQuery(searched, filter, List.of(), sort, offset, window);
+            ids = searchMeilisearch(query);
+        }
         boolean degraded = ids == null;
         if (degraded) {
             ids = places.findApprovedIdsByNameWords(query.q(), filter, fallbackSort(sort), offset, window);
         }
         boolean hasMore = ids.size() > pageSize;
         List<Long> pageIds = hasMore ? ids.subList(0, pageSize) : ids;
-        String next = hasMore ? SearchCursor.encode(sort, offset + pageSize) : null;
-        return new SearchPage(load(pageIds, !degraded), next, degraded);
+        String next = hasMore ? SearchCursor.encode(sort, offset + pageSize, relaxed) : null;
+        // Báo "không có kết quả đúng dấu" chỉ khi thật sự đang hiện kết quả không phân biệt dấu
+        return new SearchPage(load(pageIds, !degraded), next, degraded, relaxed && !degraded && !pageIds.isEmpty());
     }
 
     /** {@code null} = không dùng được Meilisearch (lỗi lúc này, hoặc đang trong thời gian chờ sau lần lỗi trước). */

@@ -109,6 +109,46 @@ class SearchFlowTests {
         assertThat(searchIds("chi nhanh", category)).doesNotContain(pending);
     }
 
+    @Test
+    void accentedQueriesMatchExactAccentsAndFallBackWhenNothingMatches() throws Exception {
+        Account member = account("USER");
+        long category = category(null);
+        // Địa chỉ mặc định "1 Phố Thử" — mọi địa điểm đều có "phố"
+        long pho = place(member, "Phở Bắc Hải", category, "APPROVED");
+        long phoBo = place(member, "Phở bò Gia Truyền", category, "APPROVED");
+        long walkingStreet = place(member, "Phố Cổ Corner", category, "APPROVED");
+        indexing.sync(List.of(pho, phoBo, walkingStreet));
+
+        // Gõ có dấu → đúng dấu: "phở" không ra "Phố…" (chốt 2026-10-21)
+        assertThat(searchIds("phở", category)).containsExactlyInAnyOrder(pho, phoBo);
+        assertThat(searchIds("phở bò", category)).containsExactly(phoBo);
+        assertThat(searchIds("phố cổ", category)).containsExactly(walkingStreet);
+        // Từ chung chung bị bỏ không ràng buộc dấu
+        assertThat(searchIds("quán phở", category)).containsExactlyInAnyOrder(pho, phoBo);
+        // Gõ không dấu → như trước, khớp mọi dấu
+        assertThat(searchIds("pho", category)).containsExactlyInAnyOrder(pho, phoBo, walkingStreet);
+        assertThat(searchPage("phở", category).read("$.relaxedAccents", Boolean.class))
+                .isFalse();
+
+        // Không có gì đúng dấu (gõ nhầm "phớ") → không phân biệt dấu, báo cho giao diện
+        var relaxed = searchPage("phớ", category);
+        assertThat(ids(relaxed.jsonString())).containsExactlyInAnyOrder(pho, phoBo, walkingStreet);
+        assertThat(relaxed.read("$.relaxedAccents", Boolean.class)).isTrue();
+
+        // Trang sau giữ chế độ đã chọn ở trang đầu
+        var first = searchPage("phớ", category, "limit", "2");
+        var second = JsonPath.parse(mvc.perform(searchRequest(
+                        "phớ", category, "limit", "2", "cursor", first.read("$.nextCursor", String.class)))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+        assertThat(second.read("$.relaxedAccents", Boolean.class)).isTrue();
+        List<Long> all = new java.util.ArrayList<>(ids(first.jsonString()));
+        all.addAll(ids(second.jsonString()));
+        assertThat(all).containsExactlyInAnyOrder(pho, phoBo, walkingStreet);
+    }
+
     // ─── Bộ lọc, thứ tự, phân trang (FR-10) ─────────────────────────────────
 
     @Test
@@ -220,7 +260,7 @@ class SearchFlowTests {
 
         // Id lệch được đẩy đi đồng bộ lại → index tự xóa chúng
         PlaceSearchQuery query = new PlaceSearchQuery(
-                "lau de", new PlaceFilter(category, null, null, null, null), SearchSort.RELEVANCE, 0, 10);
+                "lau de", new PlaceFilter(category, null, null, null, null), List.of(), SearchSort.RELEVANCE, 0, 10);
         long deadline = System.currentTimeMillis() + 10_000;
         while (!index.search(query).isEmpty()) {
             if (System.currentTimeMillis() > deadline) {
@@ -260,6 +300,16 @@ class SearchFlowTests {
                 .getResponse()
                 .getContentAsString();
         return ids(body);
+    }
+
+    private com.jayway.jsonpath.DocumentContext searchPage(String q, long categoryId, String... params)
+            throws Exception {
+        return JsonPath.parse(mvc.perform(searchRequest(q, categoryId, params))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.degraded").value(false))
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
     }
 
     private static MockHttpServletRequestBuilder searchRequest(String q, long categoryId, String... params) {

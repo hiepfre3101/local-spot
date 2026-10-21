@@ -156,9 +156,13 @@ export interface PlaceDetail extends PlaceSummary {
   version: number
 }
 
-/** `GET /search`: `degraded = true` khi Meilisearch lỗi và đang dùng tìm theo tên (U9). */
+/**
+ * `GET /search`: `degraded = true` khi Meilisearch lỗi và đang dùng tìm theo tên (U9). `relaxedAccents = true` khi từ
+ * khóa có dấu nhưng không địa điểm nào khớp đúng dấu — kết quả là bản không phân biệt dấu (chốt 2026-10-21).
+ */
 export interface SearchPage extends CursorPage<PlaceSummary> {
   degraded: boolean
+  relaxedAccents: boolean
 }
 
 /** openapi `City` (`GET /cities`) — `name` khớp đúng `places.city`. */
