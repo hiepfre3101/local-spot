@@ -1454,3 +1454,22 @@ Chưa commit.
 **Tài liệu**: openapi `PlaceSummary.city`.
 
 **Kiểm chứng**: `fullAddress.spec` (4: ghép, không lặp khi đã có — kể cả khác dấu / hoa thường, chỉ xét phần cuối, thiếu một phần); `PlaceFlowTests` kiểm `items[0].city` của danh sách; `./mvnw verify` **360 test** xanh; frontend `vitest` **221 test** xanh, `vue-tsc`, `eslint`, `prettier --check` sạch, `vite build` được. API dev trả `city` trong danh sách.
+
+## 2026-10-21 15:36 (+07) — Tìm kiếm: gõ có dấu thì khớp đúng dấu
+
+**Bối cảnh**: supervisor thấy tìm "phở" ra cả "phố". Điều tra: (1) Meilisearch trên máy dev không chạy — dữ liệu index còn định dạng v1.10, bản v1.54 từ chối khởi động (đúng ghi chú README 2026-10-08) → mọi truy vấn rơi về fallback MySQL `LIKE` theo tên (collation không phân biệt dấu, không xếp độ liên quan). Supervisor đồng ý xóa volume index (`localspot_meilisearch_data` — README ghi `local-spot_…`, tên thật trên máy này khác) để backend dựng lại từ MySQL: 278 địa điểm. (2) Meilisearch thật cũng trả y hệt cho "phở" / "pho" / "phố" — bỏ dấu là thiết kế (2026-10-08).
+
+**Supervisor chốt (qua câu hỏi):** **gõ có dấu thì chỉ khớp đúng dấu, không có kết quả đúng dấu thì quay về không phân biệt dấu**. Bị loại: đúng dấu lên đầu, phần còn lại phía sau (vẫn hiện "Phố đi bộ"); giữ nguyên.
+
+**Quyết định kỹ thuật:**
+- **Trường `accentKeys` chỉ để lọc** trong tài liệu Meilisearch: khóa giữ dấu kiểu VNI của mọi từ có dấu ở tên, thẻ, danh mục, địa chỉ, thành phố, mô tả (`phở` → `pho_8_3`, `phố` → `pho_6_1`; NFD nên gõ tổ hợp / dựng sẵn ra cùng khóa). Không nằm trong thuộc tính tìm → độ liên quan, sửa lỗi chính tả, synonym giữ nguyên; chỉ ASCII nên không phụ thuộc cách Meilisearch chuẩn hóa chuỗi khi so bộ lọc. Bị loại: tách query tìm trên trường mã hóa + gộp kết quả (federated) — phức tạp hơn, phân trang khó; lọc sau khi nhận kết quả — phá phân trang theo vị trí.
+- **Mỗi từ có dấu người dùng gõ = một điều kiện lọc (AND)**, chỉ những từ còn lại sau khi bỏ từ chung chung ("quán phở" → chỉ "phở"). Từ không dấu không ràng buộc → "pho" vẫn ra mọi dấu (điểm khác biệt "tìm không dấu" giữ nguyên).
+- **Fallback**: trang đầu rỗng khi lọc đúng dấu → tìm lại không lọc, `relaxedAccents = true`; chế độ ghi vào cursor (`SORT|offset|E/R`, cursor cũ 2 phần vẫn đọc được) để các trang sau không lẫn hai thứ tự. Kết quả rỗng cả hai thì không báo `relaxedAccents`.
+- Fallback MySQL (Meilisearch sập) giữ không phân biệt dấu — đường sự cố, đã báo `degraded`; làm đúng dấu ở đó cần SQL theo collation riêng.
+- Frontend: một dòng "● Không có địa điểm khớp đúng dấu với “…” — đang hiện kết quả không phân biệt dấu."
+- Cần khởi động lại backend sau khi triển khai: áp cấu hình lọc mới + đồng bộ lại toàn bộ tài liệu (có sẵn ở `SearchIndexBootstrap`).
+- Hệ quả đã biết: "phở" vẫn ra "Bún chả Phố Cổ", "Bún bò Góc Phố" vì danh mục của chúng là "Phở & bún" (chữ "phở" thật sự có trong dữ liệu).
+
+**Tài liệu**: openapi `/search` (luật đúng dấu, `relaxedAccents`), requirements §5 tham số tìm kiếm tiếng Việt.
+
+**Kiểm chứng**: `AccentKeysTest` (4: khóa đúng dấu, NFC = NFD, gom từ nhiều trường, bỏ từ chung chung), `PlaceSearchIndexTest` (điều kiện lọc), `SearchFlowTests.accentedQueriesMatchExactAccentsAndFallBackWhenNothingMatches` trên Meilisearch thật (phở / phở bò / phố cổ / quán phở / pho / phớ → relaxed, cursor giữ chế độ); ca cũ "phỏ thin" vẫn ra Phở Thìn qua fallback. `./mvnw verify` **365 test** xanh. Frontend **222 test** xanh, `vue-tsc` / `eslint` / `prettier` sạch, build được. Chạy thật: "phở" 22 kết quả (trước: 50+ gồm "Phố đi bộ…"), "pho" / "phố" 50+, "phớ" → relaxed.
