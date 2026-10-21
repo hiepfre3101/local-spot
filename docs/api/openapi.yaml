@@ -1876,13 +1876,14 @@ components:
         tags: { type: array, maxItems: 10, items: { type: string, maxLength: 50 } }
     PlaceUpdateRequest:
       description: |
-        Chủ không đổi được vị trí và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý.
+        Chủ không đổi được vị trí, địa chỉ và danh mục (tránh "dời" địa điểm để thoát review) — muốn đổi phải báo cáo WRONG_INFO để kiểm duyệt viên xử lý.
+        *(2026-10-21)* Bỏ `address`: địa điểm do thành viên đề xuất và kiểm duyệt viên duyệt; địa chỉ không phải quán của mình thì đề xuất
+        đúng địa điểm rồi yêu cầu sở hữu. Trường không có trong schema (kể cả `address`, `name`, `categoryId`) gửi lên bị bỏ qua.
         Ngữ nghĩa PATCH *(2026-10-04)*: trường vắng / null = giữ nguyên; chuỗi rỗng xóa `description` / `phone` / `website`;
         `openingHours`, `amenityIds` gửi lên là thay toàn bộ (mảng rỗng = xóa hết).
       type: object
       properties:
         description: { type: string, maxLength: 5000 }
-        address: { type: string, maxLength: 300 }
         priceMin: { type: integer, minimum: 0 }
         priceMax: { type: integer, minimum: 0 }
         phone: { type: string, maxLength: 20 }

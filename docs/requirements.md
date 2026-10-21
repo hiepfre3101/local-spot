@@ -99,7 +99,7 @@ Cột "Nguồn" trỏ về mục trong plan-v1.md để truy vết.
 | Mã | Tác nhân | Chức năng | Mô tả / tiêu chí chấp nhận | Ưu tiên | Nguồn |
 |---|---|---|---|---|---|
 | FR-31 | Thành viên | Yêu cầu xác nhận sở hữu | Gửi kèm minh chứng; một yêu cầu đang chờ / địa điểm / người | S | §4, §5 `place_claims` |
-| FR-32 | Chủ địa điểm | Cập nhật thông tin địa điểm | Thông tin, ảnh, giờ mở cửa, tiện ích của địa điểm mình sở hữu | S | §4 |
+| FR-32 | Chủ địa điểm | Cập nhật thông tin địa điểm | Thông tin, ảnh, giờ mở cửa, tiện ích của địa điểm mình sở hữu — không gồm tên, vị trí, địa chỉ, danh mục (2026-10-21) | S | §4 |
 | FR-33 | Chủ địa điểm | Phản hồi review | Phản hồi công khai; thông báo cho người viết review | S | §4, §5 `owner_replies` |
 | FR-34 | Chủ địa điểm | Thống kê địa điểm | Lượt xem (gộp theo ngày), lượt check-in, phân bố điểm sao | C | §4, §5 `place_views` |
 

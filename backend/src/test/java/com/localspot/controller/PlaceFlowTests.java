@@ -532,7 +532,7 @@ class PlaceFlowTests {
 
         MvcResult updated = perform(owner, ownerPatch(placeId, """
                         {"description": "Lẩu bò nhúng dấm", "phone": "", "priceMax": 250000,
-                         "name": "Không đổi được tên", "categoryId": %d,
+                         "name": "Không đổi được tên", "categoryId": %d, "address": "99 Phố Khác",
                          "amenityIds": [%d, %d],
                          "openingHours": [{"dayOfWeek": 7, "openTime": "09:00", "closeTime": "23:30"}],
                          "version": %d}
@@ -544,6 +544,7 @@ class PlaceFlowTests {
                 .andExpect(jsonPath("$.priceMin").value(100000))
                 .andExpect(jsonPath("$.priceMax").value(250000))
                 .andExpect(jsonPath("$.name").value("Lẩu Phan"))
+                .andExpect(jsonPath("$.address").value("1 Phố Huế")) // chủ không đổi địa chỉ (chốt 2026-10-21)
                 .andExpect(jsonPath("$.category.slug").value("pho-bun"))
                 .andExpect(jsonPath("$.amenities.length()").value(2))
                 .andExpect(jsonPath("$.openingHours.length()").value(1))
@@ -561,9 +562,6 @@ class PlaceFlowTests {
         perform(owner, ownerPatch(placeId, "{\"priceMin\": 300000}"))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.errors[0].field").value("priceMax"));
-        perform(owner, ownerPatch(placeId, "{\"address\": \"  \"}"))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.errors[0].field").value("address"));
         assertThat((Integer) JsonPath.read(updated.getResponse().getContentAsString(), "$.version"))
                 .isEqualTo(version + 1);
     }

@@ -192,6 +192,9 @@ describe('OwnerPlacePage (P09 /owner/places/:id)', () => {
     const wrapper = await mountPage(5, 'info')
     const description = wrapper.get('textarea').element as HTMLTextAreaElement
     expect(description.value).toBe('Phở bò tái lăn')
+    // Địa chỉ chỉ để đối chiếu — không sửa, không gửi (chốt 2026-10-21)
+    const address = wrapper.get('input[disabled]').element as HTMLInputElement
+    expect(address.value).toBe('13 Lò Đúc')
 
     await wrapper.get('input[type="tel"]').setValue('')
     const boxes = wrapper.findAll('input[type="checkbox"]')
@@ -200,7 +203,6 @@ describe('OwnerPlacePage (P09 /owner/places/:id)', () => {
     await flushPromises()
     expect(owner.update).toHaveBeenCalledWith(5, {
       description: 'Phở bò tái lăn',
-      address: '13 Lò Đúc',
       priceMin: 50000,
       priceMax: 80000,
       phone: '',

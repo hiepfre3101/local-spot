@@ -196,20 +196,15 @@ public class PlaceService {
     }
 
     /**
-     * Chủ địa điểm sửa thông tin (quyền sở hữu đã kiểm ở {@code @PreAuthorize} của controller). Mô tả, địa chỉ, giá, tiện
-     * ích nằm trong index tìm kiếm → đồng bộ lại sau commit.
+     * Chủ địa điểm sửa thông tin (quyền sở hữu đã kiểm ở {@code @PreAuthorize} của controller). Không đổi được tên, vị
+     * trí, địa chỉ, danh mục (chốt 2026-10-21 cho địa chỉ). Mô tả, giá, tiện ích nằm trong index tìm kiếm → đồng bộ lại
+     * sau commit.
      */
     @Transactional
     public PlaceDetailResponse updateByOwner(Long ownerId, Long placeId, PlaceUpdateRequest request) {
         Place place = places.findDetailById(placeId).orElseThrow(PlaceService::placeNotFound);
         checkVersion(place, request.version());
 
-        if (request.address() != null) {
-            if (request.address().isBlank()) {
-                throw ApiException.fieldError(ErrorCode.VALIDATION_FAILED, "address", "Địa chỉ không được để trống.");
-            }
-            place.setAddress(request.address().strip());
-        }
         Integer priceMin = request.priceMin() != null ? request.priceMin() : place.getPriceMin();
         Integer priceMax = request.priceMax() != null ? request.priceMax() : place.getPriceMax();
         checkPriceRange(priceMin, priceMax);

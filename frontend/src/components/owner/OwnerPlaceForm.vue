@@ -20,8 +20,10 @@ import {
 
 /**
  * Cập nhật thông tin địa điểm (UC24, FR-32) — áp dụng ngay, không duyệt lại (O5, chốt 2026-10-05). Bố cục section như
- * P05 / AdminForm. Không sửa được tên, vị trí, danh mục (backend không nhận — đổi phải báo cáo WRONG_INFO); giá chỉ đặt
- * được, không xoá được (API: `null` = giữ nguyên). Gửi `version`: người khác vừa sửa → 409, báo tải lại.
+ * P05 / AdminForm. Không sửa được tên, vị trí, **địa chỉ** (chốt 2026-10-21), danh mục — backend không nhận; địa chỉ chỉ
+ * hiện (tắt) để chủ đối chiếu. Địa điểm do thành viên đề xuất và kiểm duyệt viên duyệt: sai thì báo cáo WRONG_INFO, không
+ * phải quán của mình thì đề xuất đúng địa điểm rồi yêu cầu sở hữu. Giá chỉ đặt được, không xoá được (API: `null` = giữ
+ * nguyên). Gửi `version`: người khác vừa sửa → 409, báo tải lại.
  *
  * Ảnh: thêm / xoá gọi API ngay (không đợi "Lưu"), xử lý nền như ảnh đề xuất; tối đa 30 ảnh / địa điểm.
  */
@@ -35,7 +37,6 @@ const notify = useNotify()
 const amenities = useAmenities()
 
 const description = ref('')
-const address = ref('')
 const priceMin = ref<number | null>(null)
 const priceMax = ref<number | null>(null)
 const phone = ref('')
@@ -48,7 +49,6 @@ const saving = ref(false)
 
 function load(p: PlaceDetail): void {
   description.value = p.description ?? ''
-  address.value = p.address
   priceMin.value = p.priceMin
   priceMax.value = p.priceMax
   phone.value = p.phone ?? ''
@@ -65,8 +65,6 @@ function parsePrice(event: Event): number | null {
 
 function validate(): boolean {
   const e: Record<string, string> = {}
-  if (!address.value.trim()) e.address = 'Nhập địa chỉ.'
-  else if (address.value.trim().length > 300) e.address = 'Địa chỉ tối đa 300 ký tự.'
   for (const [key, value] of [
     ['priceMin', priceMin.value],
     ['priceMax', priceMax.value],
@@ -98,7 +96,6 @@ async function save(): Promise<void> {
   if (!validate()) return
   const update: PlaceUpdate = {
     description: description.value.trim(),
-    address: address.value.trim(),
     priceMin: priceMin.value ?? undefined,
     priceMax: priceMax.value ?? undefined,
     phone: phone.value.trim(),
@@ -185,8 +182,8 @@ onBeforeUnmount(() => newPhotos.value.forEach(releaseDraft))
   <div>
     <form novalidate @submit.prevent="save">
       <p class="m-0 mb-2 max-w-[640px] text-caption text-ink-muted">
-        Tên, vị trí và danh mục không sửa ở đây — nếu sai, hãy dùng “Báo cáo → Thông tin sai” trên
-        trang địa điểm để kiểm duyệt viên xử lý.
+        Tên, vị trí, địa chỉ và danh mục không sửa ở đây — nếu sai, hãy dùng “Báo cáo → Thông tin
+        sai” trên trang địa điểm để kiểm duyệt viên xử lý.
       </p>
 
       <!-- Giới thiệu + địa chỉ -->
@@ -207,16 +204,18 @@ onBeforeUnmount(() => newPhotos.value.forEach(releaseDraft))
             ></textarea>
           </div>
           <div class="ls-field">
-            <label :for="`${uid}-address`">Địa chỉ *</label>
+            <label :for="`${uid}-address`">Địa chỉ</label>
             <input
               :id="`${uid}-address`"
-              v-model="address"
+              :value="place.address"
               class="ls-input"
-              maxlength="300"
-              autocomplete="street-address"
-              :aria-invalid="errors.address ? 'true' : undefined"
+              disabled
+              :aria-describedby="`${uid}-address-hint`"
             />
-            <span v-if="errors.address" class="ls-field__error">✕ {{ errors.address }}</span>
+            <span :id="`${uid}-address-hint`" class="ls-field__hint">
+              Địa chỉ gắn với vị trí đã được duyệt nên không sửa được. Nếu đây không phải địa chỉ
+              quán của bạn, hãy đề xuất đúng địa điểm rồi gửi yêu cầu xác nhận sở hữu.
+            </span>
           </div>
         </div>
       </section>
