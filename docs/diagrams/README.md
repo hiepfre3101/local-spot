@@ -19,7 +19,8 @@ Xem nhanh trong VS Code: extension "PlantUML" (jebbs.plantuml), `Alt+D`.
 
 | File | Nội dung | Use case |
 |---|---|---|
-| use-case-overview | Sơ đồ use case tổng quát | UC01–UC33 |
+| architecture | Kiến trúc tổng thể (SPA, API, hạ tầng) — plan §3 | — |
+| use-case-overview | Sơ đồ use case tổng quát | UC01–UC34 |
 | activity-write-review | Hoạt động: viết đánh giá | UC12 |
 | activity-approve-place | Hoạt động: đề xuất & duyệt địa điểm | UC11, UC27 |
 | activity-check-in | Hoạt động: check-in | UC16 |
@@ -31,4 +32,4 @@ Xem nhanh trong VS Code: extension "PlantUML" (jebbs.plantuml), `Alt+D`.
 | erd-community | ERD 3/3: cộng đồng & vận hành | — |
 | class-domain | Sơ đồ lớp 1/2: mô hình miền (JPA entity) | — |
 | class-review-module | Sơ đồ lớp 2/2: module đánh giá theo phân lớp | UC12, UC28 |
-| sitemap | Sitemap frontend (route theo layout) — chi tiết ở [docs/design/sitemap.md](../design/sitemap.md) | UC01–UC33 |
+| sitemap | Sitemap frontend (route theo layout) — chi tiết ở [docs/design/sitemap.md](../design/sitemap.md) | UC01–UC34 |

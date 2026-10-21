@@ -35,4 +35,5 @@ title LocalSpot — Sitemap
 **** /admin/moderation/claims/:id\nUC30
 *** /admin/users Người dùng & vai trò\nUC31 [quản trị viên]
 *** /admin/catalog Danh mục & tiện ích\nUC32 [quản trị viên]
+*** /admin/banners Ảnh trang chủ\nUC34 [quản trị viên]
 @endwbs

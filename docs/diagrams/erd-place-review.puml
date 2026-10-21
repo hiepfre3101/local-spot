@@ -136,6 +136,7 @@ entity reviews {
   * rating : TINYINT (1–5)
   * content : TEXT
   * visited_at : DATE
+  revised_at : DATETIME
   * status : VARCHAR(20)
   * ip_address : VARCHAR(45)
   * ip_prefix : VARCHAR(45)
